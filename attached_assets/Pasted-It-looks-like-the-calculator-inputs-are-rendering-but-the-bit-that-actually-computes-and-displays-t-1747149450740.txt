@@ -1,0 +1,87 @@
+It looks like the calculator inputs are rendering, but the bit that actually computes and displays the score never runs. Let’s drop in one final, self-contained snippet right after your selectboxes so you immediately get a score and category:
+
+python
+Copy
+Edit
+# ────────────────────────────────────────────────────────────────
+# 2. Lead Scoring Calculator (after your selectboxes)
+# ────────────────────────────────────────────────────────────────
+
+# (1) Make sure the model is loaded
+if 'weights_df' not in st.session_state or 'thresholds' not in st.session_state:
+    st.warning("Hit **Generate Lead Scoring Model** above first.")
+else:
+    # (2) Fetch the learned points & thresholds
+    weights    = st.session_state['weights_df'].set_index('Feature')['Points']
+    thresholds = st.session_state['thresholds']
+    max_score  = int(weights.sum())
+
+    # (3) Read user inputs
+    guests      = st.number_input("Number of Guests",      min_value=0, value=100)
+    bartenders  = st.number_input("Bartenders Needed",      min_value=0, value=2)
+    is_corp     = st.selectbox("Is Corporate Event?", ["No","Yes"]) == "Yes"
+    referral    = st.selectbox("Referral Tier (1–3)",    [1,2,3])
+    phone_match = st.selectbox("Phone Area Code Matches State?", ["No","Yes"]) == "Yes"
+
+    # (4) Build the feature dict (must match derive_scorecard feature names)
+    feature_vals = {
+        'Guests':       guests,
+        'Bartenders':   bartenders,
+        'IsCorporate':  int(is_corp),
+        'ReferralTier': referral,
+        'PhoneMatch':   int(phone_match),
+        # Note: PricePerGuest, DaysUntilEvent, DaysSinceInquiry will default to 0
+    }
+
+    # (5) Compute the total score
+    score = sum(weights.get(f, 0) * feature_vals.get(f, 0)
+                for f in feature_vals)
+
+    # (6) Bucket into categories
+    if score >= thresholds['hot']:
+        category = "🔥 Hot"
+    elif score >= thresholds['warm']:
+        category = "👍 Warm"
+    elif score >= thresholds['cool']:
+        category = "🙂 Cool"
+    else:
+        category = "❄️ Cold"
+
+    # (7) Display the results
+    st.markdown(f"**Lead Score:** `{score}` / `{max_score}` points")
+    st.markdown(f"**Category:** {category}")
+    # Optionally show a gauge or progress bar
+    st.progress(min(score / max_score, 1.0))
+Steps to make it live:
+
+Paste this entire block immediately below the five inputs in your calculator section of app.py.
+
+Restart the Streamlit server.
+
+Upload your CSVs, click Generate Lead Scoring Model, then scroll down to your calculator.
+
+Enter some test values, and you should see the score and category appear instantly.
+
+That should turn your blank inputs into a working, data-driven scorecard in a snap. Let me know once you’ve got live scores!
+
+
+
+
+
+
+
+
+
+
+
+
+Search
+
+Deep research
+
+Create image
+
+
+
+
+ChatGPT can make mistakes. Chec
