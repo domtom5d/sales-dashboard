@@ -6,6 +6,7 @@ import base64
 import os
 import datetime
 from sqlalchemy import create_engine
+from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score, roc_curve, auc
 from database import import_leads_data, import_operations_data, get_lead_data, get_operation_data, get_merged_data, initialize_db_if_empty
 from utils import process_data, calculate_conversion_rates, calculate_correlations
 from derive_scorecard import generate_lead_scorecard, score_lead
@@ -407,16 +408,43 @@ if st.session_state.processed_df is not None:
                         
                         # Plot thresholds
                         best_threshold = model_metrics['best_threshold']
-                        ax.axvline(x=best_threshold, color='blue', linestyle='--', 
-                                   label=f'Hot threshold: {best_threshold:.3f}')
                         
-                        second_threshold = best_threshold / 2
+                        # If we have F1 threshold, show it
+                        if 'f1_threshold' in model_metrics:
+                            f1_threshold = model_metrics['f1_threshold']
+                            ax.axvline(x=f1_threshold, color='blue', linestyle='--', 
+                                      label=f'Hot threshold (F1): {f1_threshold:.3f}')
+                            
+                            # Show Youden's J as comparison
+                            if 'j_threshold' in model_metrics:
+                                j_threshold = model_metrics['j_threshold']
+                                ax.axvline(x=j_threshold, color='purple', linestyle=':', 
+                                          label=f'Alt (Youden\'s J): {j_threshold:.3f}')
+                                
+                            # Calculate warm/cool thresholds based on F1
+                            second_threshold = f1_threshold / 2
+                            third_threshold = f1_threshold / 4
+                        else:
+                            # Fall back to previous approach
+                            ax.axvline(x=best_threshold, color='blue', linestyle='--', 
+                                      label=f'Hot threshold: {best_threshold:.3f}')
+                            
+                            second_threshold = best_threshold / 2
+                            third_threshold = best_threshold / 4
+                        
+                        # Add warm threshold
                         ax.axvline(x=second_threshold, color='orange', linestyle='--', 
-                                   label=f'Warm threshold: {second_threshold:.3f}')
+                                  label=f'Warm threshold: {second_threshold:.3f}')
                         
-                        third_threshold = best_threshold / 4
-                        ax.axvline(x=third_threshold, color='purple', linestyle='--', 
-                                   label=f'Cool threshold: {third_threshold:.3f}')
+                        # Add cool threshold
+                        ax.axvline(x=third_threshold, color='green', linestyle='--', 
+                                  label=f'Cool threshold: {third_threshold:.3f}')
+                                  
+                        # Show F1 score if available
+                        if 'max_f1_score' in model_metrics:
+                            ax.text(0.05, 0.95, f"Best F1 Score: {model_metrics['max_f1_score']:.3f}", 
+                                   transform=ax.transAxes, fontsize=10,
+                                   verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
                         
                         ax.set_xlabel('Model Score')
                         ax.set_ylabel('Number of Leads')
@@ -424,6 +452,62 @@ if st.session_state.processed_df is not None:
                         ax.legend()
                         
                         st.pyplot(fig)
+                        
+                        # Add interactive threshold slider for fine-tuning
+                        st.write("#### Interactive Threshold Tuning")
+                        st.write("Adjust the threshold to see how it affects the model's predictions:")
+                        
+                        # Get min and max values from model_metrics
+                        y_pred_proba = model_metrics['y_pred_proba']
+                        min_score = float(max(0.001, y_pred_proba.min()))
+                        max_score = float(min(0.999, y_pred_proba.max()))
+                        
+                        # Calculate metrics for different thresholds
+                        custom_threshold = st.slider(
+                            "Select threshold", 
+                            min_value=min_score,
+                            max_value=max_score,
+                            value=float(model_metrics['best_threshold']),
+                            step=0.01
+                        )
+                        
+                        # Show confusion matrix for selected threshold
+                        y_true = model_metrics['y_true']
+                        y_pred = (y_pred_proba >= custom_threshold).astype(int)
+                        custom_cm = confusion_matrix(y_true, y_pred)
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            # Display confusion matrix
+                            cm_df = pd.DataFrame(
+                                custom_cm, 
+                                index=["Actual: Lost", "Actual: Won"],
+                                columns=["Predicted: Lost", "Predicted: Won"]
+                            )
+                            st.write("**Confusion Matrix at Selected Threshold:**")
+                            st.dataframe(cm_df)
+                        
+                        with col2:
+                            # Calculate metrics
+                            tn, fp, fn, tp = custom_cm.ravel()
+                            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+                            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+                            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+                            accuracy = (tp + tn) / (tp + tn + fp + fn)
+                            
+                            # Show metrics
+                            metrics_data = {
+                                "Metric": ["Precision", "Recall", "F1 Score", "Accuracy"],
+                                "Value": [f"{precision:.3f}", f"{recall:.3f}", f"{f1:.3f}", f"{accuracy:.3f}"]
+                            }
+                            st.dataframe(pd.DataFrame(metrics_data))
+                            
+                            # Recommendations based on metrics
+                            if precision < 0.3:
+                                st.warning("⚠️ Low precision! Consider increasing the threshold.")
+                            if recall < 0.3:
+                                st.warning("⚠️ Low recall! Consider decreasing the threshold.")
                 
                 # Section 2: Lead Scoring Calculator
                 st.markdown("### 2. Lead Scoring Calculator")
