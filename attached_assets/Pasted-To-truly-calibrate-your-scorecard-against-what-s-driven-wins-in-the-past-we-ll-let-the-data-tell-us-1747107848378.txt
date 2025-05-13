@@ -1,0 +1,112 @@
+To truly calibrate your scorecard against what’s driven wins in the past, we’ll let the data tell us the weights. Here’s the end-to-end process—and a ready-to-feed Replit script that:
+
+Loads your historical leads + outcomes
+
+Engineers all your candidate features (price per guest, duration, RFM, referrer tier, corporate flag, phone-match, etc.)
+
+Fits a logistic regression and ranks features by coefficient magnitude
+
+Normalizes those coefficients into integer “points” on a 0–10 scale
+
+Prints a draft scorecard you can drop into Zapier or Streak
+
+A. Replit AI Script: derive_scorecard.py
+python
+Copy
+Edit
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+
+# 1) Load your exports
+leads = pd.read_csv('Streak_Leads.csv', low_memory=False)
+ops   = pd.read_csv('Streak_Operations.csv', low_memory=False)
+
+# 2) Merge and clean
+leads['Status'] = leads['Status'].str.lower().str.strip()
+leads = leads[leads['Status'].isin(['definite','definte','lost'])]
+leads['Outcome'] = leads['Status'].isin(['definite','definte']).astype(int)
+
+df = pd.merge(
+    leads,
+    ops[['Box Key', 'Actual Deal Value']],
+    on='Box Key', how='left'
+)
+df['Actual Deal Value'] = pd.to_numeric(df['Actual Deal Value'], errors='coerce')
+
+# 3) Feature engineering
+df['PricePerGuest']       = df['Actual Deal Value'] / df['Number Of Guests'].replace(0, np.nan)
+df['DaysUntilEvent']      = pd.to_numeric(df['Days Until Event'], errors='coerce')
+df['DaysSinceInquiry']    = pd.to_numeric(df['Days Since Inquiry'], errors='coerce')
+df['BartendersNeeded']    = pd.to_numeric(df['Bartenders Needed'], errors='coerce')
+df['IsCorporate']         = (df['Event Type'].str.lower()=='corporate').astype(int)
+# Referral tier example
+tier_map = {'referral':3,'facebook':2,'google':1}
+df['ReferralTier']        = df['Referral Source'].str.lower().map(tier_map).fillna(1)
+# Phone-match stub (adjust mapping as needed)
+df['PhoneArea']           = df['Phone Number'].astype(str).str[:3]
+state_code_map = {'California':'415','New York':'212'}  # extend as needed
+df['PhoneMatch']          = df.apply(lambda r: int(r['PhoneArea']==state_code_map.get(r['State'],'')), axis=1)
+
+# Drop rows without outcomes or features
+df = df.dropna(subset=['Outcome'])
+
+# 4) Prepare X/y
+features = [
+    'PricePerGuest','DaysUntilEvent','DaysSinceInquiry',
+    'Number Of Guests','BartendersNeeded','IsCorporate',
+    'ReferralTier','PhoneMatch'
+]
+X = df[features].fillna(0)
+y = df['Outcome']
+
+# 5) Standardize & fit logistic regression
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+model   = LogisticRegression(max_iter=1000)
+model.fit(X_scaled, y)
+
+# 6) Extract & normalize coefficients
+coefs = pd.Series(model.coef_[0], index=features)
+# Absolute importance
+imp   = coefs.abs().sort_values(ascending=False)
+# Scale to a 0–5 point system proportional to relative size
+max_points = 5
+weights = (imp / imp.max() * max_points).round().astype(int)
+
+# 7) Draft Scorecard table
+print("Feature             | Coef   | Points")
+print("--------------------|--------|-------")
+for feat in weights.index:
+    sign = '+' if coefs[feat]>0 else '–'
+    print(f"{feat:20} | {coefs[feat]:+0.3f} | {weights[feat]:>5}")
+
+# 8) Suggest total buckets
+print("\nSuggested Buckets:")
+print(" Score ≥", int(weights.sum()*0.6), "→ Hot")
+print(" Score ≥", int(weights.sum()*0.4), "→ Warm")
+print(" Score ≥", int(weights.sum()*0.2), "→ Cool")
+print(" Else       → Cold")
+B. How to Use
+Drop this script into your Replit project as derive_scorecard.py.
+
+Upload Streak_Leads.csv and Streak_Operations.csv.
+
+Install dependencies:
+
+nginx
+Copy
+Edit
+pip install pandas numpy scikit-learn
+Run:
+
+nginx
+Copy
+Edit
+python derive_scorecard.py
+Review the printed table of features, their logistic regression coefficients, and their normalized “Points.”
+
+Copy the resulting “Points” into your final scorecard rubric.
+
+This ensures each feature’s weight is grounded in real conversion data, maximizing the predictive power of your lead‐scoring model.

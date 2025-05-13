@@ -8,6 +8,7 @@ import seaborn as sns
 from utils import process_data, calculate_conversion_rates, calculate_correlations
 import database as db
 from scipy import stats
+from derive_scorecard import generate_lead_scorecard, score_lead
 
 # Set matplotlib style for more modern-looking plots
 plt.style.use('ggplot')
@@ -203,7 +204,7 @@ if data_loaded and df is not None:
             st.metric("Conversion Rate", f"{conversion_rate}%")
     
     # Tabs for different visualizations
-    tab1, tab2, tab3 = st.tabs(["Conversion by Category", "Feature Analysis", "Raw Data"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Conversion by Category", "Feature Analysis", "Lead Scoring", "Raw Data"])
     
     with tab1:
         try:
@@ -386,6 +387,240 @@ if data_loaded and df is not None:
             st.error(f"Error generating correlation charts: {str(e)}")
     
     with tab3:
+        st.subheader("AI-Powered Lead Scoring Model")
+        
+        try:
+            # Section 1: Generate Scorecard from Historical Data
+            st.markdown("### 1. Generate Lead Scoring Model")
+            st.write("This model analyzes your historical conversion data to create a weighted scoring system that predicts which leads are most likely to convert.")
+            
+            # Display loading message while generating scorecard
+            with st.spinner("Analyzing historical data to build lead scoring model..."):
+                scorecard_df, thresholds = generate_lead_scorecard(use_sample_data=True)
+            
+            if scorecard_df is not None and not scorecard_df.empty:
+                # Success message
+                st.success("Lead scoring model successfully generated!")
+                
+                # Create two columns - one for scorecard table, one for visualization
+                col1, col2 = st.columns([3, 2])
+                
+                with col1:
+                    # Display the scorecard as a table
+                    st.write("#### Feature Weights")
+                    
+                    # Format coefficient and add sign
+                    scorecard_df['Weight'] = scorecard_df['Coefficient'].apply(
+                        lambda x: f"+{x:.3f}" if x > 0 else f"{x:.3f}"
+                    )
+                    
+                    # Reorder columns for display
+                    display_df = scorecard_df[['Feature', 'Weight', 'Points']]
+                    st.dataframe(display_df, use_container_width=True)
+                
+                with col2:
+                    # Visualize the points as a horizontal bar chart
+                    st.write("#### Points Distribution")
+                    
+                    # Create color map based on coefficient sign
+                    colors = ['red' if coef < 0 else 'green' for coef in scorecard_df['Coefficient']]
+                    
+                    # Create horizontal bar chart
+                    fig, ax = plt.subplots(figsize=(8, 8))
+                    bars = ax.barh(
+                        scorecard_df['Feature'],
+                        scorecard_df['Points'], 
+                        color=colors
+                    )
+                    
+                    # Add point values to the end of each bar
+                    for bar in bars:
+                        width = bar.get_width()
+                        ax.text(
+                            width + 0.1, 
+                            bar.get_y() + bar.get_height()/2, 
+                            f"{int(width)}", 
+                            va='center'
+                        )
+                    
+                    ax.set_xlabel('Points')
+                    ax.set_title('Lead Scoring Model Weights')
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                
+                # Display the suggested thresholds
+                st.write("#### Score Thresholds")
+                st.write("Based on the analysis, here are the recommended score thresholds for lead classification:")
+                
+                # Create threshold table
+                threshold_data = []
+                max_score = sum(scorecard_df['Points'])
+                
+                for category, threshold in thresholds.items():
+                    threshold_data.append({
+                        "Category": category,
+                        "Minimum Score": threshold,
+                        "Score Range": f"{threshold}+ points"
+                    })
+                
+                threshold_df = pd.DataFrame(threshold_data)
+                st.dataframe(threshold_df, use_container_width=True)
+                
+                # Section 2: Lead Scoring Calculator
+                st.markdown("### 2. Lead Scoring Calculator")
+                st.write("Use this tool to score a new lead and determine its likelihood to convert based on your historical data.")
+                
+                # Create form for lead scoring
+                with st.form(key="lead_score_form"):
+                    # Create multiple columns to organize inputs
+                    form_col1, form_col2 = st.columns(2)
+                    
+                    lead_data = {}
+                    
+                    with form_col1:
+                        if 'PricePerGuest' in scorecard_df['Feature'].values:
+                            lead_data['PricePerGuest'] = st.number_input(
+                                "Price Per Guest ($)",
+                                min_value=0.0,
+                                max_value=1000.0,
+                                value=100.0,
+                                step=10.0,
+                                help="The price per guest for this lead"
+                            )
+                        
+                        if 'DaysUntilEvent' in scorecard_df['Feature'].values:
+                            lead_data['DaysUntilEvent'] = st.number_input(
+                                "Days Until Event",
+                                min_value=0,
+                                max_value=365,
+                                value=90,
+                                step=1,
+                                help="Number of days until the event date"
+                            )
+                        
+                        if 'NumberOfGuests' in scorecard_df['Feature'].values:
+                            lead_data['NumberOfGuests'] = st.number_input(
+                                "Number of Guests",
+                                min_value=0,
+                                max_value=1000,
+                                value=100,
+                                step=10,
+                                help="Expected number of guests at the event"
+                            )
+                        
+                        if 'BartendersNeeded' in scorecard_df['Feature'].values:
+                            lead_data['BartendersNeeded'] = st.number_input(
+                                "Bartenders Needed",
+                                min_value=0,
+                                max_value=20,
+                                value=2,
+                                step=1,
+                                help="Number of bartenders required"
+                            )
+                    
+                    with form_col2:
+                        if 'DaysSinceInquiry' in scorecard_df['Feature'].values:
+                            lead_data['DaysSinceInquiry'] = st.number_input(
+                                "Days Since Inquiry",
+                                min_value=0,
+                                max_value=365,
+                                value=7,
+                                step=1,
+                                help="Number of days since the lead's initial inquiry"
+                            )
+                        
+                        if 'IsCorporate' in scorecard_df['Feature'].values:
+                            lead_data['IsCorporate'] = st.selectbox(
+                                "Is Corporate Event?",
+                                options=[0, 1],
+                                format_func=lambda x: "Yes" if x == 1 else "No",
+                                help="Whether this is a corporate event"
+                            )
+                        
+                        if 'ReferralTier' in scorecard_df['Feature'].values:
+                            lead_data['ReferralTier'] = st.slider(
+                                "Referral Tier",
+                                min_value=1,
+                                max_value=3,
+                                value=1,
+                                step=1,
+                                help="Referral tier (3=Referral, 2=Social, 1=Search)"
+                            )
+                        
+                        if 'PhoneMatch' in scorecard_df['Feature'].values:
+                            lead_data['PhoneMatch'] = st.selectbox(
+                                "Phone Area Code Matches State?",
+                                options=[0, 1],
+                                format_func=lambda x: "Yes" if x == 1 else "No",
+                                help="Whether the phone area code matches the state"
+                            )
+                    
+                    # Submit button
+                    submit_button = st.form_submit_button(label="Calculate Lead Score")
+                
+                # Calculate and display score when form is submitted
+                if submit_button:
+                    # Calculate score
+                    score = score_lead(lead_data, scorecard_df)
+                    
+                    # Determine category
+                    category = "Cold"
+                    for cat, threshold in thresholds.items():
+                        if score >= threshold:
+                            category = cat
+                            break
+                    
+                    # Display score with fancy styling
+                    st.markdown("### Lead Score Results")
+                    
+                    # Create score display
+                    max_score = sum(scorecard_df[scorecard_df['Coefficient'] > 0]['Points'])
+                    
+                    # Calculate percentage of maximum possible score
+                    score_percent = min(100, max(0, (score / max_score) * 100)) if max_score > 0 else 0
+                    
+                    # Create columns for metric and gauge
+                    result_col1, result_col2 = st.columns([1, 3])
+                    
+                    with result_col1:
+                        # Display numeric score and category
+                        st.metric("Lead Score", score)
+                        st.markdown(f"**Category:** {category}")
+                    
+                    with result_col2:
+                        # Create a progress bar visualization of the score
+                        st.markdown(f"**Score: {score}/{max_score} points ({score_percent:.1f}%)**")
+                        st.progress(score_percent/100)
+                        
+                        # Add colored indicators for threshold ranges
+                        threshold_cols = st.columns(4)
+                        
+                        with threshold_cols[0]:
+                            st.markdown(f"<span style='color: blue'>Cold: < {thresholds['Cool']}</span>", unsafe_allow_html=True)
+                        with threshold_cols[1]:
+                            st.markdown(f"<span style='color: teal'>Cool: {thresholds['Cool']}+</span>", unsafe_allow_html=True)
+                        with threshold_cols[2]:
+                            st.markdown(f"<span style='color: orange'>Warm: {thresholds['Warm']}+</span>", unsafe_allow_html=True)
+                        with threshold_cols[3]:
+                            st.markdown(f"<span style='color: red'>Hot: {thresholds['Hot']}+</span>", unsafe_allow_html=True)
+                    
+                    # Add interpretation and recommendations
+                    st.markdown("#### Interpretation")
+                    
+                    if category == "Hot":
+                        st.success("This lead has a very high probability of converting based on your historical data. Prioritize immediate follow-up.")
+                    elif category == "Warm":
+                        st.info("This lead shows good potential and should be followed up promptly.")
+                    elif category == "Cool":
+                        st.warning("This lead has moderate potential. Consider standard follow-up procedures.")
+                    else:
+                        st.error("This lead has lower conversion potential based on your historical patterns.")
+            else:
+                st.error("Unable to generate lead scoring model from the available data. Please ensure you have sufficient historical lead data with win/loss outcomes.")
+        except Exception as e:
+            st.error(f"Error in lead scoring functionality: {str(e)}")
+    
+    with tab4:
         try:
             # Display the raw data
             st.subheader("Raw Data")
