@@ -70,6 +70,8 @@ if 'weights_df' not in st.session_state:
     st.session_state.weights_df = None
 if 'thresholds' not in st.session_state:
     st.session_state.thresholds = None
+if 'model_metrics' not in st.session_state:
+    st.session_state.model_metrics = None
 
 # Data loading section
 if data_source == "Upload CSV Files":
@@ -308,34 +310,120 @@ if st.session_state.processed_df is not None:
             # Button to generate lead scoring model
             if st.button("Generate Lead Scoring Model"):
                 # Generate the lead scoring model
-                scorecard_df, thresholds = generate_lead_scorecard(use_sample_data=False)
+                scorecard_df, thresholds, model_metrics = generate_lead_scorecard(use_sample_data=False)
                 
-                if scorecard_df is not None and thresholds is not None:
+                if scorecard_df is not None and thresholds is not None and model_metrics is not None:
                     st.session_state.weights_df = scorecard_df
                     st.session_state.thresholds = thresholds
+                    st.session_state.model_metrics = model_metrics
                     
                     # Display the model information
                     st.write("#### Feature Weights")
                     st.write("The model identified these features as significant predictors of conversion:")
                     st.dataframe(scorecard_df)
                 
-                # Display the suggested thresholds
-                st.write("#### Score Thresholds")
-                st.write("Based on the analysis, here are the recommended score thresholds for lead classification:")
-                
-                # Create threshold table
-                threshold_data = []
-                max_score = sum(scorecard_df['Points'])
-                
-                for category, threshold in thresholds.items():
-                    threshold_data.append({
-                        "Category": category,
-                        "Minimum Score": threshold,
-                        "Score Range": f"{threshold}+ points"
-                    })
-                
-                threshold_df = pd.DataFrame(threshold_data)
-                st.dataframe(threshold_df, use_container_width=True)
+                    # Display the suggested thresholds
+                    st.write("#### Score Thresholds")
+                    st.write("Based on the analysis, here are the recommended score thresholds for lead classification:")
+                    
+                    # Create threshold table
+                    threshold_data = []
+                    max_score = sum(scorecard_df['Points'])
+                    
+                    for category, threshold in thresholds.items():
+                        threshold_data.append({
+                            "Category": category,
+                            "Minimum Score": threshold,
+                            "Score Range": f"{threshold}+ points"
+                        })
+                    
+                    threshold_df = pd.DataFrame(threshold_data)
+                    st.dataframe(threshold_df, use_container_width=True)
+                    
+                    # Display model performance metrics
+                    st.write("#### Model Performance")
+                    
+                    # Create 2 columns for metrics and visualization
+                    metrics_col, viz_col = st.columns(2)
+                    
+                    with metrics_col:
+                        # Display ROC AUC and other metrics
+                        st.metric("ROC AUC Score", f"{model_metrics['roc_auc']:.3f}")
+                        st.metric("Precision-Recall AUC", f"{model_metrics['pr_auc']:.3f}")
+                        
+                        # Confusion matrix
+                        cm = model_metrics['confusion_matrix']
+                        st.write("**Confusion Matrix at Optimal Threshold:**")
+                        cm_df = pd.DataFrame(
+                            cm, 
+                            index=["Actual: Lost", "Actual: Won"],
+                            columns=["Predicted: Lost", "Predicted: Won"]
+                        )
+                        st.dataframe(cm_df)
+                        
+                        # Calculate and display precision, recall, etc.
+                        tn, fp, fn, tp = cm.ravel()
+                        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+                        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+                        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+                        accuracy = (tp + tn) / (tp + tn + fp + fn)
+                        
+                        metrics_data = {
+                            "Metric": ["Precision", "Recall", "F1 Score", "Accuracy"],
+                            "Value": [f"{precision:.3f}", f"{recall:.3f}", f"{f1:.3f}", f"{accuracy:.3f}"]
+                        }
+                        st.dataframe(pd.DataFrame(metrics_data))
+                    
+                    with viz_col:
+                        # Plot ROC curve
+                        fig, ax = plt.subplots(figsize=(8, 6))
+                        ax.plot(model_metrics['fpr'], model_metrics['tpr'], label=f'ROC curve (AUC = {model_metrics["roc_auc"]:.3f})')
+                        ax.plot([0, 1], [0, 1], 'k--', label='Random')
+                        ax.set_xlabel('False Positive Rate')
+                        ax.set_ylabel('True Positive Rate')
+                        ax.set_title('Receiver Operating Characteristic (ROC) Curve')
+                        
+                        # Plot the optimal threshold point
+                        best_idx = model_metrics['best_idx']
+                        ax.plot(model_metrics['fpr'][best_idx], model_metrics['tpr'][best_idx], 'ro', 
+                                label=f'Optimal threshold: {model_metrics["best_threshold"]:.3f}')
+                        
+                        ax.legend(loc="lower right")
+                        st.pyplot(fig)
+                        
+                        # Plot score distributions
+                        fig, ax = plt.subplots(figsize=(8, 6))
+                        
+                        # Plot histograms of scores for Won and Lost leads
+                        won_scores = model_metrics['won_scores']
+                        lost_scores = model_metrics['lost_scores']
+                        
+                        bins = np.linspace(0, 1, 20)
+                        
+                        if len(won_scores) > 0:
+                            ax.hist(won_scores, bins=bins, alpha=0.5, color='green', label='Won Leads')
+                        if len(lost_scores) > 0:
+                            ax.hist(lost_scores, bins=bins, alpha=0.5, color='red', label='Lost Leads')
+                        
+                        # Plot thresholds
+                        best_threshold = model_metrics['best_threshold']
+                        ax.axvline(x=best_threshold, color='blue', linestyle='--', 
+                                   label=f'Hot threshold: {best_threshold:.3f}')
+                        
+                        second_threshold = best_threshold / 2
+                        ax.axvline(x=second_threshold, color='orange', linestyle='--', 
+                                   label=f'Warm threshold: {second_threshold:.3f}')
+                        
+                        third_threshold = best_threshold / 4
+                        ax.axvline(x=third_threshold, color='purple', linestyle='--', 
+                                   label=f'Cool threshold: {third_threshold:.3f}')
+                        
+                        ax.set_xlabel('Model Score')
+                        ax.set_ylabel('Number of Leads')
+                        ax.set_title('Score Distribution: Won vs. Lost Leads')
+                        ax.legend()
+                        
+                        st.pyplot(fig)
                 
                 # Section 2: Lead Scoring Calculator
                 st.markdown("### 2. Lead Scoring Calculator")
