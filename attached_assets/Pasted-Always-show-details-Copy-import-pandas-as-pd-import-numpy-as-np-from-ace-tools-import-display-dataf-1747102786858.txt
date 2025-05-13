@@ -1,0 +1,252 @@
+Always show details
+
+Copy
+import pandas as pd
+import numpy as np
+from ace_tools import display_dataframe_to_user
+
+# 1) Load the CSVs
+leads = pd.read_csv('/mnt/data/Streak Export_ Leads (5-12-25, 9_03 PM) - Boxes (Leads).csv', low_memory=False)
+operations = pd.read_csv('/mnt/data/Streak Export_ Operations (5-12-25, 9_03 PM) - Boxes (Operations).csv', low_memory=False)
+
+# 2) Clean and prepare outcome from leads.Status
+leads['Status'] = leads['Status'].astype(str).str.strip().str.lower()
+# Map won/lost
+leads['Won'] = leads['Status'].isin(['definite', 'definte'])
+leads['Lost'] = leads['Status'] == 'lost'
+# Filter to only definitive outcomes
+df = leads[leads['Status'].isin(['definite', 'definte', 'lost'])].copy()
+df['Outcome'] = df['Won'].astype(int)
+
+# 3) Merge in deal value from operations
+merged = pd.merge(df, operations[['Box Key', 'Actual Deal Value']], on='Box Key', how='left')
+merged['Actual Deal Value'] = pd.to_numeric(merged['Actual Deal Value'], errors='coerce')
+
+# 4) Define bins & compute conversion rates
+# Guests bins
+bins_guests = [0, 50, 100, 200, np.inf]
+labels_guests = ['0–50', '51–100', '101–200', '200+']
+merged['Guests Bin'] = pd.cut(merged['Number Of Guests'], bins=bins_guests, labels=labels_guests)
+
+# Days-until-event bins
+bins_days = [0, 7, 30, 90, np.inf]
+labels_days = ['0–7 days', '8–30 days', '31–90 days', '91+ days']
+merged['DaysUntilBin'] = pd.cut(merged['Days Until Event'], bins=bins_days, labels=labels_days)
+
+# 5) Conversion rates by factor
+conv_event_type = merged.groupby('Event Type')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_referral = merged.groupby('Referral Source')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_marketing = merged.groupby('Marketing Source')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_state = merged.groupby('State')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_guests = merged.groupby('Guests Bin')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_days = merged.groupby('DaysUntilBin')['Outcome'].mean().reset_index(name='Conversion Rate')
+
+# 6) Feature correlation with outcome and deal value
+numeric_features = ['Days Since Inquiry', 'Days Until Event', 'Number Of Guests', 'Bartenders Needed']
+corr_outcome = merged[numeric_features + ['Outcome']].corr()['Outcome'].abs().sort_values(ascending=False).reset_index(name='Correlation with Outcome')
+corr_value = merged[numeric_features + ['Actual Deal Value']].corr()['Actual Deal Value'].abs().sort_values(ascending=False).reset_index(name='Correlation with Deal Value')
+
+# 7) Display results
+display_dataframe_to_user('Conversion Rate by Event Type', conv_event_type)
+display_dataframe_to_user('Conversion Rate by Referral Source', conv_referral)
+display_dataframe_to_user('Conversion Rate by Marketing Source', conv_marketing)
+display_dataframe_to_user('Conversion Rate by State', conv_state)
+display_dataframe_to_user('Conversion Rate by Number of Guests', conv_guests)
+display_dataframe_to_user('Conversion Rate by Days Until Event', conv_days)
+display_dataframe_to_user('Feature Correlation with Outcome', corr_outcome)
+display_dataframe_to_user('Feature Correlation with Deal Value', corr_value)
+---------------------------------------------------------------------------
+KeyError                                  Traceback (most recent call last)
+File ~/.local/lib/python3.11/site-packages/pandas/core/indexes/base.py:3802, in Index.get_loc(self, key, method, tolerance)
+   3801 try:
+-> 3802     return self._engine.get_loc(casted_key)
+   3803 except KeyError as err:
+
+File ~/.local/lib/python3.11/site-packages/pandas/_libs/index.pyx:138, in pandas._libs.index.IndexEngine.get_loc()
+
+File ~/.local/lib/python3.11/site-packages/pandas/_libs/index.pyx:165, in pandas._libs.index.IndexEngine.get_loc()
+
+File pandas/_libs/hashtable_class_helper.pxi:5745, in pandas._libs.hashtable.PyObjectHashTable.get_item()
+
+File pandas/_libs/hashtable_class_helper.pxi:5753, in pandas._libs.hashtable.PyObjectHashTable.get_item()
+
+KeyError: 'Actual Deal Value'
+
+The above exception was the direct cause of the following exception:
+
+KeyError                                  Traceback (most recent call last)
+Cell In[12], line 20
+     18 # 3) Merge in deal value from operations
+     19 merged = pd.merge(df, operations[['Box Key', 'Actual Deal Value']], on='Box Key', how='left')
+---> 20 merged['Actual Deal Value'] = pd.to_numeric(merged['Actual Deal Value'], errors='coerce')
+     22 # 4) Define bins & compute conversion rates
+     23 # Guests bins
+     24 bins_guests = [0, 50, 100, 200, np.inf]
+
+File ~/.local/lib/python3.11/site-packages/pandas/core/frame.py:3807, in DataFrame.__getitem__(self, key)
+   3805 if self.columns.nlevels > 1:
+   3806     return self._getitem_multilevel(key)
+-> 3807 indexer = self.columns.get_loc(key)
+   3808 if is_integer(indexer):
+   3809     indexer = [indexer]
+
+File ~/.local/lib/python3.11/site-packages/pandas/core/indexes/base.py:3804, in Index.get_loc(self, key, method, tolerance)
+   3802     return self._engine.get_loc(casted_key)
+   3803 except KeyError as err:
+-> 3804     raise KeyError(key) from err
+   3805 except TypeError:
+   3806     # If we have a listlike key, _check_indexing_error will raise
+   3807     #  InvalidIndexError. Otherwise we fall through and re-raise
+   3808     #  the TypeError.
+   3809     self._check_indexing_error(key)
+
+KeyError: 'Actual Deal Value'
+
+Thought for 1m 53s
+
+Analysis errored
+python
+Always show details
+
+Copy
+import pandas as pd
+import numpy as np
+from ace_tools import display_dataframe_to_user
+
+# Load and prepare leads data
+leads = pd.read_csv('/mnt/data/Streak Export_ Leads (5-12-25, 9_03 PM) - Boxes (Leads).csv', low_memory=False)
+
+# Clean status & define outcome
+leads['Status'] = leads['Status'].astype(str).str.strip().str.lower()
+leads['Won'] = leads['Status'].isin(['definite', 'definte'])
+leads['Lost'] = leads['Status'] == 'lost'
+df = leads[leads['Status'].isin(['definite', 'definte', 'lost'])].copy()
+df['Outcome'] = df['Won'].astype(int)
+
+# Define bins for grouping
+bins_guests = [0, 50, 100, 200, np.inf]
+labels_guests = ['0–50', '51–100', '101–200', '200+']
+df['Guests Bin'] = pd.cut(df['Number Of Guests'], bins=bins_guests, labels=labels_guests)
+
+bins_days = [0, 7, 30, 90, np.inf]
+labels_days = ['0–7 days', '8–30 days', '31–90 days', '91+ days']
+df['DaysUntilBin'] = pd.cut(df['Days Until Event'], bins=bins_days, labels=labels_days)
+
+# Conversion rates by category
+conv_event_type = df.groupby('Event Type')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_referral = df.groupby('Referral Source')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_marketing = df.groupby('Marketing Source')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_state = df.groupby('State')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_guests = df.groupby('Guests Bin')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_days = df.groupby('DaysUntilBin')['Outcome'].mean().reset_index(name='Conversion Rate')
+
+# Correlation of numeric features with Outcome
+numeric_features = ['Days Since Inquiry', 'Days Until Event', 'Number Of Guests', 'Bartenders Needed']
+corr_outcome = df[numeric_features + ['Outcome']].corr()['Outcome'].abs().sort_values(ascending=False).reset_index(name='Correlation with Outcome')
+
+# Display all results
+display_dataframe_to_user('Conversion by Event Type', conv_event_type)
+display_dataframe_to_user('Conversion by Referral Source', conv_referral)
+display_dataframe_to_user('Conversion by Marketing Source', conv_marketing)
+display_dataframe_to_user('Conversion by State', conv_state)
+display_dataframe_to_user('Conversion by Guests Bin', conv_guests)
+display_dataframe_to_user('Conversion by Days Until Event', conv_days)
+display_dataframe_to_user('Numeric Feature Correlation with Outcome', corr_outcome)
+---------------------------------------------------------------------------
+TypeError                                 Traceback (most recent call last)
+Cell In[15], line 22
+     20 bins_days = [0, 7, 30, 90, np.inf]
+     21 labels_days = ['0–7 days', '8–30 days', '31–90 days', '91+ days']
+---> 22 df['DaysUntilBin'] = pd.cut(df['Days Until Event'], bins=bins_days, labels=labels_days)
+     24 # Conversion rates by category
+     25 conv_event_type = df.groupby('Event Type')['Outcome'].mean().reset_index(name='Conversion Rate')
+
+File ~/.local/lib/python3.11/site-packages/pandas/core/reshape/tile.py:293, in cut(x, bins, right, labels, retbins, precision, include_lowest, duplicates, ordered)
+    290     if (np.diff(bins.astype("float64")) < 0).any():
+    291         raise ValueError("bins must increase monotonically.")
+--> 293 fac, bins = _bins_to_cuts(
+    294     x,
+    295     bins,
+    296     right=right,
+    297     labels=labels,
+    298     precision=precision,
+    299     include_lowest=include_lowest,
+    300     dtype=dtype,
+    301     duplicates=duplicates,
+    302     ordered=ordered,
+    303 )
+    305 return _postprocess_for_cut(fac, bins, retbins, dtype, original)
+
+File ~/.local/lib/python3.11/site-packages/pandas/core/reshape/tile.py:428, in _bins_to_cuts(x, bins, right, labels, precision, include_lowest, dtype, duplicates, ordered)
+    425         bins = unique_bins
+    427 side: Literal["left", "right"] = "left" if right else "right"
+--> 428 ids = ensure_platform_int(bins.searchsorted(x, side=side))
+    430 if include_lowest:
+    431     ids[np.asarray(x) == bins[0]] = 1
+
+TypeError: '<' not supported between instances of 'float' and 'str'
+
+Analyzed
+python
+Always show details
+
+Copy
+import pandas as pd
+import numpy as np
+from ace_tools import display_dataframe_to_user
+
+# Load and prepare leads data
+leads = pd.read_csv('/mnt/data/Streak Export_ Leads (5-12-25, 9_03 PM) - Boxes (Leads).csv', low_memory=False)
+
+# Clean outcome
+leads['Status'] = leads['Status'].astype(str).str.strip().str.lower()
+leads['Won'] = leads['Status'].isin(['definite', 'definte'])
+leads['Lost'] = leads['Status'] == 'lost'
+df = leads[leads['Status'].isin(['definite', 'definte', 'lost'])].copy()
+df['Outcome'] = df['Won'].astype(int)
+
+# Convert numeric fields
+df['Number Of Guests'] = pd.to_numeric(df['Number Of Guests'], errors='coerce')
+df['Days Until Event'] = pd.to_numeric(df['Days Until Event'], errors='coerce')
+df['Days Since Inquiry'] = pd.to_numeric(df['Days Since Inquiry'], errors='coerce')
+df['Bartenders Needed'] = pd.to_numeric(df['Bartenders Needed'], errors='coerce')
+
+# Bins for grouping
+bins_guests = [0, 50, 100, 200, np.inf]
+labels_guests = ['0–50', '51–100', '101–200', '200+']
+df['Guests Bin'] = pd.cut(df['Number Of Guests'], bins=bins_guests, labels=labels_guests)
+
+bins_days = [0, 7, 30, 90, np.inf]
+labels_days = ['0–7 days', '8–30 days', '31–90 days', '91+ days']
+df['DaysUntilBin'] = pd.cut(df['Days Until Event'], bins=bins_days, labels=labels_days)
+
+# Conversion rates
+conv_event_type = df.groupby('Event Type')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_referral = df.groupby('Referral Source')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_marketing = df.groupby('Marketing Source')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_state = df.groupby('State')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_guests = df.groupby('Guests Bin')['Outcome'].mean().reset_index(name='Conversion Rate')
+conv_days = df.groupby('DaysUntilBin')['Outcome'].mean().reset_index(name='Conversion Rate')
+
+# Correlation with outcome
+numeric_features = ['Days Since Inquiry', 'Days Until Event', 'Number Of Guests', 'Bartenders Needed']
+corr_outcome = df[numeric_features + ['Outcome']].corr()['Outcome'].abs().sort_values(ascending=False).reset_index(name='Correlation with Outcome')
+
+# Display results
+display_dataframe_to_user('Conversion by Event Type', conv_event_type)
+display_dataframe_to_user('Conversion by Referral Source', conv_referral)
+display_dataframe_to_user('Conversion by Marketing Source', conv_marketing)
+display_dataframe_to_user('Conversion by State', conv_state)
+display_dataframe_to_user('Conversion by Guests Bin', conv_guests)
+display_dataframe_to_user('Conversion by Days Until Event', conv_days)
+display_dataframe_to_user('Numeric Feature Correlation with Outcome', corr_outcome)
+STDOUT/STDERR
+/home/sandbox/.local/lib/python3.11/site-packages/pandas/core/internals/blocks.py:2323: RuntimeWarning: invalid value encountered in cast
+  values = values.astype(str)
+Result
+                index  Correlation with Outcome
+0             Outcome                  1.000000
+1   Bartenders Needed                  0.020548
+2    Number Of Guests                  0.016257
+3  Days Since Inquiry                       NaN
+4    Days Until Event                       NaN
