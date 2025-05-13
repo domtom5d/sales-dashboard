@@ -31,7 +31,37 @@ def generate_findings(df, y_scores, thresholds):
             avg_days = time_result.get('average_days')
             median_days = time_result.get('median_days')
             findings.append(f"**Time to Conversion:** Average: {avg_days:.1f} days, Median: {median_days:.1f} days.")
-    except Exception:
+            
+            # Add insights by event type if available
+            if 'by_event_type' in time_result and not time_result['by_event_type'].empty:
+                # Find fastest and slowest converting event types with at least 3 data points
+                event_df = time_result['by_event_type']
+                event_df_filtered = event_df[event_df['count'] >= 3]
+                
+                if not event_df_filtered.empty:
+                    fastest = event_df_filtered.loc[event_df_filtered['mean'].idxmin()]
+                    slowest = event_df_filtered.loc[event_df_filtered['mean'].idxmax()]
+                    
+                    # Only add if there's a meaningful difference (more than 1 day)
+                    if abs(fastest['mean'] - slowest['mean']) > 1:
+                        findings.append(f"**Event Type Conversion Speed:** {fastest['event_type']} events convert fastest ({fastest['mean']:.1f} days), while {slowest['event_type']} events take longest ({slowest['mean']:.1f} days).")
+            
+            # Add insights by booking type if available
+            if 'by_booking_type' in time_result and not time_result['by_booking_type'].empty:
+                # Find fastest and slowest converting booking types with at least 3 data points
+                booking_df = time_result['by_booking_type']
+                booking_df_filtered = booking_df[booking_df['count'] >= 3]
+                
+                if not booking_df_filtered.empty:
+                    fastest = booking_df_filtered.loc[booking_df_filtered['mean'].idxmin()]
+                    slowest = booking_df_filtered.loc[booking_df_filtered['mean'].idxmax()]
+                    
+                    # Only add if there's a meaningful difference (more than 1 day)
+                    if abs(fastest['mean'] - slowest['mean']) > 1:
+                        findings.append(f"**Booking Type Conversion Speed:** {fastest['booking_type']} bookings convert fastest ({fastest['mean']:.1f} days), while {slowest['booking_type']} bookings take longest ({slowest['mean']:.1f} days).")
+    except Exception as e:
+        # Uncomment for debugging but keep silently failing in production
+        # print(f"Error generating time to conversion findings: {e}")
         pass  # Silently skip if the time analysis fails
 
     # 1. Urgency

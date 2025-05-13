@@ -306,6 +306,16 @@ if st.session_state.processed_df is not None:
                         display_df['median'] = display_df['median'].round(1)
                         display_df.columns = ['Booking Type', 'Avg Days', 'Median Days', 'Count']
                         st.dataframe(display_df.sort_values(by='Avg Days'), use_container_width=True)
+                    
+                    # Display conversion time by event type
+                    if 'by_event_type' in time_to_conversion and not time_to_conversion['by_event_type'].empty:
+                        st.write("**Time to Conversion by Event Type**")
+                        # Format columns for better display
+                        display_df = time_to_conversion['by_event_type'].copy()
+                        display_df['mean'] = display_df['mean'].round(1)
+                        display_df['median'] = display_df['median'].round(1)
+                        display_df.columns = ['Event Type', 'Avg Days', 'Median Days', 'Count']
+                        st.dataframe(display_df.sort_values(by='Avg Days'), use_container_width=True)
             
             # Create columns for additional metrics
             col1, col2, col3 = st.columns(3)
@@ -1065,6 +1075,8 @@ return {
             • **Seasonality:** July month has 32% conversion rate, lowest is January at I4%.
             • **Event Type:** Corporate events convert at 28%, Social events at 20%.
             • **Phone‐Match:** Local numbers convert at 16% vs. non‐local at 10%.
+            • **Time to Conversion:** Average: 12.5 days, Median: 8.0 days.
+            • **Event Type Conversion Speed:** Corporate events convert fastest (8.3 days), while Weddings take longest (16.7 days).
             • **Model AUC:** ROC=0.835, PR=0.574.
             • **Buckets:** 2,458 Hot, 3,721 Warm, 8,942 Cool, 12,311 Cold.
             """)
@@ -1132,7 +1144,19 @@ return {
         _Why it matters:_ A quick proxy for lead quality — helps you spot "ghost" or low-fi leads.
         """)
 
-        st.header("7. Lead Scoring Calculator")
+        st.header("7. Time to Conversion Analysis")
+        st.markdown("""
+        Analyzes how long it typically takes to convert leads from first inquiry to won deal.
+        - **Average Days**: Mean time from inquiry to winning the deal
+        - **Median Days**: Middle value in the conversion timeline (less affected by outliers)
+        - **By Event Type**: Shows which events typically convert faster or slower
+        - **By Booking Type**: Breaks down conversion times by booking category
+        - **Distribution**: Shows what percentage of deals close within specific time frames
+
+        _Why it matters:_ Helps with forecasting, setting appropriate follow-up schedules, and prioritizing faster-converting event types.
+        """)
+
+        st.header("8. Lead Scoring Calculator")
         st.markdown("""
         Enter hypothetical lead details to get:
         - A **numeric score** (sum of data-driven points)  

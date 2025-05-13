@@ -298,6 +298,16 @@ def analyze_time_to_conversion(df):
             result['by_booking_type'] = won_leads.groupby('booking_type')['days_to_conversion'].agg(
                 ['mean', 'median', 'count']).reset_index()
         
+        # By event type if available
+        if 'event_type' in won_leads.columns:
+            result['by_event_type'] = won_leads.groupby('event_type')['days_to_conversion'].agg(
+                ['mean', 'median', 'count']).reset_index()
+        elif 'lead_trigger' in won_leads.columns:
+            # Use lead_trigger as fallback for event type
+            result['by_event_type'] = won_leads.groupby('lead_trigger')['days_to_conversion'].agg(
+                ['mean', 'median', 'count']).reset_index()
+            result['by_event_type'].rename(columns={'lead_trigger': 'event_type'}, inplace=True)
+        
         # Create histogram data
         bins = [0, 1, 3, 7, 14, 30, 60, 90, float('inf')]
         labels = ['Same day', '1-3 days', '4-7 days', '8-14 days', '15-30 days', '31-60 days', '61-90 days', '90+ days']
