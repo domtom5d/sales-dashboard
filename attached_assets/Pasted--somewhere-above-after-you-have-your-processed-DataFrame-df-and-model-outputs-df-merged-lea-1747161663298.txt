@@ -1,0 +1,88 @@
+# somewhere above, after you have your processed DataFrame `df` and model outputs:
+# df: merged leads+ops with df['Outcome']=0/1
+# y_scores: array of model probabilities
+# thresholds: dict with 'hot','warm','cool'
+
+import numpy as np
+
+def generate_findings(df, y_scores, thresholds):
+    findings = []
+
+    # 1. Urgency
+    urg = df.assign(bin=lambda d: pd.cut(d['Days Until Event'], [0,7,30,np.inf], labels=['≤7d','8–30d','>30d']))
+    urg_rates = urg.groupby('bin')['Outcome'].mean()
+    best_urg = urg_rates.idxmax(), urg_rates.max()
+    worst_urg = urg_rates.idxmin(), urg_rates.min()
+    findings.append(f"**Urgency:** Leads {best_urg[0]} convert at {best_urg[1]:.0%}, vs. {worst_urg[0]} at {worst_urg[1]:.0%}.")
+
+    # 2. Region
+    if 'Region' in df:
+        reg_rates = df.groupby('Region')['Outcome'].mean()
+        top_reg = reg_rates.idxmax(), reg_rates.max()
+        bot_reg = reg_rates.idxmin(), reg_rates.min()
+        findings.append(f"**Geography:** {top_reg[0]} leads close at {top_reg[1]:.0%}, while {bot_reg[0]} at {bot_reg[1]:.0%}.")
+
+    # 3. Seasonality (Month)
+    if 'Month' in df:
+        mon_rates = df.groupby('Month')['Outcome'].mean()
+        best_mon = mon_rates.idxmax(), mon_rates.max()
+        worst_mon = mon_rates.idxmin(), mon_rates.min()
+        findings.append(f"**Seasonality:** {best_mon[0]} month has {best_mon[1]:.0%}, lowest is {worst_mon[0]} at {worst_mon[1]:.0%}.")
+
+    # 4. Corporate vs Social
+    corp_rates = df.groupby(df['IsCorporate'].map({1:'Corporate',0:'Social'}))['Outcome'].mean()
+    findings.append(f"**Event Type:** Corporate at {corp_rates['Corporate']:.0%}, Social at {corp_rates['Social']:.0%}.")
+
+    # 5. PhoneMatch uplift
+    pm_rates = df.groupby('PhoneMatch')['Outcome'].mean()
+    if True in pm_rates.index and False in pm_rates.index:
+        findings.append(f"**Phone‐Match:** Local numbers convert at {pm_rates[True]:.0%} vs. non‐local at {pm_rates[False]:.0%}.")
+
+    # 6. Model performance
+    from sklearn.metrics import roc_auc_score, precision_recall_curve, auc
+    roc = roc_auc_score(df['Outcome'], y_scores)
+    prec, rec, _ = precision_recall_curve(df['Outcome'], y_scores)
+    pr_auc = auc(rec, prec)
+    findings.append(f"**Model AUC:** ROC={roc:.3f}, PR={pr_auc:.3f}.")
+
+    # 7. Bucket distribution
+    hot = (y_scores >= thresholds['hot']).sum()
+    warm = ((y_scores >= thresholds['warm']) & (y_scores < thresholds['hot'])).sum()
+    cool = ((y_scores >= thresholds['cool']) & (y_scores < thresholds['warm'])).sum()
+    cold = (y_scores < thresholds['cool']).sum()
+    findings.append(f"**Buckets:** {hot} Hot, {warm} Warm, {cool} Cool, {cold} Cold.")
+
+    return findings
+
+# ─────────────────────────────────────────────────────────
+# In your “Key Findings” tab:
+with tabs[4]:
+    st.title("📈 Report of Key Findings")
+
+    # assume df, y_scores, thresholds are in scope
+    for bullet in generate_findings(df, y_scores, thresholds):
+        st.markdown(f"- {bullet}")
+What this does
+Bins “Days Until Event” into three groups and compares conversion rates.
+
+Ranks regions by win rate, calling out top vs. bottom.
+
+Checks seasonal performance by calendar month.
+
+Compares corporate vs. social events.
+
+Measures phone‐match lift.
+
+Reports your model’s ROC and PR AUC on the full dataset.
+
+Counts how many leads fall into each Hot/Warm/Cool/Cold bucket.
+
+Each bullet is generated from real data every time you load or refresh—so your “Key Findings” are always up-to-date reflections of the latest numbers.
+
+
+
+
+
+
+
+
