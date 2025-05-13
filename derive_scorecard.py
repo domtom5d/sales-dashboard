@@ -2,9 +2,11 @@ import pandas as pd
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import roc_curve, roc_auc_score, precision_recall_curve, auc, confusion_matrix, classification_report
 import database as db
 import sqlite3
 import streamlit as st
+import matplotlib.pyplot as plt
 
 def generate_lead_scorecard(use_sample_data=True):
     """
@@ -14,7 +16,21 @@ def generate_lead_scorecard(use_sample_data=True):
         use_sample_data (bool): Whether to use sample data or database data
     
     Returns:
-        tuple: (weights DataFrame, suggested thresholds dict)
+        tuple: (weights DataFrame, suggested thresholds dict, model_metrics dict)
+        
+        The model_metrics dict contains these keys:
+        - roc_auc: Area under the ROC curve
+        - pr_auc: Area under the Precision-Recall curve
+        - fpr: False positive rates for ROC curve
+        - tpr: True positive rates for ROC curve
+        - precision: Precision values for PR curve
+        - recall: Recall values for PR curve
+        - best_threshold: Optimal probability threshold (Youden's J)
+        - confusion_matrix: Confusion matrix at optimal threshold
+        - y_pred_proba: Predicted probabilities for all samples
+        - y_true: True labels
+        - won_scores: Score distribution for won leads
+        - lost_scores: Score distribution for lost leads
     """
     try:
         # 1) Load your exports
@@ -216,19 +232,74 @@ def generate_lead_scorecard(use_sample_data=True):
             'Points': weights.values
         })
         
-        # 7) Suggested threshold buckets
+        # 7) Calculate model performance metrics
+        y_pred_proba = model.predict_proba(X_scaled)[:, 1]  # Probability of positive class
+        
+        # Compute ROC curve and AUC
+        fpr, tpr, thresholds_roc = roc_curve(y, y_pred_proba)
+        roc_auc = roc_auc_score(y, y_pred_proba)
+        
+        # Compute precision-recall curve
+        precision, recall, thresholds_pr = precision_recall_curve(y, y_pred_proba)
+        pr_auc = auc(recall, precision)
+        
+        # Compute optimal threshold using Youden's J statistic (sensitivity + specificity - 1)
+        j_scores = tpr + (1 - fpr) - 1
+        best_idx = np.argmax(j_scores)
+        best_threshold = thresholds_roc[best_idx]
+        
+        # Get confusion matrix at the optimal threshold
+        optimal_preds = (y_pred_proba >= best_threshold).astype(int)
+        cm = confusion_matrix(y, optimal_preds)
+        
+        # Get score distributions
+        won_scores = y_pred_proba[y == 1]
+        lost_scores = y_pred_proba[y == 0]
+        
+        # Store model evaluation metrics
+        model_metrics = {
+            'roc_auc': roc_auc,
+            'pr_auc': pr_auc,
+            'fpr': fpr,
+            'tpr': tpr,
+            'precision': precision,
+            'recall': recall,
+            'thresholds_roc': thresholds_roc,
+            'best_threshold': best_threshold,
+            'confusion_matrix': cm,
+            'y_pred_proba': y_pred_proba,
+            'y_true': y,
+            'won_scores': won_scores,
+            'lost_scores': lost_scores,
+            'best_idx': best_idx,
+            'j_scores': j_scores
+        }
+        
+        # 8) Set data-driven thresholds
+        # Convert model probabilities to point scale for easier interpretation
+        total_pts = weights.sum()
+        prob_to_points = lambda p: int(p * total_pts)
+        
+        # Find second threshold at 1/3 of the way between best threshold and 0
+        second_threshold = best_threshold / 2
+        third_threshold = best_threshold / 4
+        
+        # Define thresholds using data-driven approach
         thresholds = {
-            'Hot': int(weights.sum() * 0.6),
-            'Warm': int(weights.sum() * 0.4),
-            'Cool': int(weights.sum() * 0.2),
+            'Hot': prob_to_points(best_threshold),           # Optimal threshold from ROC curve
+            'Warm': prob_to_points(second_threshold),        # Halfway point
+            'Cool': prob_to_points(third_threshold),         # Quarter point
             'Cold': 0
         }
         
-        return result_df, thresholds
+        print(f"Data-driven thresholds: Hot: {thresholds['Hot']}, Warm: {thresholds['Warm']}, Cool: {thresholds['Cool']}")
+        print(f"ROC AUC: {roc_auc:.3f}, Best threshold: {best_threshold:.3f}")
+        
+        return result_df, thresholds, model_metrics
         
     except Exception as e:
         print(f"Error generating scorecard: {str(e)}")
-        return None, None
+        return None, None, None
 
 def score_lead(lead_data, scorecard):
     """
