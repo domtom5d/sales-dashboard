@@ -77,109 +77,242 @@ def import_leads_data(csv_path):
     Returns:
         int: Number of records imported
     """
+    session = None
     try:
-        # Read the CSV file
-        df = pd.read_csv(csv_path, low_memory=False)
+        # Create backup directory
+        os.makedirs("data/backups", exist_ok=True)
         
-        # Convert data
-        records = []
-        for _, row in df.iterrows():
-            try:
-                # Extract Box Key from Name field if available
-                box_key = None
-                if 'Name' in row and pd.notna(row['Name']):
-                    parts = str(row['Name']).split(' ')
-                    for part in parts:
-                        if part.startswith('BK-'):
-                            box_key = part
-                            break
-                
-                # If Box Key not found, use from Box Key column if available
-                if not box_key and 'Box Key' in row and pd.notna(row['Box Key']):
-                    box_key = row['Box Key']
-                
-                # Ensure we have a box key
-                if not box_key:
-                    continue
-                
-                # Process date fields
-                inquiry_date = None
-                if 'Inquiry Date' in row and pd.notna(row['Inquiry Date']):
-                    try:
-                        inquiry_date = pd.to_datetime(row['Inquiry Date'])
-                    except:
-                        pass
-                
-                event_date = None
-                if 'Event Date' in row and pd.notna(row['Event Date']):
-                    try:
-                        event_date = pd.to_datetime(row['Event Date'])
-                    except:
-                        pass
-                
-                # Process numeric fields
-                days_since_inquiry = pd.to_numeric(row.get('Days Since Inquiry', None), errors='coerce')
-                days_until_event = pd.to_numeric(row.get('Days Until Event', None), errors='coerce')
-                bartenders_needed = pd.to_numeric(row.get('Bartenders Needed', None), errors='coerce')
-                number_of_guests = pd.to_numeric(row.get('Number Of Guests', None), errors='coerce')
-                total_serve_time = pd.to_numeric(row.get('Total Serve Time', None), errors='coerce')
-                total_bartender_time = pd.to_numeric(row.get('Total Bartender Time', None), errors='coerce')
-                
-                # Process status and outcome
-                status = None
-                won = False
-                lost = False
-                outcome = 0
-                
-                if 'Status' in row and pd.notna(row['Status']):
-                    status = str(row['Status']).strip().lower()
-                    won = status in ['definite', 'definte'] 
-                    lost = status == 'lost'
-                    outcome = 1 if won else 0 if lost else None
-                
-                # Create a new Lead record
-                record = Lead(
-                    box_key=box_key,
-                    inquiry_date=inquiry_date,
-                    lead_trigger=row.get('Lead Trigger', None),
-                    event_date=event_date,
-                    name=row.get('Name', None),
-                    booking_type=row.get('Booking Type', None),
-                    days_since_inquiry=days_since_inquiry,
-                    days_until_event=days_until_event,
-                    city=row.get('City', None),
-                    state=row.get('State', None),
-                    bartenders_needed=bartenders_needed,
-                    number_of_guests=number_of_guests,
-                    total_serve_time=total_serve_time,
-                    total_bartender_time=total_bartender_time,
-                    marketing_source=row.get('Marketing Source', None),
-                    referral_source=row.get('Referral Source', None),
-                    status=status,
-                    won=won,
-                    lost=lost,
-                    outcome=outcome
-                )
-                
-                records.append(record)
-            except Exception as e:
-                print(f"Error processing row: {e}")
+        # Create a backup of the database before import
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_csv = f"data/backups/leads_backup_{timestamp}.csv"
         
-        # Insert records into the database
+        # Backup existing data
         session = Session()
-        for record in records:
-            try:
-                session.merge(record)  # Use merge to handle updates if the record already exists
-            except Exception as e:
-                print(f"Error inserting record: {e}")
-                session.rollback()
-        
-        session.commit()
+        existing_leads_count = session.query(Lead).count()
+        if existing_leads_count > 0:
+            existing_leads = pd.read_sql(session.query(Lead).statement, engine)
+            existing_leads.to_csv(backup_csv, index=False)
+            print(f"Created backup with {existing_leads_count} leads at {backup_csv}")
         session.close()
         
-        return len(records)
+        # Read the CSV file with more permissive settings
+        print(f"Importing leads from {csv_path}...")
+        df = pd.read_csv(csv_path, low_memory=False, on_bad_lines='skip', encoding='utf-8')
+        print(f"Found {len(df)} rows in CSV file")
+        
+        # Save a copy of the source data for reference
+        source_copy = f"data/backups/source_leads_{timestamp}.csv"
+        df.to_csv(source_copy, index=False)
+        
+        # Normalize column names to handle case sensitivity
+        column_map = {}
+        for col in df.columns:
+            col_lower = col.lower()
+            if col_lower == 'box key':
+                column_map[col] = 'Box Key'
+            elif col_lower == 'name':
+                column_map[col] = 'Name'
+            elif col_lower == 'inquiry date':
+                column_map[col] = 'Inquiry Date'
+            elif col_lower == 'event date':
+                column_map[col] = 'Event Date'
+            elif col_lower == 'lead trigger':
+                column_map[col] = 'Lead Trigger'
+            elif col_lower == 'days since inquiry':
+                column_map[col] = 'Days Since Inquiry'
+            elif col_lower == 'days until event':
+                column_map[col] = 'Days Until Event'
+            elif col_lower == 'city':
+                column_map[col] = 'City'
+            elif col_lower == 'state':
+                column_map[col] = 'State'
+            elif col_lower == 'bartenders needed':
+                column_map[col] = 'Bartenders Needed'
+            elif col_lower == 'number of guests':
+                column_map[col] = 'Number Of Guests'
+            elif col_lower == 'total serve time':
+                column_map[col] = 'Total Serve Time'
+            elif col_lower == 'total bartender time':
+                column_map[col] = 'Total Bartender Time'
+            elif col_lower == 'marketing source':
+                column_map[col] = 'Marketing Source'
+            elif col_lower == 'referral source':
+                column_map[col] = 'Referral Source'
+            elif col_lower == 'status':
+                column_map[col] = 'Status'
+            elif col_lower == 'booking type':
+                column_map[col] = 'Booking Type'
+        
+        # Rename columns
+        if column_map:
+            df = df.rename(columns=column_map)
+            print(f"Normalized {len(column_map)} column names")
+        
+        # Print column names to help debug
+        print(f"Available columns: {', '.join(df.columns)}")
+        
+        # Process data in batches
+        session = Session()
+        batch_size = 100
+        total_records = 0
+        
+        for i in range(0, len(df), batch_size):
+            batch = df.iloc[i:i+batch_size]
+            batch_records = 0
+            
+            for _, row in batch.iterrows():
+                try:
+                    # Extract Box Key from Name field if available
+                    box_key = None
+                    
+                    # Check for Box Key column first
+                    if 'Box Key' in row and pd.notna(row['Box Key']):
+                        box_key = str(row['Box Key']).strip()
+                    
+                    # If not found, look for BK- pattern in Name
+                    if not box_key and 'Name' in row and pd.notna(row['Name']):
+                        name_str = str(row['Name'])
+                        if 'BK-' in name_str:
+                            parts = name_str.split(' ')
+                            for part in parts:
+                                if part.startswith('BK-'):
+                                    box_key = part.strip()
+                                    break
+                    
+                    # If still no box key, generate one based on row index and timestamp
+                    if not box_key:
+                        row_idx = total_records + batch_records
+                        box_key = f"GEN-{timestamp}-{row_idx}"
+                        print(f"Generated box_key: {box_key} for row without BK")
+                    
+                    # Process date fields
+                    inquiry_date = None
+                    if 'Inquiry Date' in row and pd.notna(row['Inquiry Date']):
+                        try:
+                            inquiry_date = pd.to_datetime(row['Inquiry Date'], errors='coerce')
+                        except Exception as e:
+                            print(f"Error parsing inquiry date: {e}")
+                    
+                    event_date = None
+                    if 'Event Date' in row and pd.notna(row['Event Date']):
+                        try:
+                            event_date = pd.to_datetime(row['Event Date'], errors='coerce')
+                        except Exception as e:
+                            print(f"Error parsing event date: {e}")
+                    
+                    # Process numeric fields
+                    days_since_inquiry = pd.to_numeric(row.get('Days Since Inquiry', None), errors='coerce')
+                    days_until_event = pd.to_numeric(row.get('Days Until Event', None), errors='coerce')
+                    bartenders_needed = pd.to_numeric(row.get('Bartenders Needed', None), errors='coerce')
+                    number_of_guests = pd.to_numeric(row.get('Number Of Guests', None), errors='coerce')
+                    total_serve_time = pd.to_numeric(row.get('Total Serve Time', None), errors='coerce')
+                    total_bartender_time = pd.to_numeric(row.get('Total Bartender Time', None), errors='coerce')
+                    
+                    # Process status and outcome according to our updated logic
+                    status = None
+                    won = False
+                    lost = False
+                    outcome = 0
+                    
+                    if 'Status' in row and pd.notna(row['Status']):
+                        status = str(row['Status']).strip()
+                        status_lower = status.lower()
+                        won = status_lower in ['definite', 'definte', 'tentative']
+                        lost = status_lower == 'lost'
+                        outcome = 1 if won else 0 if lost else None
+                    
+                    # Also check Lead Trigger if Status doesn't give a clear outcome
+                    if outcome is None and 'Lead Trigger' in row and pd.notna(row['Lead Trigger']):
+                        lead_trigger = str(row['Lead Trigger']).strip().lower()
+                        if lead_trigger in ['hot', 'warm', 'super lead']:
+                            won = True
+                            lost = False
+                            outcome = 1
+                        elif lead_trigger in ['cool', 'cold']:
+                            won = False
+                            lost = True
+                            outcome = 0
+                    
+                    # Create lead dict with all available fields
+                    lead_data = {
+                        'box_key': box_key,
+                        'inquiry_date': inquiry_date,
+                        'event_date': event_date,
+                        'name': row.get('Name'),
+                        'status': status,
+                        'won': won,
+                        'lost': lost,
+                        'outcome': outcome if outcome is not None else 0
+                    }
+                    
+                    # Add all other fields if they exist in the row
+                    optional_fields = {
+                        'Lead Trigger': 'lead_trigger',
+                        'Booking Type': 'booking_type',
+                        'Days Since Inquiry': 'days_since_inquiry',
+                        'Days Until Event': 'days_until_event',
+                        'City': 'city',
+                        'State': 'state',
+                        'Bartenders Needed': 'bartenders_needed',
+                        'Number Of Guests': 'number_of_guests',
+                        'Total Serve Time': 'total_serve_time',
+                        'Total Bartender Time': 'total_bartender_time',
+                        'Marketing Source': 'marketing_source',
+                        'Referral Source': 'referral_source'
+                    }
+                    
+                    for csv_col, db_col in optional_fields.items():
+                        if csv_col in row and pd.notna(row[csv_col]):
+                            lead_data[db_col] = row[csv_col]
+                    
+                    # Create Lead object
+                    lead = Lead(**lead_data)
+                    
+                    # Check if record already exists
+                    existing = session.query(Lead).filter(Lead.box_key == box_key).first()
+                    if existing:
+                        # Update existing record attributes
+                        for key, value in lead_data.items():
+                            if value is not None and hasattr(existing, key):
+                                setattr(existing, key, value)
+                    else:
+                        # Add new record
+                        session.add(lead)
+                    
+                    batch_records += 1
+                    
+                    # Commit every 10 records to avoid transaction bloat
+                    if batch_records % 10 == 0:
+                        session.commit()
+                        
+                except Exception as e:
+                    print(f"Error processing row: {e}")
+                    # Continue processing (don't stop the entire import for one bad row)
+                    continue
+            
+            # Commit batch
+            try:
+                session.commit()
+                total_records += batch_records
+                print(f"Imported batch {i//batch_size + 1}: {batch_records} records (total: {total_records})")
+            except Exception as e:
+                print(f"Error committing batch: {e}")
+                session.rollback()
+        
+        # Close session
+        if session:
+            session.close()
+        
+        print(f"Successfully imported {total_records} lead records")
+        return total_records
     except Exception as e:
-        print(f"Error importing data: {e}")
+        print(f"Error in import_leads_data: {e}")
+        if session:
+            try:
+                session.rollback()
+                session.close()
+            except:
+                pass
         return 0
 
 
@@ -193,77 +326,198 @@ def import_operations_data(csv_path):
     Returns:
         int: Number of records imported
     """
+    session = None
     try:
-        # Read the CSV file
-        df = pd.read_csv(csv_path, low_memory=False)
+        # Create backup directory
+        os.makedirs("data/backups", exist_ok=True)
         
-        # Convert data
-        records = []
-        for _, row in df.iterrows():
-            try:
-                # Extract Box Key from Name field if available
-                box_key = None
-                if 'Name' in row and pd.notna(row['Name']):
-                    parts = str(row['Name']).split(' ')
-                    for part in parts:
-                        if part.startswith('BK-'):
-                            box_key = part
-                            break
-                
-                # If Box Key not found, use from Box Key column if available
-                if not box_key and 'Box Key' in row and pd.notna(row['Box Key']):
-                    box_key = row['Box Key']
-                
-                # Ensure we have a box key
-                if not box_key:
-                    continue
-                
-                # Process date fields
-                event_date = None
-                if 'Event Date' in row and pd.notna(row['Event Date']):
-                    try:
-                        event_date = pd.to_datetime(row['Event Date'])
-                    except:
-                        pass
-                
-                # Process numeric fields
-                actual_deal_value = pd.to_numeric(row.get('Actual Deal Value', None), errors='coerce')
-                days_until_event = pd.to_numeric(row.get('Days Until Event', None), errors='coerce')
-                
-                # Create a new Operation record
-                record = Operation(
-                    box_key=box_key,
-                    event_date=event_date,
-                    actual_deal_value=actual_deal_value,
-                    region=row.get('Region', None),
-                    name=row.get('Name', None),
-                    days_until_event=days_until_event,
-                    status=row.get('Status', None),
-                    booking_type=row.get('Booking Type', None),
-                    event_type=row.get('Event Type', None),
-                    city=row.get('City', None),
-                    state=row.get('State', None)
-                )
-                
-                records.append(record)
-            except Exception as e:
-                print(f"Error processing row: {e}")
+        # Create a backup of the database before import
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_csv = f"data/backups/operations_backup_{timestamp}.csv"
         
-        # Insert records into the database
+        # Backup existing data
         session = Session()
-        for record in records:
-            try:
-                session.merge(record)  # Use merge to handle updates if the record already exists
-            except Exception as e:
-                print(f"Error inserting record: {e}")
-                session.rollback()
-        
-        session.commit()
+        existing_ops_count = session.query(Operation).count()
+        if existing_ops_count > 0:
+            existing_ops = pd.read_sql(session.query(Operation).statement, engine)
+            existing_ops.to_csv(backup_csv, index=False)
+            print(f"Created backup with {existing_ops_count} operations at {backup_csv}")
         session.close()
         
-        return len(records)
+        # Read the CSV file with more permissive settings
+        print(f"Importing operations from {csv_path}...")
+        df = pd.read_csv(csv_path, low_memory=False, on_bad_lines='skip', encoding='utf-8')
+        print(f"Found {len(df)} rows in CSV file")
+        
+        # Save a copy of the source data for reference
+        source_copy = f"data/backups/source_operations_{timestamp}.csv"
+        df.to_csv(source_copy, index=False)
+        
+        # Normalize column names to handle case sensitivity
+        column_map = {}
+        for col in df.columns:
+            col_lower = col.lower()
+            if col_lower == 'box key':
+                column_map[col] = 'Box Key'
+            elif col_lower == 'name':
+                column_map[col] = 'Name'
+            elif col_lower == 'event date':
+                column_map[col] = 'Event Date'
+            elif col_lower == 'actual deal value':
+                column_map[col] = 'Actual Deal Value'
+            elif col_lower == 'region':
+                column_map[col] = 'Region'
+            elif col_lower == 'days until event':
+                column_map[col] = 'Days Until Event'
+            elif col_lower == 'status':
+                column_map[col] = 'Status'
+            elif col_lower == 'booking type':
+                column_map[col] = 'Booking Type'
+            elif col_lower == 'event type':
+                column_map[col] = 'Event Type'
+            elif col_lower == 'city':
+                column_map[col] = 'City'
+            elif col_lower == 'state':
+                column_map[col] = 'State'
+        
+        # Rename columns
+        if column_map:
+            df = df.rename(columns=column_map)
+            print(f"Normalized {len(column_map)} column names")
+        
+        # Print column names to help debug
+        print(f"Available columns: {', '.join(df.columns)}")
+        
+        # Process data in batches
+        session = Session()
+        batch_size = 100
+        total_records = 0
+        
+        for i in range(0, len(df), batch_size):
+            batch = df.iloc[i:i+batch_size]
+            batch_records = 0
+            
+            for _, row in batch.iterrows():
+                try:
+                    # Extract Box Key from Name field if available
+                    box_key = None
+                    
+                    # Check for Box Key column first
+                    if 'Box Key' in row and pd.notna(row['Box Key']):
+                        box_key = str(row['Box Key']).strip()
+                    
+                    # If not found, look for BK- pattern in Name
+                    if not box_key and 'Name' in row and pd.notna(row['Name']):
+                        name_str = str(row['Name'])
+                        if 'BK-' in name_str:
+                            parts = name_str.split(' ')
+                            for part in parts:
+                                if part.startswith('BK-'):
+                                    box_key = part.strip()
+                                    break
+                    
+                    # If still no box key, generate one based on row index and timestamp
+                    if not box_key:
+                        row_idx = total_records + batch_records
+                        box_key = f"GEN-OP-{timestamp}-{row_idx}"
+                        print(f"Generated box_key: {box_key} for operation row without BK")
+                    
+                    # Process date fields
+                    event_date = None
+                    if 'Event Date' in row and pd.notna(row['Event Date']):
+                        try:
+                            event_date = pd.to_datetime(row['Event Date'], errors='coerce')
+                        except Exception as e:
+                            print(f"Error parsing event date: {e}")
+                    
+                    # Process numeric fields with more robust handling
+                    actual_deal_value = None
+                    if 'Actual Deal Value' in row and pd.notna(row['Actual Deal Value']):
+                        # Handle currency symbols, commas, etc.
+                        value_str = str(row['Actual Deal Value']).replace('$', '').replace(',', '')
+                        try:
+                            actual_deal_value = pd.to_numeric(value_str, errors='coerce')
+                        except:
+                            pass
+                    
+                    days_until_event = pd.to_numeric(row.get('Days Until Event', None), errors='coerce')
+                    
+                    # Create operation dict with all available fields
+                    op_data = {
+                        'box_key': box_key,
+                        'event_date': event_date,
+                        'actual_deal_value': actual_deal_value,
+                        'days_until_event': days_until_event
+                    }
+                    
+                    # Add all other fields if they exist in the row
+                    optional_fields = {
+                        'Region': 'region',
+                        'Name': 'name',
+                        'Status': 'status',
+                        'Booking Type': 'booking_type',
+                        'Event Type': 'event_type',
+                        'City': 'city',
+                        'State': 'state'
+                    }
+                    
+                    for csv_col, db_col in optional_fields.items():
+                        if csv_col in row and pd.notna(row[csv_col]):
+                            op_data[db_col] = row[csv_col]
+                    
+                    # Try to detect a duplicate before creating a new operation
+                    existing = session.query(Operation).filter(Operation.box_key == box_key).first()
+                    
+                    if existing:
+                        # Update existing record with new data
+                        for key, value in op_data.items():
+                            if value is not None and hasattr(existing, key):
+                                setattr(existing, key, value)
+                    else:
+                        # Create new Operation object
+                        operation = Operation(**op_data)
+                        session.add(operation)
+                    
+                    batch_records += 1
+                    
+                    # Commit every 10 records to avoid transaction bloat
+                    if batch_records % 10 == 0:
+                        try:
+                            session.commit()
+                        except Exception as e:
+                            print(f"Error committing records: {e}")
+                            session.rollback()
+                            # Continue with next batch instead of aborting
+                            continue
+                    
+                except Exception as e:
+                    print(f"Error processing operation row: {e}")
+                    # Continue processing (don't stop the entire import for one bad row)
+                    continue
+            
+            # Commit batch
+            try:
+                session.commit()
+                total_records += batch_records
+                print(f"Imported operations batch {i//batch_size + 1}: {batch_records} records (total: {total_records})")
+            except Exception as e:
+                print(f"Error committing operations batch: {e}")
+                session.rollback()
+        
+        # Close session
+        if session:
+            session.close()
+        
+        print(f"Successfully imported {total_records} operation records")
+        return total_records
     except Exception as e:
-        print(f"Error importing data: {e}")
+        print(f"Error in import_operations_data: {e}")
+        if session:
+            try:
+                session.rollback()
+                session.close()
+            except:
+                pass
         return 0
 
 
