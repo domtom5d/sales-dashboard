@@ -129,13 +129,25 @@ def load_data():
                         # Define bins for guests
                         bins_guests = [0, 50, 100, 200, np.inf]
                         labels_guests = ['0–50', '51–100', '101–200', '200+']
-                        df['Guests Bin'] = pd.cut(df['number_of_guests'], bins=bins_guests, labels=labels_guests)
+                        
+                        # Handle None values - replace with NaN first
+                        guests = df['number_of_guests'].copy()
+                        guests = pd.to_numeric(guests, errors='coerce')  # Convert to numeric, invalid values become NaN
+                        
+                        # Only bin non-NaN values
+                        df['Guests Bin'] = pd.cut(guests, bins=bins_guests, labels=labels_guests)
                     
                     if 'DaysUntilBin' not in df.columns and 'days_until_event' in df.columns:
                         # Define bins for days until event
                         bins_days = [0, 7, 30, 90, np.inf]
                         labels_days = ['0–7 days', '8–30 days', '31–90 days', '91+ days']
-                        df['DaysUntilBin'] = pd.cut(df['days_until_event'], bins=bins_days, labels=labels_days)
+                        
+                        # Handle None values - replace with NaN first
+                        days_until = df['days_until_event'].copy()
+                        days_until = pd.to_numeric(days_until, errors='coerce')  # Convert to numeric, invalid values become NaN
+                        
+                        # Only bin non-NaN values
+                        df['DaysUntilBin'] = pd.cut(days_until, bins=bins_days, labels=labels_days)
                     
                     # Make column names consistent with the original data
                     df.rename(columns={
