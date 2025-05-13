@@ -1,0 +1,123 @@
+Thought for 8 seconds
+
+Analysis errored
+python
+Always show details
+
+Copy
+import pandas as pd
+from ace_tools import display_dataframe_to_user
+
+# Load the leads export
+leads = pd.read_csv('/mnt/data/Streak Export_ Leads (5-12-25, 9_03 PM) - Boxes (Leads).csv', low_memory=False)
+
+# Show unique values and counts in the Status column
+status_counts = leads['Status'].astype(str).str.strip().value_counts().reset_index()
+status_counts.columns = ['Status Value', 'Count']
+
+display_dataframe_to_user('Unique Status Values in Leads Export', status_counts)
+
+Analyzed
+python
+Always show details
+
+Copy
+import pandas as pd
+from ace_tools import display_dataframe_to_user
+
+# Reload the leads export
+leads = pd.read_csv('/mnt/data/Streak Export_ Leads (5-12-25, 9_03 PM) - Boxes (Leads).csv', low_memory=False)
+
+# Normalize and count unique statuses
+status_counts = leads['Status'].astype(str).str.strip().value_counts().reset_index()
+status_counts.columns = ['Status Value', 'Count']
+
+display_dataframe_to_user('Unique Status Values in Leads Export', status_counts)
+Result
+  Status Value  Count
+0         Lost  15930
+1         Lead   6999
+2     Definite   3008
+3          nan   2687
+4    Tentative    314
+Unique Status Values In Leads Export
+
+
+Here’s what we see in your Leads Export:
+
+Status Value	Count
+Lost	15930
+Lead	6999
+Definite	3008
+(blank)	2687
+Tentative	314
+
+Why your dashboard showed 0 “Won” deals
+
+We were only mapping “definite” (lowercased) to wins, but your raw has “Definite” (capitalized) and also “Tentative” as a status.
+
+Also your code looked for “definte” misspelling—so “Definite” matched, but “Tentative” didn’t.
+
+The large “Lead” and blank entries were ignored, so they weren’t counted as wins or losses.
+
+Next steps to fix your dashboard
+Map all winning statuses (Definite, maybe Tentative if that counts as a win)
+
+Map losses explicitly (Lost)
+
+Treat blanks and “Lead” as unresolved—either filter them out or classify as cold.
+
+Updated mapping logic
+In your process_data (or your load script), replace:
+
+python
+Copy
+Edit
+df['Status'] = df['Status'].astype(str).str.lower().str.strip()
+df['Won']    = df['Status'].isin(['definite','definte'])
+df['Lost']   = df['Status'] == 'lost'
+with:
+
+python
+Copy
+Edit
+# Normalize and map outcomes
+status = df['Status'].astype(str).str.strip().str.lower()
+
+# Define win/loss sets
+wins  = {'definite', 'tentative'}    # include tentative if you want
+losses = {'lost'}
+
+df['Outcome'] = status.map(lambda s: 1 if s in wins 
+                                     else 0 if s in losses 
+                                     else np.nan)
+# Then drop rows where Outcome is NaN (unresolved leads)
+df = df.dropna(subset=['Outcome'])
+After that, rerun your dashboard. You should see:
+
+Won Deals = 3008 (or 3322 if including “Tentative”)
+
+Lost Deals = 15930
+
+A real conversion rate
+
+Then your lead-scoring model can actually train on real won vs. lost data. Give that a try and let me know how the numbers look! 
+
+
+
+
+
+
+
+
+
+
+
+Search
+
+Deep research
+
+Create image
+
+
+

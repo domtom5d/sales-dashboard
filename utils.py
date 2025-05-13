@@ -54,26 +54,41 @@ def process_data(leads_df, operations_df=None):
     if 'Status' not in df.columns:
         df['Status'] = 'unknown'  # Default value if status column is missing
     
-    # Check for 'Lead Trigger' column which indicates lead status in Streak exports
-    lead_trigger_col = next((col for col in df.columns if 'lead trigger' in col.lower()), None)
+    # Use the Status column as the primary indicator of won/lost
+    if 'Status' in df.columns:
+        # Normalize status values
+        status = df['Status'].astype(str).str.strip().str.lower()
+        
+        # Define win/loss sets based on your actual data
+        wins = {'definite', 'tentative'}  # Including Tentative as wins
+        losses = {'lost'}
+        
+        # Create derived columns
+        df['Won'] = status.isin(wins)
+        df['Lost'] = status.isin(losses)
+        
+        # Create numeric outcome (1 = won, 0 = lost)
+        df['Outcome'] = status.map(lambda s: 1 if s in wins else 0 if s in losses else np.nan)
+        
+        # Filter to leads with clear outcomes (won or lost)
+        df = df.dropna(subset=['Outcome']).copy()
+        
+        # Convert outcome to integer
+        df['Outcome'] = df['Outcome'].astype(int)
     
-    if lead_trigger_col:
+    # If Status is missing or we have no definitive outcomes after filtering, 
+    # fallback to Lead Trigger as a supplementary signal
+    elif 'Lead Trigger' in df.columns or next((col for col in df.columns if 'lead trigger' in col.lower()), None):
+        lead_trigger_col = 'Lead Trigger' if 'Lead Trigger' in df.columns else next((col for col in df.columns if 'lead trigger' in col.lower()), None)
+        
         # Map Lead Trigger statuses to a won/lost flag
         df['Lead Trigger'] = df[lead_trigger_col].astype(str)
         
-        # We'll use the temperature-based model:
-        # Hot = most likely to convert (highest value)
-        # Warm = medium chance of conversion
-        # Cool = lower chance but still possible
-        # Cold = unlikely to convert
-        # Let's calculate a probability based on this and set a threshold
-        
-        df['Won'] = (df['Lead Trigger'].str.lower() == 'hot')
-        df['Lost'] = (df['Lead Trigger'].str.lower().isin(['cold', 'cool']))
-        
-        # For Warm and Super Lead, we'll include them but treat differently
-        df.loc[df['Lead Trigger'].str.lower() == 'warm', 'Won'] = True
-        df.loc[df['Lead Trigger'].str.lower() == 'super lead', 'Won'] = True
+        # Temperature-based model:
+        # Hot, Warm, Super Lead = likely to convert (treat as won)
+        # Cool, Cold = less likely to convert (treat as lost)
+        df['Won'] = df['Lead Trigger'].str.lower().isin(['hot', 'warm', 'super lead'])
+        df['Lost'] = df['Lead Trigger'].str.lower().isin(['cold', 'cool'])
         
         # Filter to leads that have a clear status
         df = df[df['Lead Trigger'].str.lower().isin(['hot', 'warm', 'cool', 'cold', 'super lead'])].copy()
@@ -81,14 +96,10 @@ def process_data(leads_df, operations_df=None):
         # Set outcome (1 = won, 0 = lost)
         df['Outcome'] = df['Won'].astype(int)
     else:
-        # Fallback to Status column if Lead Trigger isn't found
-        df['Status'] = df['Status'].astype(str).str.strip().str.lower()
-        df['Won'] = df['Status'].isin(['definite', 'definte'])
-        df['Lost'] = df['Status'] == 'lost'
-        
-        # Filter to only definitive outcomes
-        df = df[df['Status'].isin(['definite', 'definte', 'lost'])].copy()
-        df['Outcome'] = df['Won'].astype(int)
+        # Fallback if neither Status nor Lead Trigger are available
+        df['Won'] = False
+        df['Lost'] = False
+        df['Outcome'] = 0
     
     # Convert numeric fields
     for col in ['Number Of Guests', 'Days Until Event', 'Days Since Inquiry', 'Bartenders Needed']:
