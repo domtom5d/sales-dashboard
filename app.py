@@ -227,14 +227,42 @@ if st.session_state.processed_df is not None:
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                # Plot conversion by booking type
+                # Plot conversion by booking type using the improved horizontal bar chart
                 st.write("#### Conversion by Booking Type")
-                fig, ax = plt.subplots(figsize=(8, 5))
-                conversion_rates["booking_type"].plot(kind="bar", x="Booking Type", y="Conversion Rate", ax=ax)
-                ax.set_xlabel("Booking Type")
-                ax.set_ylabel("Conversion Rate")
-                ax.set_ylim(0, min(1, conversion_rates["booking_type"]["Conversion Rate"].max() * 1.5))
-                st.pyplot(fig)
+                
+                if "booking_type" in conversion_rates and not conversion_rates["booking_type"].empty:
+                    # Get the top 8 booking types by conversion rate
+                    booking_df = conversion_rates["booking_type"].copy()
+                    
+                    # Only include booking types with at least 3 leads
+                    booking_df = booking_df[booking_df['total'] >= 3]
+                    
+                    # Get top 8 or all if less than 8
+                    top_booking_types = booking_df.head(8)
+                    
+                    # Create horizontal bar chart
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    bars = ax.barh(top_booking_types['Booking Type'], 
+                                  top_booking_types['Conversion Rate'],
+                                  edgecolor='black',
+                                  color='skyblue')
+                    
+                    # Set labels and limits
+                    ax.set_xlabel('Conversion Rate')
+                    ax.set_xlim(0, min(1, top_booking_types['Conversion Rate'].max() * 1.2))
+                    
+                    # Add annotations with conversion rate percentage and sample size
+                    for i, (rate, total) in enumerate(zip(top_booking_types['Conversion Rate'], 
+                                                         top_booking_types['total'])):
+                        ax.text(rate + 0.01, i, f"{rate:.0%} (n={int(total)})", va='center')
+                    
+                    # Add a title
+                    plt.title('Top Booking Types by Conversion Rate')
+                    plt.tight_layout()
+                    
+                    st.pyplot(fig)
+                else:
+                    st.info("No booking type data available.")
             
             with col2:
                 # Plot conversion by referral source

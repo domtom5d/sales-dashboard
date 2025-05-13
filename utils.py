@@ -208,6 +208,52 @@ def process_data(leads_df, operations_df=None):
     
     return df
 
+def clean_booking_type(booking_type):
+    """
+    Clean and standardize booking type strings.
+    
+    Args:
+        booking_type (str): The booking type string to clean
+        
+    Returns:
+        str: Cleaned booking type
+    """
+    if not booking_type or pd.isna(booking_type):
+        return "Unknown"
+    
+    # Convert to string if needed
+    booking_type = str(booking_type)
+    
+    # Convert to lowercase, strip trailing years, replace underscores with spaces
+    cleaned = booking_type.lower()
+    cleaned = re.sub(r'\d{4}$', '', cleaned)  # Remove trailing years (e.g., 2025)
+    cleaned = cleaned.replace('_', ' ').strip()
+    
+    # Group similar types
+    if 'wedding' in cleaned:
+        return 'Wedding'
+    elif 'corporate' in cleaned:
+        return 'Corporate Event'
+    elif 'birthday' in cleaned or 'bday' in cleaned:
+        return 'Birthday'
+    elif 'graduation' in cleaned or 'grad' in cleaned:
+        return 'Graduation'
+    elif 'holiday' in cleaned or 'christmas' in cleaned or 'halloween' in cleaned:
+        return 'Holiday Party'
+    elif 'anniversary' in cleaned:
+        return 'Anniversary'
+    elif 'fundraiser' in cleaned or 'charity' in cleaned:
+        return 'Fundraiser'
+    elif 'rehearsal' in cleaned:
+        return 'Rehearsal Dinner'
+    elif 'engagement' in cleaned:
+        return 'Engagement'
+    elif 'private' in cleaned:
+        return 'Private Party'
+    
+    # Title case for display
+    return cleaned.title()
+
 def calculate_conversion_rates(df):
     """
     Calculate conversion rates by different categories.
@@ -237,10 +283,41 @@ def calculate_conversion_rates(df):
         booking_type_col = 'booking_type'
     
     if booking_type_col:
-        conv_booking_type = df.groupby(booking_type_col)['Outcome'].mean().reset_index()
-        conv_booking_type.columns = ['Booking Type', 'Conversion Rate']
-        if not conv_booking_type.empty:
-            conversion_rates['booking_type'] = conv_booking_type
+        # Make a copy of the dataframe to avoid modifying the original
+        df_copy = df.copy()
+        
+        # Clean and standardize booking types
+        df_copy['Clean Booking Type'] = df_copy[booking_type_col].apply(clean_booking_type)
+        
+        # Count occurrences of each booking type
+        type_counts = df_copy['Clean Booking Type'].value_counts()
+        
+        # Identify low-volume booking types (less than 5 occurrences)
+        low_volume_types = type_counts[type_counts < 5].index.tolist()
+        
+        # Replace low-volume types with 'Other'
+        df_copy.loc[df_copy['Clean Booking Type'].isin(low_volume_types), 'Clean Booking Type'] = 'Other'
+        
+        # Calculate conversion rates with aggregated counts
+        booking_type_summary = (
+            df_copy
+            .groupby('Clean Booking Type')
+            .agg(
+                total=('Outcome', 'size'),
+                won=('Outcome', 'sum')
+            )
+            .assign(conversion_rate=lambda d: d['won']/d['total'])
+            .reset_index()
+            .sort_values('conversion_rate', ascending=False)
+        )
+        
+        # Rename columns for compatibility
+        booking_type_summary = booking_type_summary.rename(
+            columns={'Clean Booking Type': 'Booking Type', 'conversion_rate': 'Conversion Rate'}
+        )
+        
+        if not booking_type_summary.empty:
+            conversion_rates['booking_type'] = booking_type_summary
     
     # Event Type conversion rates
     if 'Event Type' in df.columns:
