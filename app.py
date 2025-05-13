@@ -969,6 +969,76 @@ return {
             st.markdown(href, unsafe_allow_html=True)
         except Exception as e:
             st.error(f"Error displaying raw data: {str(e)}")
+    
+    with tab5:
+        st.title("📖 Dashboard Explanations")
+
+        st.header("1. Conversion Summary")
+        st.markdown("""
+        - **Total Leads**: Number of distinct form submissions processed.  
+        - **Won Deals**: Leads you've marked "Definite" or "Tentative."  
+        - **Lost Deals**: Leads marked "Lost."  
+        - **Conversion Rate** = Won ÷ (Won + Lost).  
+          
+        _Why it matters:_ Gives you a quick high-level view of how healthy your pipeline is.
+        """)
+
+        st.header("2. Conversion by Category")
+        st.markdown("""
+        Here we break out historical **win‐rates** by:
+        - **Event Type** (Corporate vs. Wedding vs. Party)  
+        - **Referral Source** (Referral vs. Facebook vs. Google)  
+        - **State / Region**  
+        - **Guests / Days-to-Event** buckets  
+
+        _Why it matters:_ Pinpoints which lead characteristics produce the strongest closes so you can prioritize similar prospects.
+        """)
+
+        st.header("3. Feature Correlation")
+        st.markdown("""
+        Displays the **absolute Pearson correlations** between each numeric feature and outcome (0=Lost, 1=Won).  
+        - Values near **1.0** indicate very strong linear relationships.  
+        - Near **0** means little predictive power.
+
+        _Why it matters:_ Helps you decide which features deserve the most weight in your scorecard.
+        """)
+
+        st.header("4. Lead Scoring Model")
+        st.markdown("""
+        We fit a **logistic regression** (and checked with a Random Forest) to derive:
+        - **Coefficients** (direction & magnitude of impact on close probability)  
+        - **Point values** (normalized, integer weights)  
+        - **Score thresholds** (Hot/Warm/Cool/Cold cut-offs)  
+
+        _Why it matters:_ Translates complex statistics into a simple rubric your team can use in real time.
+        """)
+
+        st.header("5. Model Performance & Threshold Tuning")
+        st.markdown("""
+        - **ROC AUC** measures ranking ability (higher is better, 0.5 = random).  
+        - **PR AUC** measures precision/recall trade-off under class imbalance.  
+        - **Threshold slider** lets you choose the operating point—higher recall if you want more leads, higher precision if you want fewer but stronger leads.  
+
+        _Why it matters:_ Ensures you pick cut-offs that align with your capacity and risk tolerance.
+        """)
+
+        st.header("6. Contact-Match Analysis")
+        st.markdown("""
+        Compares win-rates for leads whose **phone area code** matches the state they specified vs. those that don't.  
+        - Local numbers often signal higher trust and close rates.  
+        - Mismatches can hint at disposable or non-local leads.
+
+        _Why it matters:_ A quick proxy for lead quality — helps you spot "ghost" or low-fi leads.
+        """)
+
+        st.header("7. Lead Scoring Calculator")
+        st.markdown("""
+        Enter hypothetical lead details to get:
+        - A **numeric score** (sum of data-driven points)  
+        - A **category** (Hot, Warm, Cool, Cold)  
+
+        _Why it matters:_ Gives your sales team a consistent, transparent way to prioritize follow-ups on new inbound leads.
+        """)
 
 else:
     # Display instructions when no data is loaded
