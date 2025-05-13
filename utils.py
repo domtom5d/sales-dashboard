@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import re  # Added for regex pattern matching in clean_booking_type
 
 def process_data(leads_df, operations_df=None):
     """
