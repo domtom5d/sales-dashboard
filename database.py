@@ -1,5 +1,7 @@
 import os
 import pandas as pd
+import numpy as np
+import sqlite3
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, Table, MetaData, Text, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -33,6 +35,10 @@ class Lead(Base):
     marketing_source = Column(String, nullable=True)
     referral_source = Column(String, nullable=True)
     status = Column(String, nullable=True)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    phone_number = Column(String, nullable=True)
     won = Column(Boolean, default=False)
     lost = Column(Boolean, default=False)
     outcome = Column(Integer, default=0)  # 1 = won, 0 = lost
@@ -58,6 +64,10 @@ class Operation(Base):
     event_type = Column(String, nullable=True)
     city = Column(String, nullable=True)
     state = Column(String, nullable=True)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    phone_number = Column(String, nullable=True)
     
     def __repr__(self):
         return f"<Operation(box_key='{self.box_key}', name='{self.name}', actual_deal_value={self.actual_deal_value})>"
@@ -66,6 +76,54 @@ class Operation(Base):
 # Create tables
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
+
+def migrate_database():
+    """
+    Update database schema to include new columns
+    """
+    try:
+        # Connect to database
+        conn = sqlite3.connect('streak_data.db')
+        cursor = conn.cursor()
+        
+        # Check if the columns already exist in leads table
+        cursor.execute("PRAGMA table_info(leads)")
+        leads_columns = [column[1] for column in cursor.fetchall()]
+        
+        # Add new columns to leads table if they don't exist
+        if 'first_name' not in leads_columns:
+            cursor.execute("ALTER TABLE leads ADD COLUMN first_name TEXT")
+        if 'last_name' not in leads_columns:
+            cursor.execute("ALTER TABLE leads ADD COLUMN last_name TEXT")
+        if 'email' not in leads_columns:
+            cursor.execute("ALTER TABLE leads ADD COLUMN email TEXT")
+        if 'phone_number' not in leads_columns:
+            cursor.execute("ALTER TABLE leads ADD COLUMN phone_number TEXT")
+            
+        # Check if the columns already exist in operations table
+        cursor.execute("PRAGMA table_info(operations)")
+        operations_columns = [column[1] for column in cursor.fetchall()]
+        
+        # Add new columns to operations table if they don't exist
+        if 'first_name' not in operations_columns:
+            cursor.execute("ALTER TABLE operations ADD COLUMN first_name TEXT")
+        if 'last_name' not in operations_columns:
+            cursor.execute("ALTER TABLE operations ADD COLUMN last_name TEXT")
+        if 'email' not in operations_columns:
+            cursor.execute("ALTER TABLE operations ADD COLUMN email TEXT")
+        if 'phone_number' not in operations_columns:
+            cursor.execute("ALTER TABLE operations ADD COLUMN phone_number TEXT")
+            
+        # Commit changes
+        conn.commit()
+        print("Database migration successful")
+        return True
+    except Exception as e:
+        print(f"Error migrating database: {e}")
+        return False
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 def import_leads_data(csv_path):
     """
@@ -130,6 +188,14 @@ def import_leads_data(csv_path):
                 column_map[col] = 'Bartenders Needed'
             elif col_lower == 'number of guests':
                 column_map[col] = 'Number Of Guests'
+            elif col_lower == 'first name':
+                column_map[col] = 'First Name'
+            elif col_lower == 'last name':
+                column_map[col] = 'Last Name'
+            elif col_lower == 'email address' or col_lower == 'email':
+                column_map[col] = 'Email Address'
+            elif col_lower == 'phone number' or col_lower == 'phone #':
+                column_map[col] = 'Phone Number'
             elif col_lower == 'total serve time':
                 column_map[col] = 'Total Serve Time'
             elif col_lower == 'total bartender time':
@@ -457,6 +523,10 @@ def import_operations_data(csv_path):
                         'Status': 'status',
                         'Booking Type': 'booking_type',
                         'Event Type': 'event_type',
+                        'First Name': 'first_name',
+                        'Last Name': 'last_name',
+                        'Email': 'email',
+                        'Phone #': 'phone_number',
                         'City': 'city',
                         'State': 'state'
                     }
@@ -642,6 +712,110 @@ def initialize_db_if_empty():
     return lead_count > 0 or operation_count > 0
 
 
+def process_phone_matching():
+    """
+    Match lead inquiries with bookings based on phone numbers
+    and update contact information.
+    
+    Returns:
+        tuple: (matched_count, total_leads, total_operations)
+    """
+    try:
+        # Migrate database first to ensure we have the needed columns
+        migrate_database()
+        
+        session = Session()
+        
+        # Get all leads and operations
+        leads = session.query(Lead).all()
+        operations = session.query(Operation).all()
+        
+        total_leads = len(leads)
+        total_operations = len(operations)
+        matches = 0
+        
+        # Create dictionaries for faster lookups
+        operation_by_phone = {}
+        operation_by_email = {}
+        operation_by_box_key = {}
+        
+        # Clean and normalize phone numbers
+        def clean_phone(phone):
+            if not phone or pd.isna(phone) or phone == "#ERROR!":
+                return None
+            # Remove non-numeric characters
+            cleaned = ''.join(filter(str.isdigit, str(phone)))
+            # Keep only the last 10 digits if longer
+            if len(cleaned) > 10:
+                cleaned = cleaned[-10:]
+            return cleaned if cleaned else None
+        
+        # First pass: Build lookup dictionaries from operations
+        for op in operations:
+            # Add to box_key dictionary
+            if op.box_key:
+                operation_by_box_key[op.box_key] = op
+                
+            # Add to email dictionary if email exists
+            if op.email and not pd.isna(op.email):
+                email = op.email.lower().strip()
+                operation_by_email[email] = op
+                
+            # Add to phone dictionary if phone exists
+            if op.phone_number and not pd.isna(op.phone_number) and op.phone_number != "#ERROR!":
+                clean_num = clean_phone(op.phone_number)
+                if clean_num:
+                    operation_by_phone[clean_num] = op
+        
+        # Second pass: Match leads to operations
+        for lead in leads:
+            matched = False
+            
+            # First try to match by box_key (direct match)
+            if lead.box_key and lead.box_key in operation_by_box_key:
+                matched = True
+                matches += 1
+                
+            # Then try to match by email
+            elif lead.email and not pd.isna(lead.email):
+                email = lead.email.lower().strip()
+                if email in operation_by_email:
+                    matched = True
+                    matches += 1
+                    
+                    # If we matched on email, update the operation with the lead's box_key
+                    operation = operation_by_email[email]
+                    if operation.box_key != lead.box_key:
+                        print(f"Matched lead {lead.box_key} to operation {operation.box_key} via email")
+                    
+            # Finally try to match by phone
+            elif lead.phone_number and not pd.isna(lead.phone_number) and lead.phone_number != "#ERROR!":
+                clean_num = clean_phone(lead.phone_number)
+                if clean_num and clean_num in operation_by_phone:
+                    matched = True
+                    matches += 1
+                    
+                    # If we matched on phone, update the operation with the lead's box_key
+                    operation = operation_by_phone[clean_num]
+                    if operation.box_key != lead.box_key:
+                        print(f"Matched lead {lead.box_key} to operation {operation.box_key} via phone")
+        
+        session.commit()
+        print(f"Found {matches} matches out of {total_leads} leads and {total_operations} operations")
+        return matches, total_leads, total_operations
+    
+    except Exception as e:
+        print(f"Error processing phone matching: {e}")
+        import traceback
+        traceback.print_exc()
+        return 0, 0, 0
+    finally:
+        if 'session' in locals():
+            session.close()
+
+
 # Run initialization if this script is run directly
 if __name__ == "__main__":
     initialize_db_if_empty()
+    # Run phone matching
+    process_phone_matching()

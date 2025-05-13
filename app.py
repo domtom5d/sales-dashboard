@@ -7,7 +7,7 @@ import os
 import datetime
 from sqlalchemy import create_engine
 from sklearn.metrics import confusion_matrix
-from database import import_leads_data, import_operations_data, get_lead_data, get_operation_data, get_merged_data, initialize_db_if_empty
+from database import import_leads_data, import_operations_data, get_lead_data, get_operation_data, get_merged_data, initialize_db_if_empty, migrate_database, process_phone_matching
 from utils import process_data, calculate_conversion_rates, calculate_correlations
 from derive_scorecard import generate_lead_scorecard, score_lead
 from evaluate import (
@@ -80,6 +80,26 @@ if 'thresholds' not in st.session_state:
     st.session_state.thresholds = None
 if 'model_metrics' not in st.session_state:
     st.session_state.model_metrics = None
+
+# Initialize and migrate database schema
+try:
+    # First run the database migration to ensure new columns exist
+    if st.sidebar.button("Run Database Migration"):
+        with st.spinner("Migrating database schema to add contact fields..."):
+            success = migrate_database()
+            if success:
+                st.sidebar.success("Database migration completed successfully")
+            else:
+                st.sidebar.error("Database migration failed")
+    
+    # Initialize database if empty
+    try:
+        # This is just a check, don't load the models with new columns yet
+        is_initialized = initialize_db_if_empty()
+    except Exception as e:
+        st.sidebar.warning(f"Database needs migration: {e}")
+except Exception as e:
+    st.sidebar.error(f"Database initialization error: {e}")
 
 # Data loading section
 if data_source == "Upload CSV Files":
@@ -579,6 +599,58 @@ return {
                             }
                             st.write("**Prediction Counts:**")
                             st.dataframe(pd.DataFrame(count_data))
+                
+                # Section 1.5: Contact Matching Analysis
+                st.markdown("### 1.5 📱 Contact Matching Analysis")
+                
+                with st.expander("Lead-to-Booking Phone Matching", expanded=False):
+                    st.markdown("""
+                    <div class="info-text">
+                    This feature matches leads who inquired about an event with the eventual booking records.
+                    Tracking the customer journey from inquiry to booking helps understand which leads convert.
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if st.button("Run Phone Number Matching"):
+                            with st.spinner("Matching inquiries with bookings..."):
+                                try:
+                                    matches, total_leads, total_ops = process_phone_matching()
+                                    
+                                    # Calculate matching rate
+                                    if total_leads > 0:
+                                        match_rate = (matches / total_leads) * 100
+                                    else:
+                                        match_rate = 0
+                                        
+                                    st.success(f"Found {matches} matches out of {total_leads} leads ({match_rate:.1f}%)")
+                                    
+                                    # Visualize matches
+                                    fig, ax = plt.subplots(figsize=(8, 4))
+                                    labels = ['Matched', 'Unmatched']
+                                    sizes = [matches, total_leads - matches]
+                                    colors = ['#1E88E5', '#BBDEFB']
+                                    
+                                    ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
+                                    ax.axis('equal')
+                                    st.pyplot(fig)
+                                except Exception as e:
+                                    st.error(f"Error running phone matching: {e}")
+                    
+                    with col2:
+                        st.markdown("""
+                        #### How it works:
+                        
+                        The system matches leads to bookings using these methods in priority order:
+                        
+                        1. **Box Key Match**: Direct ID matching
+                        2. **Email Match**: Same email address used for inquiry and booking
+                        3. **Phone Match**: Same phone number used (after normalization)
+                        
+                        This helps connect the dots between an initial inquiry and the final booking.
+                        """)
                 
                 # Section 2: Lead Scoring Calculator
                 st.markdown("### 2. Lead Scoring Calculator")
