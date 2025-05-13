@@ -26,25 +26,56 @@ def analyze_phone_matches(df):
     if 'phone_number' not in df.columns:
         return pd.DataFrame(), pd.DataFrame()
     
+    # Create a copy to avoid SettingWithCopyWarning
+    analysis_df = df.copy()
+    
     # Extract area codes from phone numbers
-    df['area_code'] = df['phone_number'].apply(extract_area_code)
+    analysis_df['area_code'] = analysis_df['phone_number'].apply(extract_area_code)
     
     # Extract state from area codes
-    df['phone_state'] = df['area_code'].apply(map_area_code_to_state)
+    analysis_df['phone_state'] = analysis_df['area_code'].apply(map_area_code_to_state)
     
     # Check if phone state matches lead state
-    df['phone_state_match'] = (df['phone_state'] == df['state']) & (~df['phone_state'].isna())
+    analysis_df['phone_state_match'] = (analysis_df['phone_state'] == analysis_df['state']) & (~analysis_df['phone_state'].isna())
     
-    # Calculate conversion rates by phone match status
-    match_conversion = df.groupby('phone_state_match')['outcome'].mean().reset_index()
-    match_conversion['outcome'] = (match_conversion['outcome'] * 100).round(1).astype(str) + '%'
-    match_conversion.columns = ['Phone-State Match', 'Conversion Rate']
+    # Create more descriptive labels for the match status
+    analysis_df['match_status'] = analysis_df['phone_state_match'].map({
+        True: 'Area Code Matches State',
+        False: 'Area Code Different from State'
+    })
     
-    # Count by phone match status
-    match_counts = df['phone_state_match'].value_counts().reset_index()
-    match_counts.columns = ['Phone-State Match', 'Count']
+    # Filter for rows with valid phone data
+    valid_data = analysis_df.dropna(subset=['phone_number'])
     
-    return match_conversion, match_counts
+    # If we have valid data, continue with the analysis
+    if len(valid_data) > 0:
+        # Calculate conversion rates by phone-state match status
+        match_conversion = valid_data.groupby('match_status')['outcome'].agg(['mean', 'count']).reset_index()
+        match_conversion.columns = ['Phone-State Match', 'Conversion Rate', 'Count']
+        match_conversion['Conversion Rate'] = (match_conversion['Conversion Rate'] * 100).round(1).astype(str) + '%'
+        
+        # Count by phone-state match status for visualization
+        match_counts = valid_data['match_status'].value_counts().reset_index()
+        match_counts.columns = ['Phone-State Match', 'Count']
+        
+        return match_conversion, match_counts
+    else:
+        # Return empty frames if no valid data
+        return pd.DataFrame(columns=['Phone-State Match', 'Conversion Rate', 'Count']), pd.DataFrame(columns=['Phone-State Match', 'Count'])
+
+# Clean and normalize phone numbers
+def clean_phone(phone):
+    if not phone or pd.isna(phone) or phone == "#ERROR!":
+        return None
+    # Remove non-numeric characters
+    try:
+        cleaned = ''.join(filter(str.isdigit, str(phone)))
+        # Keep only the last 10 digits if longer
+        if len(cleaned) > 10:
+            cleaned = cleaned[-10:]
+        return cleaned if cleaned else None
+    except:
+        return None
 
 def extract_area_code(phone):
     """

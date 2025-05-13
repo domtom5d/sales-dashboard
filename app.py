@@ -603,7 +603,10 @@ return {
                 # Section 1.5: Contact Matching Analysis
                 st.markdown("### 1.5 📱 Contact Matching Analysis")
                 
-                with st.expander("Lead-to-Booking Phone Matching", expanded=False):
+                # Import necessary functions
+                from conversion import analyze_phone_matches, analyze_prediction_counts
+                
+                with st.expander("Lead-to-Booking Phone Matching", expanded=True):
                     st.markdown("""
                     <div class="info-text">
                     This feature matches leads who inquired about an event with the eventual booking records.
@@ -611,46 +614,101 @@ return {
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    col1, col2 = st.columns(2)
+                    tab1, tab2, tab3 = st.tabs(["Phone Matching", "Area Code Analysis", "Prediction Counts"])
                     
-                    with col1:
-                        if st.button("Run Phone Number Matching"):
-                            with st.spinner("Matching inquiries with bookings..."):
-                                try:
-                                    matches, total_leads, total_ops = process_phone_matching()
-                                    
-                                    # Calculate matching rate
-                                    if total_leads > 0:
-                                        match_rate = (matches / total_leads) * 100
-                                    else:
-                                        match_rate = 0
+                    with tab1:
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            if st.button("Run Phone Number Matching"):
+                                with st.spinner("Matching inquiries with bookings..."):
+                                    try:
+                                        matches, total_leads, total_ops = process_phone_matching()
                                         
-                                    st.success(f"Found {matches} matches out of {total_leads} leads ({match_rate:.1f}%)")
-                                    
-                                    # Visualize matches
-                                    fig, ax = plt.subplots(figsize=(8, 4))
-                                    labels = ['Matched', 'Unmatched']
-                                    sizes = [matches, total_leads - matches]
-                                    colors = ['#1E88E5', '#BBDEFB']
-                                    
-                                    ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
-                                    ax.axis('equal')
-                                    st.pyplot(fig)
-                                except Exception as e:
-                                    st.error(f"Error running phone matching: {e}")
+                                        # Calculate matching rate
+                                        if total_leads > 0:
+                                            match_rate = (matches / total_leads) * 100
+                                        else:
+                                            match_rate = 0
+                                            
+                                        st.success(f"Found {matches} matches out of {total_leads} leads ({match_rate:.1f}%)")
+                                        
+                                        # Visualize matches
+                                        fig, ax = plt.subplots(figsize=(8, 4))
+                                        labels = ['Matched', 'Unmatched']
+                                        sizes = [matches, total_leads - matches]
+                                        colors = ['#1E88E5', '#BBDEFB']
+                                        
+                                        ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
+                                        ax.axis('equal')
+                                        st.pyplot(fig)
+                                    except Exception as e:
+                                        st.error(f"Error running phone matching: {e}")
+                        
+                        with col2:
+                            st.markdown("""
+                            #### How it works:
+                            
+                            The system matches leads to bookings using these methods in priority order:
+                            
+                            1. **Box Key Match**: Direct ID matching
+                            2. **Email Match**: Same email address used for inquiry and booking
+                            3. **Phone Match**: Same phone number used (after normalization)
+                            
+                            This helps connect the dots between an initial inquiry and the final booking.
+                            """)
                     
-                    with col2:
-                        st.markdown("""
-                        #### How it works:
+                    with tab2:
+                        st.subheader("Area Code to State Conversion Analysis")
+                        st.write("How often area-code matching predicts wins:")
                         
-                        The system matches leads to bookings using these methods in priority order:
+                        if st.session_state.processed_df is not None:
+                            # Analyze phone matches
+                            match_conversion, match_counts = analyze_phone_matches(st.session_state.processed_df)
+                            
+                            if not match_conversion.empty:
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    st.write("**Conversion Rates by Phone-State Match:**")
+                                    st.table(match_conversion)
+                                
+                                with col2:
+                                    st.write("**Count by Phone-State Match:**")
+                                    
+                                    # Visualize counts
+                                    fig, ax = plt.subplots(figsize=(8, 4))
+                                    ax.bar(match_counts['Phone-State Match'].astype(str), match_counts['Count'], color=['#1E88E5', '#BBDEFB'])
+                                    plt.ylabel('Count')
+                                    plt.title('Number of leads by phone-state match')
+                                    st.pyplot(fig)
+                            else:
+                                st.info("No phone match analysis available. Make sure the data includes phone numbers and state information.")
+                        else:
+                            st.info("Load data first to analyze area code matches.")
+                    
+                    with tab3:
+                        st.subheader("Prediction Counts at Thresholds")
+                        st.write("Distribution of leads across Hot/Warm/Cool/Cold categories:")
                         
-                        1. **Box Key Match**: Direct ID matching
-                        2. **Email Match**: Same email address used for inquiry and booking
-                        3. **Phone Match**: Same phone number used (after normalization)
-                        
-                        This helps connect the dots between an initial inquiry and the final booking.
-                        """)
+                        if st.session_state.model_metrics and 'y_pred_proba' in st.session_state.model_metrics:
+                            # Get prediction counts
+                            y_scores = st.session_state.model_metrics['y_pred_proba']
+                            counts_df = analyze_prediction_counts(y_scores, st.session_state.thresholds)
+                            
+                            if not counts_df.empty:
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    st.table(counts_df)
+                                
+                                with col2:
+                                    # Plot as bar chart
+                                    st.bar_chart(counts_df.set_index('Category'))
+                            else:
+                                st.info("No prediction data available for analysis.")
+                        else:
+                            st.info("Train model first to analyze prediction distribution.")
                 
                 # Section 2: Lead Scoring Calculator
                 st.markdown("### 2. Lead Scoring Calculator")
