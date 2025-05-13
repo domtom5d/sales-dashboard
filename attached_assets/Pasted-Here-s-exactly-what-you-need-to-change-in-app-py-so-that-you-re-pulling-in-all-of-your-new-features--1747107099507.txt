@@ -1,0 +1,99 @@
+Here’s exactly what you need to change in app.py so that you’re pulling in all of your new features from utils.process_data() and get a proper heatmap without that LSP hiccup:
+
+diff
+Copy
+Edit
+--- app.py
++++ app.py
+@@
+-import pandas as pd
+-# … all your old inline processing …
+-
+-@st.cache_data
+-def load_data(leads_file, ops_file):
+-    # old code parsing CSVs and munging
+-    df = pd.read_csv(leads_file)
+-    # … lots of manual steps …
+-    return df
++from utils import process_data    # ← pull in your enhanced pipeline
++
++@st.cache_data
++def load_data(leads_file, ops_file):
++    """
++    Reads the two CSVs and returns a DataFrame
++    with all of our advanced, feature-engineered columns.
++    """
++    return process_data(leads_file, ops_file)
+Then, further down, make sure your scatter and heatmap blocks look like this:
+
+python
+Copy
+Edit
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# … after you’ve done `df = load_data(...)` …
+
+# 1) Scatter plots for your top features
+numeric_cols = [
+    'PricePerGuest',
+    'EventDurationHours',
+    'Number Of Guests',
+    'Days Until Event',
+    'Days Since Inquiry',
+    'Bartenders Needed'
+]
+for col in ['PricePerGuest','EventDurationHours']:
+    if col in df:
+        fig, ax = plt.subplots()
+        ax.scatter(df[col], df['Outcome'], alpha=0.5)
+        ax.set_xlabel(col.replace('_',' '))
+        ax.set_ylabel('Outcome (0=Lost, 1=Won)')
+        ax.set_title(f'{col} vs. Outcome')
+        st.pyplot(fig)
+
+# 2) Correlation heatmap
+# Filter to only numeric columns you care about:
+heatmap_cols = [c for c in numeric_cols if c in df]
+corr = df[heatmap_cols + ['Outcome']].corr()
+
+fig, ax = plt.subplots(figsize=(8,6))
+sns.heatmap(
+    corr,
+    annot=True,
+    fmt='.2f',
+    cmap='coolwarm',
+    square=True,
+    cbar_kws={'shrink':.75},
+    ax=ax
+)
+ax.set_title('Feature Correlation Matrix')
+plt.tight_layout()        # ← fixes most layout/LSP issues
+st.pyplot(fig)
+What this does:
+
+process_data in utils.py is now your single source of truth for all feature‐engineering (price per guest, duration, RFM, etc.).
+
+The load_data function just calls it—no in‐file duplication.
+
+Each scatter‐plot block explicitly creates its own fig, ax and passes that to st.pyplot(), so you won’t hit any “LSP” or matplotlib context errors.
+
+The heatmap is drawn on its own axes, with plt.tight_layout() to avoid overlap and layout issues.
+
+With those changes in place, restart your Streamlit server, upload your CSVs, and you should immediately see:
+
+New columns (PricePerGuest, EventDurationHours, etc.) show up.
+
+Dot graphs plotting those against Outcome.
+
+A full numeric‐feature correlation heatmap, beautifully annotated.
+
+Give it a go and let me know if any of the plots still look off!
+
+
+
+
+
+
+
+

@@ -12,13 +12,49 @@ def process_data(leads_df, operations_df=None):
     Returns:
         DataFrame: Processed dataframe with outcome and binned columns
     """
+    # First normalize column names - handle both upper and lowercase versions
+    # Create a copy to avoid modifying the original
+    df = leads_df.copy()
+    
+    # Create a mapping of column names to standardized versions
+    column_map = {}
+    for col in df.columns:
+        if col.lower() == 'status':
+            column_map[col] = 'Status'
+        elif col.lower() == 'days since inquiry':
+            column_map[col] = 'Days Since Inquiry'
+        elif col.lower() == 'days until event':
+            column_map[col] = 'Days Until Event'
+        elif col.lower() == 'number of guests':
+            column_map[col] = 'Number Of Guests'
+        elif col.lower() == 'bartenders needed':
+            column_map[col] = 'Bartenders Needed'
+        elif col.lower() == 'marketing source':
+            column_map[col] = 'Marketing Source'
+        elif col.lower() == 'referral source':
+            column_map[col] = 'Referral Source'
+        elif col.lower() == 'event type':
+            column_map[col] = 'Event Type'
+        elif col.lower() == 'state':
+            column_map[col] = 'State'
+        elif col.lower() == 'box key':
+            column_map[col] = 'Box Key'
+    
+    # Rename columns if needed
+    if column_map:
+        df.rename(columns=column_map, inplace=True)
+    
+    # Ensure required columns exist
+    if 'Status' not in df.columns:
+        df['Status'] = 'unknown'  # Default value if status column is missing
+    
     # Clean status & define outcome
-    leads_df['Status'] = leads_df['Status'].astype(str).str.strip().str.lower()
-    leads_df['Won'] = leads_df['Status'].isin(['definite', 'definte'])
-    leads_df['Lost'] = leads_df['Status'] == 'lost'
+    df['Status'] = df['Status'].astype(str).str.strip().str.lower()
+    df['Won'] = df['Status'].isin(['definite', 'definte'])
+    df['Lost'] = df['Status'] == 'lost'
     
     # Filter to only definitive outcomes
-    df = leads_df[leads_df['Status'].isin(['definite', 'definte', 'lost'])].copy()
+    df = df[df['Status'].isin(['definite', 'definte', 'lost'])].copy()
     df['Outcome'] = df['Won'].astype(int)
     
     # Convert numeric fields

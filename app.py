@@ -1,12 +1,16 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
 import io
 import base64
+import matplotlib.pyplot as plt
+import seaborn as sns
 from utils import process_data, calculate_conversion_rates, calculate_correlations
 import database as db
+
+# Set matplotlib style for more modern-looking plots
+plt.style.use('ggplot')
+sns.set(style="whitegrid")
 
 # Set page configuration
 st.set_page_config(
