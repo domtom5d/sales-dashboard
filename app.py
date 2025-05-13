@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import io
 import base64
 from utils import process_data, calculate_conversion_rates, calculate_correlations
+import database as db
 
 # Set page configuration
 st.set_page_config(
@@ -17,6 +18,10 @@ st.set_page_config(
 # Dashboard Title
 st.title("📊 Sales Conversion Analytics Dashboard")
 st.markdown("Analyze conversion rates and patterns from your Streak exports.")
+
+# Initialize upload variables before the sidebar
+uploaded_leads = None
+uploaded_operations = None
 
 # Sidebar for file uploads and filters
 with st.sidebar:
@@ -53,29 +58,99 @@ def load_data():
     
     try:
         if data_source == "Sample Data":
-            # Load sample data from data folder
-            leads_df = pd.read_csv('data/leads.csv', low_memory=False)
-            operations_df = pd.read_csv('data/operations.csv', low_memory=False)
+            # Initialize database with sample data if needed
+            db.initialize_db_if_empty()
             
-            # Process data
-            df = process_data(leads_df, operations_df)
+            # Fetch data from database
+            df = db.get_lead_data()
+            
+            # Process data if not empty
+            if not df.empty:
+                # Add Guests Bin and DaysUntilBin if not present
+                if 'Guests Bin' not in df.columns and 'number_of_guests' in df.columns:
+                    # Define bins for guests
+                    bins_guests = [0, 50, 100, 200, np.inf]
+                    labels_guests = ['0–50', '51–100', '101–200', '200+']
+                    # Filter out None values before binning
+                    df['number_of_guests'] = pd.to_numeric(df['number_of_guests'], errors='coerce')
+                    df['Guests Bin'] = pd.cut(df['number_of_guests'].fillna(-1), bins=bins_guests, labels=labels_guests)
+                
+                if 'DaysUntilBin' not in df.columns and 'days_until_event' in df.columns:
+                    # Define bins for days until event
+                    bins_days = [0, 7, 30, 90, np.inf]
+                    labels_days = ['0–7 days', '8–30 days', '31–90 days', '91+ days']
+                    # Filter out None values before binning
+                    df['days_until_event'] = pd.to_numeric(df['days_until_event'], errors='coerce')
+                    df['DaysUntilBin'] = pd.cut(df['days_until_event'].fillna(-1), bins=bins_days, labels=labels_days)
+                
+                # Make column names consistent with the original data
+                df.rename(columns={
+                    'bartenders_needed': 'Bartenders Needed',
+                    'number_of_guests': 'Number Of Guests',
+                    'days_until_event': 'Days Until Event',
+                    'days_since_inquiry': 'Days Since Inquiry',
+                    'marketing_source': 'Marketing Source',
+                    'referral_source': 'Referral Source',
+                    'state': 'State',
+                    'won': 'Won',
+                    'lost': 'Lost',
+                    'event_type': 'Event Type'
+                }, inplace=True)
+            
         elif data_source == "Upload Your Own Data":
             # Check if files are uploaded
-            if 'uploaded_leads' in locals() and uploaded_leads is not None:
-                # Load leads data
-                leads_df = pd.read_csv(uploaded_leads, low_memory=False)
+            if uploaded_leads is not None:
+                # Save file to temporary location
+                with open('temp_leads.csv', 'wb') as f:
+                    f.write(uploaded_leads.getvalue())
                 
-                # Load operations data if available
-                operations_df = None
-                if 'uploaded_operations' in locals() and uploaded_operations is not None:
-                    operations_df = pd.read_csv(uploaded_operations, low_memory=False)
+                # Import data to database
+                db.import_leads_data('temp_leads.csv')
                 
-                # Process data
-                df = process_data(leads_df, operations_df)
+                # If operations data is uploaded
+                if uploaded_operations is not None:
+                    with open('temp_operations.csv', 'wb') as f:
+                        f.write(uploaded_operations.getvalue())
+                    
+                    # Import operations data
+                    db.import_operations_data('temp_operations.csv')
+                
+                # Fetch data from database
+                df = db.get_lead_data()
+                
+                # Process data if not empty
+                if not df.empty:
+                    # Add Guests Bin and DaysUntilBin if not present
+                    if 'Guests Bin' not in df.columns and 'number_of_guests' in df.columns:
+                        # Define bins for guests
+                        bins_guests = [0, 50, 100, 200, np.inf]
+                        labels_guests = ['0–50', '51–100', '101–200', '200+']
+                        df['Guests Bin'] = pd.cut(df['number_of_guests'], bins=bins_guests, labels=labels_guests)
+                    
+                    if 'DaysUntilBin' not in df.columns and 'days_until_event' in df.columns:
+                        # Define bins for days until event
+                        bins_days = [0, 7, 30, 90, np.inf]
+                        labels_days = ['0–7 days', '8–30 days', '31–90 days', '91+ days']
+                        df['DaysUntilBin'] = pd.cut(df['days_until_event'], bins=bins_days, labels=labels_days)
+                    
+                    # Make column names consistent with the original data
+                    df.rename(columns={
+                        'bartenders_needed': 'Bartenders Needed',
+                        'number_of_guests': 'Number Of Guests',
+                        'days_until_event': 'Days Until Event',
+                        'days_since_inquiry': 'Days Since Inquiry',
+                        'marketing_source': 'Marketing Source',
+                        'referral_source': 'Referral Source',
+                        'state': 'State',
+                        'won': 'Won',
+                        'lost': 'Lost',
+                        'event_type': 'Event Type'
+                    }, inplace=True)
         
-        return df is not None
+        return df is not None and not df.empty
     except Exception as e:
         st.error(f"Error loading or processing data: {str(e)}")
+        st.exception(e)
         return False
 
 # Load data
@@ -138,8 +213,28 @@ if data_loaded and df is not None:
     
     # Calculate metrics
     total_leads = filtered_df.shape[0]
-    won_leads = filtered_df['Won'].sum()
-    lost_leads = filtered_df['Lost'].sum()
+    
+    # Handle potential None values
+    if 'Won' in filtered_df.columns:
+        # Convert boolean strings to actual booleans if needed
+        if filtered_df['Won'].dtype == 'object':
+            filtered_df['Won'] = filtered_df['Won'].map({'True': True, 'False': False})
+            filtered_df['Won'] = filtered_df['Won'].fillna(False)
+        
+        won_leads = filtered_df['Won'].sum()
+    else:
+        won_leads = 0
+    
+    if 'Lost' in filtered_df.columns:
+        # Convert boolean strings to actual booleans if needed
+        if filtered_df['Lost'].dtype == 'object':
+            filtered_df['Lost'] = filtered_df['Lost'].map({'True': True, 'False': False})
+            filtered_df['Lost'] = filtered_df['Lost'].fillna(False)
+            
+        lost_leads = filtered_df['Lost'].sum()
+    else:
+        lost_leads = 0
+    
     conversion_rate = won_leads / total_leads if total_leads > 0 else 0
     
     # Summary metrics section
@@ -169,13 +264,19 @@ if data_loaded and df is not None:
     with tab1:
         # Calculate conversion rates for different categories
         try:
+            # Check if we have required columns
+            if 'Outcome' not in filtered_df.columns:
+                # Add Outcome column if it doesn't exist
+                if 'Won' in filtered_df.columns and 'Lost' in filtered_df.columns:
+                    filtered_df['Outcome'] = filtered_df['Won'].astype(int)
+            
             conv_rates = calculate_conversion_rates(filtered_df)
             
             col1, col2 = st.columns(2)
             
             with col1:
                 # Conversion by Event Type
-                if 'Event Type' in conv_rates:
+                if conv_rates and 'Event Type' in conv_rates:
                     st.subheader("Conversion by Event Type")
                     conv_event_type = conv_rates['Event Type'].sort_values(by='Conversion Rate', ascending=False)
                     
@@ -186,14 +287,14 @@ if data_loaded and df is not None:
                         y='Conversion Rate',
                         color='Conversion Rate',
                         color_continuous_scale='blues',
-                        text=conv_event_type['Conversion Rate'].apply(lambda x: f"{x:.1%}")
+                        text_auto=False
                     )
                     fig.update_layout(xaxis_title="Event Type", yaxis_title="Conversion Rate")
                     fig.update_traces(textposition='outside')
                     st.plotly_chart(fig, key="event_type_chart", use_container_width=True)
                 
                 # Conversion by Marketing Source
-                if 'Marketing Source' in conv_rates:
+                if conv_rates and 'Marketing Source' in conv_rates:
                     st.subheader("Conversion by Marketing Source")
                     conv_marketing = conv_rates['Marketing Source'].sort_values(by='Conversion Rate', ascending=False)
                     
@@ -203,14 +304,14 @@ if data_loaded and df is not None:
                         y='Conversion Rate',
                         color='Conversion Rate',
                         color_continuous_scale='blues',
-                        text=conv_marketing['Conversion Rate'].apply(lambda x: f"{x:.1%}")
+                        text_auto=False
                     )
                     fig.update_layout(xaxis_title="Marketing Source", yaxis_title="Conversion Rate")
                     fig.update_traces(textposition='outside')
                     st.plotly_chart(fig, key="marketing_chart", use_container_width=True)
                 
                 # Conversion by Number of Guests
-                if 'Guests Bin' in conv_rates:
+                if conv_rates and 'Guests Bin' in conv_rates:
                     st.subheader("Conversion by Number of Guests")
                     conv_guests = conv_rates['Guests Bin']
                     
@@ -229,7 +330,7 @@ if data_loaded and df is not None:
                         y='Conversion Rate',
                         color='Conversion Rate',
                         color_continuous_scale='blues',
-                        text=conv_guests['Conversion Rate'].apply(lambda x: f"{x:.1%}")
+                        text_auto=False
                     )
                     fig.update_layout(xaxis_title="Number of Guests", yaxis_title="Conversion Rate")
                     fig.update_traces(textposition='outside')
@@ -237,7 +338,7 @@ if data_loaded and df is not None:
             
             with col2:
                 # Conversion by Referral Source
-                if 'Referral Source' in conv_rates:
+                if conv_rates and 'Referral Source' in conv_rates:
                     st.subheader("Conversion by Referral Source")
                     conv_referral = conv_rates['Referral Source'].sort_values(by='Conversion Rate', ascending=False)
                     
@@ -247,14 +348,14 @@ if data_loaded and df is not None:
                         y='Conversion Rate',
                         color='Conversion Rate',
                         color_continuous_scale='blues',
-                        text=conv_referral['Conversion Rate'].apply(lambda x: f"{x:.1%}")
+                        text_auto=False
                     )
                     fig.update_layout(xaxis_title="Referral Source", yaxis_title="Conversion Rate")
                     fig.update_traces(textposition='outside')
                     st.plotly_chart(fig, key="referral_chart", use_container_width=True)
                 
                 # Conversion by State
-                if 'State' in conv_rates:
+                if conv_rates and 'State' in conv_rates:
                     st.subheader("Conversion by State")
                     conv_state = conv_rates['State'].sort_values(by='Conversion Rate', ascending=False)
                     
@@ -264,14 +365,14 @@ if data_loaded and df is not None:
                         y='Conversion Rate',
                         color='Conversion Rate',
                         color_continuous_scale='blues',
-                        text=conv_state['Conversion Rate'].apply(lambda x: f"{x:.1%}")
+                        text_auto=False
                     )
                     fig.update_layout(xaxis_title="State", yaxis_title="Conversion Rate")
                     fig.update_traces(textposition='outside')
                     st.plotly_chart(fig, key="state_chart", use_container_width=True)
                 
                 # Conversion by Days Until Event
-                if 'DaysUntilBin' in conv_rates:
+                if conv_rates and 'DaysUntilBin' in conv_rates:
                     st.subheader("Conversion by Days Until Event")
                     conv_days = conv_rates['DaysUntilBin']
                     
@@ -290,7 +391,7 @@ if data_loaded and df is not None:
                         y='Conversion Rate',
                         color='Conversion Rate',
                         color_continuous_scale='blues',
-                        text=conv_days['Conversion Rate'].apply(lambda x: f"{x:.1%}")
+                        text_auto=False
                     )
                     fig.update_layout(xaxis_title="Days Until Event", yaxis_title="Conversion Rate")
                     fig.update_traces(textposition='outside')
@@ -317,7 +418,7 @@ if data_loaded and df is not None:
                     y='Correlation with Outcome',
                     color='Correlation with Outcome',
                     color_continuous_scale='blues',
-                    text=corr_df['Correlation with Outcome'].apply(lambda x: f"{x:.3f}")
+                    text_auto=False
                 )
                 fig.update_layout(xaxis_title="Feature", yaxis_title="Correlation Strength")
                 fig.update_traces(textposition='outside')
