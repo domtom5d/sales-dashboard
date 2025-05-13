@@ -1,0 +1,56 @@
+Next features to layer in
+Contact Matching Analysis
+Under “📱 Contact Matching Analysis,” surface how often area-code matches predict wins. Something like:
+
+python
+Copy
+Edit
+# In your Conversion Analysis or a new pane…
+st.subheader("Contact Matching Analysis")
+cm_rate = df.groupby('PhoneMatch')['Outcome'].mean().reset_index()
+cm_rate['Outcome'] = (cm_rate['Outcome']*100).round(1).astype(str) + '%'
+st.table(cm_rate.rename(columns={'PhoneMatch':'Phone-State Match'}))
+That will give you a quick two-row table:
+
+Phone-State Match	Conversion Rate
+False	8.2%
+True	14.7%
+
+Prediction Counts
+Show how many leads you’re labeling Hot/Warm/Cool/Cold under your locked-in thresholds:
+
+python
+Copy
+Edit
+st.subheader("Prediction Counts at Thresholds")
+preds = (y_scores >= thresholds['hot']).sum(), \
+        ((y_scores >= thresholds['warm']) & (y_scores < thresholds['hot'])).sum(), \
+        ((y_scores >= thresholds['cool']) & (y_scores < thresholds['warm'])).sum(), \
+        (y_scores < thresholds['cool']).sum()
+st.bar_chart(
+  data=pd.DataFrame({
+    'Category': ['Hot','Warm','Cool','Cold'],
+    'Count':    preds
+  }).set_index('Category')
+)
+Add “Days to Contact” Signal
+If you have a timestamp for the first rep outreach, compute First Contact – Submission in minutes and analyze its impact (and add it into both your feature-engineering and your live calculator).
+
+Geo-Heatmap
+In “Conversion Analysis,” add a simple Folium or PyDeck map to show win rates by ZIP or city cluster.
+
+Modularize & Collapsible Sections
+Break your Streamlit tabs into expanding “st.expander” blocks so that each analysis panel can be hidden/shown.
+
+How to keep the code clean
+conversion.py → all cohort and phone-match analyses
+
+scoring.py → scorecard + threshold logic
+
+visuals.py → plotting routines (ROC/PR/score distributions)
+
+app.py → just plumbing: loading, tab layout, calling into those modules
+
+Each time you add a new insight—like “Contact Matching Analysis”—just slot it into conversion.py and call it from app.py.
+
+That “Contact Matching” table and the prediction-counts bar chart will give you immediate visibility into two of the most actionable pieces of your funnel. Want me to show you the exact code snippets to slot into your app.py?

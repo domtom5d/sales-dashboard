@@ -712,6 +712,18 @@ def initialize_db_if_empty():
     return lead_count > 0 or operation_count > 0
 
 
+# Clean and normalize phone numbers
+def clean_phone(phone):
+    if not phone or pd.isna(phone) or phone == "#ERROR!":
+        return None
+    # Remove non-numeric characters
+    cleaned = ''.join(filter(str.isdigit, str(phone)))
+    # Keep only the last 10 digits if longer
+    if len(cleaned) > 10:
+        cleaned = cleaned[-10:]
+    return cleaned if cleaned else None
+
+
 def process_phone_matching():
     """
     Match lead inquiries with bookings based on phone numbers
@@ -739,16 +751,7 @@ def process_phone_matching():
         operation_by_email = {}
         operation_by_box_key = {}
         
-        # Clean and normalize phone numbers
-        def clean_phone(phone):
-            if not phone or pd.isna(phone) or phone == "#ERROR!":
-                return None
-            # Remove non-numeric characters
-            cleaned = ''.join(filter(str.isdigit, str(phone)))
-            # Keep only the last 10 digits if longer
-            if len(cleaned) > 10:
-                cleaned = cleaned[-10:]
-            return cleaned if cleaned else None
+        # We're now using the global clean_phone function
         
         # First pass: Build lookup dictionaries from operations
         for op in operations:
