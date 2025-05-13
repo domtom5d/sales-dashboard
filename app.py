@@ -20,115 +20,155 @@ st.markdown("Analyze conversion rates and patterns from your Streak exports.")
 
 # Sidebar for file uploads and filters
 with st.sidebar:
-    st.header("Data Upload")
+    st.header("Data Source")
     
-    uploaded_leads = st.file_uploader("Upload Leads Data (CSV)", type="csv", key="leads_uploader")
-    uploaded_operations = st.file_uploader("Upload Operations Data (CSV)", type="csv", key="operations_uploader")
+    data_source = st.radio(
+        "Select data source",
+        ["Sample Data", "Upload Your Own Data"],
+        key="data_source"
+    )
+    
+    if data_source == "Upload Your Own Data":
+        uploaded_leads = st.file_uploader("Upload Leads Data (CSV)", type="csv", key="leads_uploader")
+        uploaded_operations = st.file_uploader("Upload Operations Data (CSV)", type="csv", key="operations_uploader")
     
     st.markdown("---")
     st.header("Filters")
     
     # These filters will be populated after data is loaded
 
-# Check if files are uploaded
-if uploaded_leads is not None:
+# Initialize variables for data and filters
+df = None
+filtered_df = None
+selected_event_type = 'All'
+selected_referral_source = 'All'
+selected_marketing_source = 'All'
+selected_state = 'All'
+selected_guest_bin = 'All'
+selected_days_bin = 'All'
+
+# Function to load and process data
+def load_data():
+    global df
+    
     try:
-        # Load leads data
-        leads_df = pd.read_csv(uploaded_leads, low_memory=False)
-        
-        # Load operations data if available
-        operations_df = None
-        if uploaded_operations is not None:
-            operations_df = pd.read_csv(uploaded_operations, low_memory=False)
-        
-        # Process data
-        df = process_data(leads_df, operations_df)
-        
-        # Once data is processed, populate filters
-        with st.sidebar:
-            # Event Type filter
-            if 'Event Type' in df.columns:
-                event_types = ['All'] + sorted(df['Event Type'].dropna().unique().tolist())
-                selected_event_type = st.selectbox("Event Type", event_types)
+        if data_source == "Sample Data":
+            # Load sample data from data folder
+            leads_df = pd.read_csv('data/leads.csv', low_memory=False)
+            operations_df = pd.read_csv('data/operations.csv', low_memory=False)
             
-            # Referral Source filter
-            if 'Referral Source' in df.columns:
-                referral_sources = ['All'] + sorted(df['Referral Source'].dropna().unique().tolist())
-                selected_referral_source = st.selectbox("Referral Source", referral_sources)
-            
-            # Marketing Source filter
-            if 'Marketing Source' in df.columns:
-                marketing_sources = ['All'] + sorted(df['Marketing Source'].dropna().unique().tolist())
-                selected_marketing_source = st.selectbox("Marketing Source", marketing_sources)
-            
-            # State filter
-            if 'State' in df.columns:
-                states = ['All'] + sorted(df['State'].dropna().unique().tolist())
-                selected_state = st.selectbox("State", states)
-            
-            # Guests Bin filter
-            if 'Guests Bin' in df.columns:
-                guest_bins = ['All'] + sorted(df['Guests Bin'].dropna().unique().tolist())
-                selected_guest_bin = st.selectbox("Number of Guests", guest_bins)
-            
-            # Days Until Event filter
-            if 'DaysUntilBin' in df.columns:
-                days_bins = ['All'] + sorted(df['DaysUntilBin'].dropna().unique().tolist())
-                selected_days_bin = st.selectbox("Days Until Event", days_bins)
+            # Process data
+            df = process_data(leads_df, operations_df)
+        elif data_source == "Upload Your Own Data":
+            # Check if files are uploaded
+            if 'uploaded_leads' in locals() and uploaded_leads is not None:
+                # Load leads data
+                leads_df = pd.read_csv(uploaded_leads, low_memory=False)
+                
+                # Load operations data if available
+                operations_df = None
+                if 'uploaded_operations' in locals() and uploaded_operations is not None:
+                    operations_df = pd.read_csv(uploaded_operations, low_memory=False)
+                
+                # Process data
+                df = process_data(leads_df, operations_df)
         
-        # Apply filters to dataframe
-        filtered_df = df.copy()
+        return df is not None
+    except Exception as e:
+        st.error(f"Error loading or processing data: {str(e)}")
+        return False
+
+# Load data
+data_loaded = load_data()
+
+# If data is loaded successfully, populate filters and display content
+if data_loaded and df is not None:
+    # Populate filters
+    with st.sidebar:
+        # Event Type filter
+        if 'Event Type' in df.columns:
+            event_types = ['All'] + sorted(df['Event Type'].dropna().unique().tolist())
+            selected_event_type = st.selectbox("Event Type", event_types)
         
-        if 'Event Type' in df.columns and selected_event_type != 'All':
-            filtered_df = filtered_df[filtered_df['Event Type'] == selected_event_type]
+        # Referral Source filter
+        if 'Referral Source' in df.columns:
+            referral_sources = ['All'] + sorted(df['Referral Source'].dropna().unique().tolist())
+            selected_referral_source = st.selectbox("Referral Source", referral_sources)
         
-        if 'Referral Source' in df.columns and selected_referral_source != 'All':
-            filtered_df = filtered_df[filtered_df['Referral Source'] == selected_referral_source]
+        # Marketing Source filter
+        if 'Marketing Source' in df.columns:
+            marketing_sources = ['All'] + sorted(df['Marketing Source'].dropna().unique().tolist())
+            selected_marketing_source = st.selectbox("Marketing Source", marketing_sources)
         
-        if 'Marketing Source' in df.columns and selected_marketing_source != 'All':
-            filtered_df = filtered_df[filtered_df['Marketing Source'] == selected_marketing_source]
+        # State filter
+        if 'State' in df.columns:
+            states = ['All'] + sorted(df['State'].dropna().unique().tolist())
+            selected_state = st.selectbox("State", states)
         
-        if 'State' in df.columns and selected_state != 'All':
-            filtered_df = filtered_df[filtered_df['State'] == selected_state]
+        # Guests Bin filter
+        if 'Guests Bin' in df.columns:
+            guest_bins = ['All'] + sorted(df['Guests Bin'].dropna().unique().tolist())
+            selected_guest_bin = st.selectbox("Number of Guests", guest_bins)
         
-        if 'Guests Bin' in df.columns and selected_guest_bin != 'All':
-            filtered_df = filtered_df[filtered_df['Guests Bin'] == selected_guest_bin]
-        
-        if 'DaysUntilBin' in df.columns and selected_days_bin != 'All':
-            filtered_df = filtered_df[filtered_df['DaysUntilBin'] == selected_days_bin]
-        
-        # Calculate metrics
-        total_leads = filtered_df.shape[0]
-        won_leads = filtered_df['Won'].sum()
-        lost_leads = filtered_df['Lost'].sum()
-        conversion_rate = won_leads / total_leads if total_leads > 0 else 0
-        
-        # Summary metrics section
-        st.header("Summary Statistics")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("Total Leads", f"{total_leads:,}")
-        
-        with col2:
-            st.metric("Won Deals", f"{won_leads:,}")
-        
-        with col3:
-            st.metric("Lost Deals", f"{lost_leads:,}")
-        
-        with col4:
-            st.metric("Conversion Rate", f"{conversion_rate:.1%}")
-        
-        st.markdown("---")
-        
-        # Conversion rates by different factors
-        st.header("Conversion Rates Analysis")
-        
-        tab1, tab2, tab3 = st.tabs(["By Category", "By Numeric Features", "Raw Data"])
-        
-        with tab1:
-            # Calculate conversion rates for different categories
+        # Days Until Event filter
+        if 'DaysUntilBin' in df.columns:
+            days_bins = ['All'] + sorted(df['DaysUntilBin'].dropna().unique().tolist())
+            selected_days_bin = st.selectbox("Days Until Event", days_bins)
+    
+    # Apply filters to dataframe
+    filtered_df = df.copy()
+    
+    if 'Event Type' in df.columns and selected_event_type != 'All':
+        filtered_df = filtered_df[filtered_df['Event Type'] == selected_event_type]
+    
+    if 'Referral Source' in df.columns and selected_referral_source != 'All':
+        filtered_df = filtered_df[filtered_df['Referral Source'] == selected_referral_source]
+    
+    if 'Marketing Source' in df.columns and selected_marketing_source != 'All':
+        filtered_df = filtered_df[filtered_df['Marketing Source'] == selected_marketing_source]
+    
+    if 'State' in df.columns and selected_state != 'All':
+        filtered_df = filtered_df[filtered_df['State'] == selected_state]
+    
+    if 'Guests Bin' in df.columns and selected_guest_bin != 'All':
+        filtered_df = filtered_df[filtered_df['Guests Bin'] == selected_guest_bin]
+    
+    if 'DaysUntilBin' in df.columns and selected_days_bin != 'All':
+        filtered_df = filtered_df[filtered_df['DaysUntilBin'] == selected_days_bin]
+    
+    # Calculate metrics
+    total_leads = filtered_df.shape[0]
+    won_leads = filtered_df['Won'].sum()
+    lost_leads = filtered_df['Lost'].sum()
+    conversion_rate = won_leads / total_leads if total_leads > 0 else 0
+    
+    # Summary metrics section
+    st.header("Summary Statistics")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Leads", f"{total_leads:,}")
+    
+    with col2:
+        st.metric("Won Deals", f"{won_leads:,}")
+    
+    with col3:
+        st.metric("Lost Deals", f"{lost_leads:,}")
+    
+    with col4:
+        st.metric("Conversion Rate", f"{conversion_rate:.1%}")
+    
+    st.markdown("---")
+    
+    # Conversion rates by different factors
+    st.header("Conversion Rates Analysis")
+    
+    tab1, tab2, tab3 = st.tabs(["By Category", "By Numeric Features", "Raw Data"])
+    
+    with tab1:
+        # Calculate conversion rates for different categories
+        try:
             conv_rates = calculate_conversion_rates(filtered_df)
             
             col1, col2 = st.columns(2)
@@ -146,11 +186,11 @@ if uploaded_leads is not None:
                         y='Conversion Rate',
                         color='Conversion Rate',
                         color_continuous_scale='blues',
-                        text_auto='.1%'
+                        text=conv_event_type['Conversion Rate'].apply(lambda x: f"{x:.1%}")
                     )
                     fig.update_layout(xaxis_title="Event Type", yaxis_title="Conversion Rate")
-                    fig.update_traces(texttemplate='%{text}', textposition='outside')
-                    st.plotly_chart(fig, use_container_width=True)
+                    fig.update_traces(textposition='outside')
+                    st.plotly_chart(fig, key="event_type_chart", use_container_width=True)
                 
                 # Conversion by Marketing Source
                 if 'Marketing Source' in conv_rates:
@@ -163,11 +203,11 @@ if uploaded_leads is not None:
                         y='Conversion Rate',
                         color='Conversion Rate',
                         color_continuous_scale='blues',
-                        text_auto='.1%'
+                        text=conv_marketing['Conversion Rate'].apply(lambda x: f"{x:.1%}")
                     )
                     fig.update_layout(xaxis_title="Marketing Source", yaxis_title="Conversion Rate")
-                    fig.update_traces(texttemplate='%{text}', textposition='outside')
-                    st.plotly_chart(fig, use_container_width=True)
+                    fig.update_traces(textposition='outside')
+                    st.plotly_chart(fig, key="marketing_chart", use_container_width=True)
                 
                 # Conversion by Number of Guests
                 if 'Guests Bin' in conv_rates:
@@ -189,11 +229,11 @@ if uploaded_leads is not None:
                         y='Conversion Rate',
                         color='Conversion Rate',
                         color_continuous_scale='blues',
-                        text_auto='.1%'
+                        text=conv_guests['Conversion Rate'].apply(lambda x: f"{x:.1%}")
                     )
                     fig.update_layout(xaxis_title="Number of Guests", yaxis_title="Conversion Rate")
-                    fig.update_traces(texttemplate='%{text}', textposition='outside')
-                    st.plotly_chart(fig, use_container_width=True)
+                    fig.update_traces(textposition='outside')
+                    st.plotly_chart(fig, key="guests_chart", use_container_width=True)
             
             with col2:
                 # Conversion by Referral Source
@@ -207,11 +247,11 @@ if uploaded_leads is not None:
                         y='Conversion Rate',
                         color='Conversion Rate',
                         color_continuous_scale='blues',
-                        text_auto='.1%'
+                        text=conv_referral['Conversion Rate'].apply(lambda x: f"{x:.1%}")
                     )
                     fig.update_layout(xaxis_title="Referral Source", yaxis_title="Conversion Rate")
-                    fig.update_traces(texttemplate='%{text}', textposition='outside')
-                    st.plotly_chart(fig, use_container_width=True)
+                    fig.update_traces(textposition='outside')
+                    st.plotly_chart(fig, key="referral_chart", use_container_width=True)
                 
                 # Conversion by State
                 if 'State' in conv_rates:
@@ -224,11 +264,11 @@ if uploaded_leads is not None:
                         y='Conversion Rate',
                         color='Conversion Rate',
                         color_continuous_scale='blues',
-                        text_auto='.1%'
+                        text=conv_state['Conversion Rate'].apply(lambda x: f"{x:.1%}")
                     )
                     fig.update_layout(xaxis_title="State", yaxis_title="Conversion Rate")
-                    fig.update_traces(texttemplate='%{text}', textposition='outside')
-                    st.plotly_chart(fig, use_container_width=True)
+                    fig.update_traces(textposition='outside')
+                    st.plotly_chart(fig, key="state_chart", use_container_width=True)
                 
                 # Conversion by Days Until Event
                 if 'DaysUntilBin' in conv_rates:
@@ -250,13 +290,16 @@ if uploaded_leads is not None:
                         y='Conversion Rate',
                         color='Conversion Rate',
                         color_continuous_scale='blues',
-                        text_auto='.1%'
+                        text=conv_days['Conversion Rate'].apply(lambda x: f"{x:.1%}")
                     )
                     fig.update_layout(xaxis_title="Days Until Event", yaxis_title="Conversion Rate")
-                    fig.update_traces(texttemplate='%{text}', textposition='outside')
-                    st.plotly_chart(fig, use_container_width=True)
-        
-        with tab2:
+                    fig.update_traces(textposition='outside')
+                    st.plotly_chart(fig, key="days_chart", use_container_width=True)
+        except Exception as e:
+            st.error(f"Error generating conversion rate charts: {str(e)}")
+    
+    with tab2:
+        try:
             # Feature correlations with outcome
             st.subheader("Feature Correlation with Outcome")
             
@@ -274,20 +317,20 @@ if uploaded_leads is not None:
                     y='Correlation with Outcome',
                     color='Correlation with Outcome',
                     color_continuous_scale='blues',
-                    text_auto='.3f'
+                    text=corr_df['Correlation with Outcome'].apply(lambda x: f"{x:.3f}")
                 )
                 fig.update_layout(xaxis_title="Feature", yaxis_title="Correlation Strength")
-                fig.update_traces(texttemplate='%{text}', textposition='outside')
-                st.plotly_chart(fig, use_container_width=True)
+                fig.update_traces(textposition='outside')
+                st.plotly_chart(fig, key="correlation_chart", use_container_width=True)
                 
                 # Scatter plots for each numeric feature
                 st.subheader("Relationship Between Numeric Features and Conversion")
                 
                 numeric_features = [col for col in ['Days Since Inquiry', 'Days Until Event', 
-                                                    'Number Of Guests', 'Bartenders Needed']
-                                    if col in filtered_df.columns]
+                                                'Number Of Guests', 'Bartenders Needed']
+                                if col in filtered_df.columns]
                 
-                for feature in numeric_features:
+                for i, feature in enumerate(numeric_features):
                     temp_df = filtered_df[[feature, 'Outcome']].dropna()
                     
                     if not temp_df.empty:
@@ -301,11 +344,14 @@ if uploaded_leads is not None:
                             labels={'Outcome': 'Won (1) / Lost (0)'}
                         )
                         fig.update_layout(title=f"{feature} vs. Outcome")
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, key=f"scatter_{i}", use_container_width=True)
             else:
                 st.info("No correlation data available for the current selection.")
-        
-        with tab3:
+        except Exception as e:
+            st.error(f"Error generating correlation charts: {str(e)}")
+    
+    with tab3:
+        try:
             # Display the raw data
             st.subheader("Raw Data")
             st.dataframe(filtered_df)
@@ -315,49 +361,48 @@ if uploaded_leads is not None:
             b64 = base64.b64encode(csv.encode()).decode()
             href = f'<a href="data:file/csv;base64,{b64}" download="filtered_data.csv">Download CSV File</a>'
             st.markdown(href, unsafe_allow_html=True)
-            
-    except Exception as e:
-        st.error(f"Error processing data: {str(e)}")
-        st.exception(e)
+        except Exception as e:
+            st.error(f"Error displaying raw data: {str(e)}")
+
 else:
-    # Display instructions when no file is uploaded
-    st.info("Please upload Streak export CSV files to begin analysis.")
+    # Display instructions when no data is loaded
+    st.info("Please select a data source to begin analysis.")
     
     # Example layout with placeholder visualizations
     col1, col2 = st.columns(2)
     
     with col1:
         st.subheader("Conversion by Category")
-        st.write("Upload data to see conversion rates by different categories.")
+        st.write("Select data source to see conversion rates by different categories.")
         
         # Placeholder for empty chart
-        fig = go.Figure()
-        fig.add_annotation(
+        fig1 = go.Figure()
+        fig1.add_annotation(
             text="No data available",
             x=0.5, y=0.5,
             xref="paper", yref="paper",
             showarrow=False,
             font=dict(size=20)
         )
-        fig.update_layout(height=300)
-        st.plotly_chart(fig, use_container_width=True)
+        fig1.update_layout(height=300)
+        st.plotly_chart(fig1, key="placeholder_chart1", use_container_width=True)
     
     with col2:
         st.subheader("Feature Correlation")
-        st.write("Upload data to see feature correlations with outcome.")
+        st.write("Select data source to see feature correlations with outcome.")
         
         # Placeholder for empty chart
-        fig = go.Figure()
-        fig.add_annotation(
+        fig2 = go.Figure()
+        fig2.add_annotation(
             text="No data available",
             x=0.5, y=0.5,
             xref="paper", yref="paper",
             showarrow=False,
             font=dict(size=20)
         )
-        fig.update_layout(height=300)
-        st.plotly_chart(fig, use_container_width=True)
+        fig2.update_layout(height=300)
+        st.plotly_chart(fig2, key="placeholder_chart2", use_container_width=True)
 
 # Add footer
 st.markdown("---")
-st.markdown("Streak Export Analysis Dashboard | Build with Streamlit")
+st.markdown("Streak Export Analysis Dashboard | Built with Streamlit")
