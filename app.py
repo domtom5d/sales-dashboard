@@ -62,44 +62,15 @@ def load_data():
             db.initialize_db_if_empty()
             
             # Fetch data from database
-            df = db.get_lead_data()
+            leads_df = db.get_lead_data()
+            operations_df = db.get_operation_data()
             
-            if df is None or df.empty:
+            if leads_df is None or leads_df.empty:
                 st.error("No data found in the database. Please try uploading your own data.")
                 return
             
-            # Process data if not empty
-            if not df.empty:
-                # Add Guests Bin and DaysUntilBin if not present
-                if 'Guests Bin' not in df.columns and 'number_of_guests' in df.columns:
-                    # Define bins for guests
-                    bins_guests = [0, 50, 100, 200, np.inf]
-                    labels_guests = ['0–50', '51–100', '101–200', '200+']
-                    # Filter out None values before binning
-                    df['number_of_guests'] = pd.to_numeric(df['number_of_guests'], errors='coerce')
-                    df['Guests Bin'] = pd.cut(df['number_of_guests'].fillna(-1), bins=bins_guests, labels=labels_guests)
-                
-                if 'DaysUntilBin' not in df.columns and 'days_until_event' in df.columns:
-                    # Define bins for days until event
-                    bins_days = [0, 7, 30, 90, np.inf]
-                    labels_days = ['0–7 days', '8–30 days', '31–90 days', '91+ days']
-                    # Filter out None values before binning
-                    df['days_until_event'] = pd.to_numeric(df['days_until_event'], errors='coerce')
-                    df['DaysUntilBin'] = pd.cut(df['days_until_event'].fillna(-1), bins=bins_days, labels=labels_days)
-                
-                # Make column names consistent with the original data
-                df.rename(columns={
-                    'bartenders_needed': 'Bartenders Needed',
-                    'number_of_guests': 'Number Of Guests',
-                    'days_until_event': 'Days Until Event',
-                    'days_since_inquiry': 'Days Since Inquiry',
-                    'marketing_source': 'Marketing Source',
-                    'referral_source': 'Referral Source',
-                    'state': 'State',
-                    'won': 'Won',
-                    'lost': 'Lost',
-                    'event_type': 'Event Type'
-                }, inplace=True)
+            # Process data using our enhanced utils function that includes all the advanced features
+            df = process_data(leads_df, operations_df)
             
         elif data_source == "Upload Your Own Data":
             # Check if files are uploaded
@@ -111,6 +82,9 @@ def load_data():
                 # Import data to database
                 db.import_leads_data('temp_leads.csv')
                 
+                # Initialize operations_df
+                operations_df = None
+                
                 # If operations data is uploaded
                 if uploaded_operations is not None:
                     with open('temp_operations.csv', 'wb') as f:
@@ -118,50 +92,19 @@ def load_data():
                     
                     # Import operations data
                     db.import_operations_data('temp_operations.csv')
+                    
+                    # Get operations data from database
+                    operations_df = db.get_operation_data()
                 
                 # Fetch data from database
-                df = db.get_lead_data()
+                leads_df = db.get_lead_data()
                 
-                # Process data if not empty
-                if not df.empty:
-                    # Add Guests Bin and DaysUntilBin if not present
-                    if 'Guests Bin' not in df.columns and 'number_of_guests' in df.columns:
-                        # Define bins for guests
-                        bins_guests = [0, 50, 100, 200, np.inf]
-                        labels_guests = ['0–50', '51–100', '101–200', '200+']
-                        
-                        # Handle None values - replace with NaN first
-                        guests = df['number_of_guests'].copy()
-                        guests = pd.to_numeric(guests, errors='coerce')  # Convert to numeric, invalid values become NaN
-                        
-                        # Only bin non-NaN values
-                        df['Guests Bin'] = pd.cut(guests, bins=bins_guests, labels=labels_guests)
-                    
-                    if 'DaysUntilBin' not in df.columns and 'days_until_event' in df.columns:
-                        # Define bins for days until event
-                        bins_days = [0, 7, 30, 90, np.inf]
-                        labels_days = ['0–7 days', '8–30 days', '31–90 days', '91+ days']
-                        
-                        # Handle None values - replace with NaN first
-                        days_until = df['days_until_event'].copy()
-                        days_until = pd.to_numeric(days_until, errors='coerce')  # Convert to numeric, invalid values become NaN
-                        
-                        # Only bin non-NaN values
-                        df['DaysUntilBin'] = pd.cut(days_until, bins=bins_days, labels=labels_days)
-                    
-                    # Make column names consistent with the original data
-                    df.rename(columns={
-                        'bartenders_needed': 'Bartenders Needed',
-                        'number_of_guests': 'Number Of Guests',
-                        'days_until_event': 'Days Until Event',
-                        'days_since_inquiry': 'Days Since Inquiry',
-                        'marketing_source': 'Marketing Source',
-                        'referral_source': 'Referral Source',
-                        'state': 'State',
-                        'won': 'Won',
-                        'lost': 'Lost',
-                        'event_type': 'Event Type'
-                    }, inplace=True)
+                # Process data using enhanced utils function with all advanced features
+                if not leads_df.empty:
+                    df = process_data(leads_df, operations_df)
+                else:
+                    st.error("No data found in the database after upload.")
+                    return
         
         return df is not None and not df.empty
     except Exception as e:
@@ -461,7 +404,7 @@ if data_loaded and df is not None:
                         full_corr_matrix,
                         color_continuous_scale='RdBu_r',  # Blue (negative) to Red (positive)
                         zmin=-1, zmax=1,  # Fix scale from -1 to 1
-                        text_auto='.2f',  # Show 2 decimal places
+                        text_auto=True,  # Show values
                         aspect="auto"
                     )
                     fig_heatmap.update_layout(height=600)
