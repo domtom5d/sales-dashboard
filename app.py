@@ -186,6 +186,30 @@ else:
             operations_df = get_operation_data()
             
             if leads_df is not None:
+                # Normalize all column names to snake_case for consistency
+                if not leads_df.empty:
+                    # Show available columns for debugging
+                    st.sidebar.expander("Debug: Available Columns").write(leads_df.columns.tolist())
+                    
+                    # Normalize column names
+                    leads_df.columns = (
+                        leads_df.columns
+                        .astype(str)
+                        .str.strip()
+                        .str.lower()
+                        .str.replace(r'\s+', '_', regex=True)
+                    )
+                
+                if operations_df is not None and not operations_df.empty:
+                    # Normalize column names
+                    operations_df.columns = (
+                        operations_df.columns
+                        .astype(str)
+                        .str.strip()
+                        .str.lower()
+                        .str.replace(r'\s+', '_', regex=True)
+                    )
+                
                 st.session_state.lead_df = leads_df
                 st.session_state.operation_df = operations_df
                 
