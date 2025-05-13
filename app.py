@@ -471,6 +471,120 @@ if st.session_state.processed_df is not None:
                             step=0.01
                         )
                         
+                        # Add business category selection
+                        st.write("#### Lock in Business Thresholds")
+                        st.write("Set your desired thresholds for each lead category:")
+                        
+                        hot_threshold = st.number_input(
+                            "Hot Lead Threshold", 
+                            min_value=0.1, 
+                            max_value=0.9, 
+                            value=float(model_metrics['best_threshold']), 
+                            step=0.01,
+                            help="Leads above this score will be categorized as 'Hot'"
+                        )
+                        
+                        warm_threshold = st.number_input(
+                            "Warm Lead Threshold", 
+                            min_value=0.05, 
+                            max_value=hot_threshold - 0.01, 
+                            value=max(0.05, float(model_metrics['best_threshold']) / 2), 
+                            step=0.01,
+                            help="Leads above this score (but below Hot) will be categorized as 'Warm'"
+                        )
+                        
+                        cool_threshold = st.number_input(
+                            "Cool Lead Threshold", 
+                            min_value=0.01, 
+                            max_value=warm_threshold - 0.01, 
+                            value=max(0.01, float(model_metrics['best_threshold']) / 4), 
+                            step=0.01,
+                            help="Leads above this score (but below Warm) will be categorized as 'Cool'"
+                        )
+                        
+                        # Code snippet for implementation
+                        if st.checkbox("Show implementation code"):
+                            st.code("""
+# Zapier Code Step (JavaScript):
+const score = parseFloat(inputData.lead_score);
+let category = 'Cold';
+
+if (score >= """ + str(hot_threshold) + """) {
+  category = 'Hot';
+} else if (score >= """ + str(warm_threshold) + """) {
+  category = 'Warm';
+} else if (score >= """ + str(cool_threshold) + """) {
+  category = 'Cool';
+}
+
+return {
+  category: category,
+  score: score,
+  is_priority: category === 'Hot'
+};
+                            """, language="javascript")
+                        
+                        # Add section for exporting model configuration
+                        st.write("#### Operationalize Your Model")
+                        
+                        # Create tabs for different implementations
+                        impl_tab1, impl_tab2, impl_tab3 = st.tabs(["Zapier", "Streak", "Performance Monitoring"])
+                        
+                        with impl_tab1:
+                            st.write("##### Zapier Implementation")
+                            st.write("""
+                            1. Set up a Zapier trigger for new leads
+                            2. Add a 'Code' step using the JavaScript above
+                            3. Use 'Paths' to route leads based on category
+                            4. Set up different actions for each category (priority Slack alerts, emails, etc.)
+                            """)
+                        
+                        with impl_tab2:
+                            st.write("##### Streak Implementation")
+                            st.write("""
+                            1. Add a custom field in Streak for 'Lead Score' (number) and 'Lead Category' (dropdown)
+                            2. Use the Streak API or Google Sheets integration to calculate and update scores
+                            3. Create Streak Workflows that trigger based on Lead Category
+                            4. Set up differentiated follow-up tasks by category (e.g., "Call Hot Leads within 30 minutes")
+                            """)
+                            
+                            # Template for Google Sheets formula
+                            st.code("""
+=IF(ISBLANK(A2), "", 
+  IF(A2 >= """ + str(hot_threshold) + """, "Hot",
+    IF(A2 >= """ + str(warm_threshold) + """, "Warm",
+      IF(A2 >= """ + str(cool_threshold) + """, "Cool", "Cold")
+    )
+  )
+)
+                            """, language="excel")
+                        
+                        with impl_tab3:
+                            st.write("##### Performance Monitoring")
+                            st.write("""
+                            To track model performance over time:
+                            
+                            1. Log every scored lead with its prediction and eventual outcome
+                            2. Re-calibrate your model monthly or quarterly as booking patterns evolve
+                            3. A/B test your new model against previous approaches
+                            """)
+                            
+                            # Create a downloadable performance tracking template
+                            monitoring_df = pd.DataFrame({
+                                'lead_id': ['example_1', 'example_2'],
+                                'lead_score': [0.75, 0.35],
+                                'category': ['Hot', 'Warm'],
+                                'date_scored': [datetime.datetime.now(), datetime.datetime.now()],
+                                'actual_outcome': ['Won', 'Lost'],
+                                'time_to_close_days': [14, 30],
+                                'deal_value': [2500, 0]
+                            })
+                            
+                            csv = monitoring_df.to_csv(index=False)
+                            b64 = base64.b64encode(csv.encode()).decode()
+                            href = f'<a href="data:file/csv;base64,{b64}" download="lead_performance_tracker.csv">Download Performance Tracking Template</a>'
+                            st.markdown(href, unsafe_allow_html=True)
+                        
                         # Show confusion matrix for selected threshold
                         y_true = model_metrics['y_true']
                         y_pred = (y_pred_proba >= custom_threshold).astype(int)
