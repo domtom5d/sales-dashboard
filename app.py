@@ -229,11 +229,12 @@ if st.session_state.processed_df is not None:
     filtered_df = st.session_state.processed_df
     
     # Create tabs for different analysis views
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "Conversion Analysis", 
         "Feature Correlation", 
         "Lead Scoring", 
-        "Raw Data"
+        "Raw Data",
+        "🛈 Explanations"
     ])
     
     with tab1:
