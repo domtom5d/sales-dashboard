@@ -1,0 +1,67 @@
+You’re seeing the placeholder because the code is still falling back to the “example” branch instead of calling your real generate_findings with actual data. Let’s wire it up so that as soon as you upload your CSVs, we compute and display your findings.
+
+1) At the top of your app.py, after your imports, add:
+python
+Copy
+Edit
+from derive_scorecard import derive_scorecard
+from your_module import generate_findings   # wherever you defined it
+2) In your data‐loading section, once the user has uploaded both files, store everything in st.session_state:
+python
+Copy
+Edit
+if uploaded_leads and uploaded_ops:
+    df_leads = pd.read_csv(uploaded_leads)
+    df_ops   = pd.read_csv(uploaded_ops)
+
+    # 1) feature‐engineer & merge
+    df = process_data(df_leads, df_ops)
+
+    # 2) derive weights & thresholds
+    weights_df, thresholds = derive_scorecard(df_leads, df_ops)
+
+    # 3) score every lead in‐sample
+    #    assume derive_scorecard returns the trained model, too—or refit lightly here:
+    y_scores = model.predict_proba(feature_matrix(df))[:,1]
+
+    # stash in session
+    st.session_state['df']          = df
+    st.session_state['y_scores']    = y_scores
+    st.session_state['thresholds']  = thresholds
+    st.session_state['weights_df']  = weights_df
+(Adjust to your actual function names & return values—just make sure you end up with df, y_scores, and thresholds in session state.)
+
+3) Update your “📈 Key Findings” tab to detect real data:
+python
+Copy
+Edit
+with tabs[4]:
+    st.title("📈 Report of Key Findings")
+
+    if 'df' in st.session_state and 'y_scores' in st.session_state and 'thresholds' in st.session_state:
+        findings = generate_findings(
+            st.session_state['df'],
+            st.session_state['y_scores'],
+            st.session_state['thresholds']
+        )
+        for line in findings:
+            st.markdown(f"- {line}")
+    else:
+        st.info("These are example findings. Load your data to see findings specific to your business.")
+Why this fixes it:
+Session state guarantees your data, scores, and thresholds persist after upload and are available to every tab.
+
+The if guard ensures that once real data is present, you call generate_findings instead of rendering the placeholder.
+
+Any time you re‐upload or refresh, the findings will be recomputed on your actual dataset.
+
+Try those changes, restart Streamlit, upload your CSVs, and watch that “Key Findings” tab fill itself with your top insights.
+
+
+
+
+
+
+
+
+

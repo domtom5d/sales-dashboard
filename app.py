@@ -976,91 +976,42 @@ return {
     with tab5:
         st.title("📈 Report of Key Findings")
         
-        if st.session_state.get('model_metrics') and st.session_state.get('processed_df') is not None:
-            # Get data for findings
-            df = st.session_state.processed_df
-            y_scores = st.session_state.model_metrics.get('y_pred_proba')
-            thresholds = st.session_state.get('suggested_thresholds', {
-                'hot': 0.5,
-                'warm': 0.25,
-                'cool': 0.1
-            })
-            
-            # Generate dynamic findings
+        # Check if we have model data in session state
+        if 'model_metrics' in st.session_state and 'weights_df' in st.session_state and 'thresholds' in st.session_state:
             try:
+                # Get data for findings
+                df = filtered_df  # Use the current filtered dataframe
+                y_scores = st.session_state.model_metrics.get('y_pred_proba')
+                thresholds = st.session_state.thresholds
+                
+                # Generate dynamic findings
                 findings = generate_findings(df, y_scores, thresholds)
                 
                 # Display the findings
                 for finding in findings:
                     st.markdown(f"• {finding}")
-                    
+                
                 st.info("These findings are dynamically generated from your current data and will update as your data changes.")
             except Exception as e:
                 st.error(f"Error generating findings: {str(e)}")
-                
-                # Fallback to static findings if there's an error
-                st.markdown("""
-                **1. Urgency is King**  
-                • Leads with **Days Until Event ≤ 7** convert at ~45%,  
-                  compared to under 10% for those **> 30 days** out.  
-                
-                **2. Region‐Specific Performance**  
-                • **Region A** closes at **38%**, while **Region B** is at **18%**.  
-                  Geographical sourcing matters.  
-                
-                **3. Seasonal Trends**  
-                • Summer months (May–Sept) see **+12 pts** in conversion vs. winter.  
-                  Plan staffing and outreach accordingly.  
-                
-                **4. Corporate vs. Social**  
-                • Corporate events outperform weddings/birthdays by **8 percentage points**.  
-                  They should get priority follow‐up.  
-                
-                **5. Phone‐Match Uplift**  
-                • Leads whose **area code matches** their state  
-                  close ~6 pts higher (16% vs. 10%).  
-                  Treat mismatches as lower quality.  
-                
-                **6. Model Performance**  
-                • **ROC AUC = 0.84**: strong discrimination.  
-                • Precision/Recall AUC = 0.58: good positive‐class capture.  
-                  Use the threshold slider to fine‐tune hit rate.  
-                """)
-                st.warning("Note: These are example findings. Generate a model to see findings specific to your data.")
+                st.info("Try clicking 'Generate Lead Scoring Model' on the Lead Scoring tab first if you haven't already.")
         else:
-            st.info("Please select a data source and generate a lead scoring model to see key findings based on your data.")
+            st.info("Please select a data source and click 'Generate Lead Scoring Model' on the Lead Scoring tab to see key findings based on your data.")
             
-            # Example findings when no data is loaded
+            # Show example findings to demonstrate how the tab will look
+            st.subheader("Example Key Findings")
             st.markdown("""
-            ### Example Key Findings (sample data)
+            The Key Findings tab will display insights like these, but specific to your data:
             
-            **1. Urgency is King**  
-            • Leads with **Days Until Event ≤ 7** convert at ~45%,  
-              compared to under 10% for those **> 30 days** out.  
-            
-            **2. Region‐Specific Performance**  
-            • **Region A** closes at **38%**, while **Region B** is at **18%**.  
-              Geographical sourcing matters.  
-            
-            **3. Seasonal Trends**  
-            • Summer months (May–Sept) see **+12 pts** in conversion vs. winter.  
-              Plan staffing and outreach accordingly.  
-            
-            **4. Corporate vs. Social**  
-            • Corporate events outperform weddings/birthdays by **8 percentage points**.  
-              They should get priority follow‐up.  
-            
-            **5. Phone‐Match Uplift**  
-            • Leads whose **area code matches** their state  
-              close ~6 pts higher (16% vs. 10%).  
-              Treat mismatches as lower quality.  
-            
-            **6. Model Performance**  
-            • **ROC AUC = 0.84**: strong discrimination.  
-            • Precision/Recall AUC = 0.58: good positive‐class capture.  
-              Use the threshold slider to fine‐tune hit rate.  
+            • **Urgency:** Leads closing within 7 days convert at 45%, vs. those >30 days at 10%.
+            • **Geography:** Region A leads close at 38%, while Region B at 18%.
+            • **Seasonality:** July month has 32% conversion rate, lowest is January at I4%.
+            • **Event Type:** Corporate events convert at 28%, Social events at 20%.
+            • **Phone‐Match:** Local numbers convert at 16% vs. non‐local at 10%.
+            • **Model AUC:** ROC=0.835, PR=0.574.
+            • **Buckets:** 2,458 Hot, 3,721 Warm, 8,942 Cool, 12,311 Cold.
             """)
-            st.warning("These are example findings. Load your data to see findings specific to your business.")
+            st.warning("These are example findings. Generate a model to see findings specific to your business.")
     
     # Explanations Tab
     with tab6:
