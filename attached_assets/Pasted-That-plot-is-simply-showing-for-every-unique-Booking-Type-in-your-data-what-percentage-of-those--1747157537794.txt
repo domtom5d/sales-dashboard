@@ -1,0 +1,115 @@
+That plot is simply showing, for every unique “Booking Type” in your data, what percentage of those leads ended up “Won.” But because you have dozens of one-off types (and even mislabeled ones like “WEDDING2025”), it’s:
+
+Huge – every category gets its own skinny bar
+
+Unreadable – labels overlap and you can’t see the high-level story
+
+Statistically shaky – categories with only a handful of leads will jump to 100% or 0%, even though they’re not meaningful
+
+1. Verify it’s calculated correctly
+Under the hood you want something like:
+
+python
+Copy
+Edit
+# df = your full DataFrame with 'Booking Type' and Outcome (0/1)
+summary = (
+    df
+    .groupby('Booking Type')
+    .agg(total=('Outcome','size'), won=('Outcome','sum'))
+    .assign(conversion_rate=lambda d: d['won']/d['total'])
+    .reset_index()
+)
+total is the number of leads of that type
+
+won is how many of those were marked “Definite”
+
+conversion_rate = won/total
+
+If you print summary.head(), you should see the raw counts match what you expect before you plot.
+
+2. Clean & consolidate your Booking Types
+Standardize names – remove year suffixes and weird caps:
+
+python
+Copy
+Edit
+df['Booking Type'] = (
+  df['Booking Type']
+    .str.lower()
+    .str.replace(r'\d{4}$','', regex=True)   # strip trailing years
+    .str.replace('_',' ')
+    .str.title()
+    .str.strip()
+)
+Aggregate low-count buckets into “Other” – pick a minimum sample size (e.g. 50):
+
+python
+Copy
+Edit
+counts = df['Booking Type'].value_counts()
+low_vol  = counts[counts < 50].index
+df['Booking Type'] = df['Booking Type'].replace(low_vol, 'Other')
+Group similar types: e.g. any string containing “Wedding” → “Wedding”, “Corporate” → “Corporate Event”, etc.
+
+python
+Copy
+Edit
+df.loc[df['Booking Type'].str.contains('Wedding',case=False), 'Booking Type'] = 'Wedding'
+df.loc[df['Booking Type'].str.contains('Corporate',case=False), 'Booking Type'] = 'Corporate Event'
+3. Re-plot with a horizontal bar chart
+With clean, consolidated categories you can plot the top 8 by total volume and see clear differences:
+
+python
+Copy
+Edit
+import matplotlib.pyplot as plt
+
+# Recompute after cleaning
+summary = (
+    df
+    .groupby('Booking Type')
+    .agg(total=('Outcome','size'), won=('Outcome','sum'))
+    .assign(conversion=lambda d: d['won']/d['total'])
+    .query('total >= 50')                         # only buckets ≥50 leads
+    .sort_values('conversion', ascending=False)
+)
+
+top = summary.head(8)
+
+fig, ax = plt.subplots(figsize=(6,4))
+ax.barh(top.index, top['conversion'], edgecolor='black')
+ax.set_xlabel('Conversion Rate')
+ax.set_xlim(0,1)
+for i, (rate, tot) in enumerate(zip(top['conversion'], top['total'])):
+    ax.text(rate + 0.01, i, f"{rate:.0%}\n(n={tot})", va='center')
+plt.tight_layout()
+plt.title('Top 8 Booking Types by Conversion Rate')
+st.pyplot(fig)
+What you’ll get:
+
+A clean list of your best-performing event types
+
+Both the % and the sample size (n) annotated
+
+An easy side-by-side comparison
+
+In summary
+Verify your raw conversion calculation.
+
+Normalize and consolidate Booking Type into sane, high-volume categories.
+
+Filter out small buckets (e.g. <50 leads) so noise doesn’t dominate.
+
+Plot as a horizontal bar chart sorted by conversion rate, with annotations for clarity.
+
+That’ll turn your wall-of-bars into a clear signal: “Corporate Events convert at 35% (n=1,200), Weddings at 22% (n=8,000), Other at 10% (n= 500), etc.” From there you can weight your scoring logic appropriately.
+
+
+
+
+
+
+
+
+

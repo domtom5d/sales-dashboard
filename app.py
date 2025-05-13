@@ -289,45 +289,80 @@ if st.session_state.processed_df is not None:
             st.write("#### Interpretation")
             
             # Get top positive and negative correlations
-            top_positive = corr_outcome[corr_outcome["Correlation with Outcome"] > 0].iloc[0:3]
-            top_negative = corr_outcome[corr_outcome["Correlation with Outcome"] < 0].iloc[-3:]
-            
-            if not top_positive.empty:
-                st.write("**Top Positive Factors:**")
-                for idx, row in top_positive.iterrows():
-                    st.write(f"• {idx}: +{row['Correlation with Outcome']:.3f}")
-            
-            if not top_negative.empty:
-                st.write("**Top Negative Factors:**")
-                for idx, row in top_negative.iterrows():
-                    st.write(f"• {idx}: {row['Correlation with Outcome']:.3f}")
+            if 'Correlation with Outcome' in corr_outcome.columns:
+                top_positive = corr_outcome[corr_outcome["Correlation with Outcome"] > 0].head(3)
+                top_negative = corr_outcome[corr_outcome["Correlation with Outcome"] < 0].tail(3)
+                
+                if not top_positive.empty:
+                    st.write("**Top Positive Factors:**")
+                    for _, row in top_positive.iterrows():
+                        feature = row['index'] if 'index' in row else 'Feature'
+                        st.write(f"• {feature}: +{row['Correlation with Outcome']:.3f}")
+                
+                if not top_negative.empty:
+                    st.write("**Top Negative Factors:**")
+                    for _, row in top_negative.iterrows():
+                        feature = row['index'] if 'index' in row else 'Feature'
+                        st.write(f"• {feature}: {row['Correlation with Outcome']:.3f}")
+            else:
+                st.warning("Correlation data structure is not as expected. Unable to display top factors.")
             
             # Plot correlation matrix for top features
             st.write("#### Feature Correlation Matrix")
-            top_features = pd.concat([top_positive, top_negative]).index.tolist()
-            top_features.append("Outcome")
-            top_corr_matrix = corr_matrix.loc[top_features, top_features]
             
-            fig, ax = plt.subplots(figsize=(10, 8))
-            im = ax.imshow(top_corr_matrix, cmap="coolwarm", vmin=-1, vmax=1)
-            
-            # Add feature labels
-            ax.set_xticks(np.arange(len(top_features)))
-            ax.set_yticks(np.arange(len(top_features)))
-            ax.set_xticklabels(top_features, rotation=45, ha="right")
-            ax.set_yticklabels(top_features)
-            
-            # Add colorbar
-            plt.colorbar(im)
-            
-            # Add correlation values
-            for i in range(len(top_features)):
-                for j in range(len(top_features)):
-                    text = ax.text(j, i, f"{top_corr_matrix.iloc[i, j]:.2f}",
-                                  ha="center", va="center", color="black" if abs(top_corr_matrix.iloc[i, j]) < 0.7 else "white")
-            
-            plt.tight_layout()
-            st.pyplot(fig)
+            # Check if we have valid data for correlation matrix
+            if not corr_matrix.empty and 'Correlation with Outcome' in corr_outcome.columns:
+                try:
+                    # Create a list of top features
+                    feature_list = []
+                    
+                    # Add features from top_positive
+                    if not top_positive.empty:
+                        for _, row in top_positive.iterrows():
+                            if 'index' in row:
+                                feature_list.append(row['index'])
+                    
+                    # Add features from top_negative
+                    if not top_negative.empty:
+                        for _, row in top_negative.iterrows():
+                            if 'index' in row:
+                                feature_list.append(row['index'])
+                    
+                    # Add outcome column
+                    if 'Outcome' in corr_matrix.columns:
+                        feature_list.append('Outcome')
+                    
+                    # If we have features to display
+                    if feature_list:
+                        # Create heatmap
+                        top_corr_matrix = corr_matrix.loc[feature_list, feature_list]
+                        
+                        fig, ax = plt.subplots(figsize=(10, 8))
+                        im = ax.imshow(top_corr_matrix, cmap="coolwarm", vmin=-1, vmax=1)
+                        
+                        # Add feature labels
+                        ax.set_xticks(np.arange(len(feature_list)))
+                        ax.set_yticks(np.arange(len(feature_list)))
+                        ax.set_xticklabels(feature_list, rotation=45, ha="right")
+                        ax.set_yticklabels(feature_list)
+                        
+                        # Add colorbar
+                        plt.colorbar(im)
+                        
+                        # Add correlation values
+                        for i in range(len(feature_list)):
+                            for j in range(len(feature_list)):
+                                text = ax.text(j, i, f"{top_corr_matrix.iloc[i, j]:.2f}",
+                                            ha="center", va="center", color="black" if abs(top_corr_matrix.iloc[i, j]) < 0.7 else "white")
+                        
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                    else:
+                        st.info("Not enough features for correlation matrix visualization.")
+                except Exception as e:
+                    st.warning(f"Could not create correlation matrix: {str(e)}")
+            else:
+                st.info("Not enough data for correlation analysis.")
         except Exception as e:
             st.error(f"Error in feature correlation analysis: {str(e)}")
     
