@@ -22,6 +22,17 @@ def generate_findings(df, y_scores, thresholds):
         list: List of findings as formatted strings
     """
     findings = []
+    
+    # Add time to conversion analysis
+    try:
+        from conversion import analyze_time_to_conversion
+        time_result = analyze_time_to_conversion(df)
+        if not time_result.get('error'):
+            avg_days = time_result.get('average_days')
+            median_days = time_result.get('median_days')
+            findings.append(f"**Time to Conversion:** Average: {avg_days:.1f} days, Median: {median_days:.1f} days.")
+    except Exception:
+        pass  # Silently skip if the time analysis fails
 
     # 1. Urgency
     try:

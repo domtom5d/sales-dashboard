@@ -10,6 +10,7 @@ from sklearn.metrics import confusion_matrix
 from database import import_leads_data, import_operations_data, get_lead_data, get_operation_data, get_merged_data, initialize_db_if_empty, migrate_database, process_phone_matching
 from utils import process_data, calculate_conversion_rates, calculate_correlations
 from derive_scorecard import generate_lead_scorecard, score_lead
+from conversion import analyze_phone_matches, analyze_time_to_conversion
 from evaluate import (
     calculate_model_metrics, 
     plot_roc_curve, 
@@ -250,7 +251,62 @@ if st.session_state.processed_df is not None:
             overall_conversion = conversion_rates["overall"]["Conversion Rate"][0]
             st.metric("Overall Conversion Rate", f"{overall_conversion:.1%}")
             
-            # Create columns for metrics
+            # Calculate and display time to conversion analysis
+            st.subheader("⏱️ Time to Conversion Analysis")
+            time_to_conversion = analyze_time_to_conversion(filtered_df)
+            
+            if time_to_conversion.get('error'):
+                st.warning(f"Could not analyze time to conversion: {time_to_conversion.get('error')}")
+            else:
+                # Create metrics row
+                metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+                
+                with metric_col1:
+                    st.metric("Average Days", f"{time_to_conversion.get('average_days', 0):.1f}")
+                
+                with metric_col2:
+                    st.metric("Median Days", f"{time_to_conversion.get('median_days', 0):.1f}")
+                
+                with metric_col3:
+                    st.metric("Minimum Days", f"{time_to_conversion.get('min_days', 0)}")
+                
+                with metric_col4:
+                    st.metric("Maximum Days", f"{time_to_conversion.get('max_days', 0)}")
+                
+                # Display histogram of time to conversion
+                time_col1, time_col2 = st.columns(2)
+                
+                with time_col1:
+                    if 'histogram_data' in time_to_conversion and not time_to_conversion['histogram_data'].empty:
+                        st.write("**Distribution of Time to Conversion**")
+                        
+                        # Create a horizontal bar chart
+                        fig, ax = plt.subplots(figsize=(10, 6))
+                        bars = sns.barplot(x='Count', y='Time to Conversion', 
+                                       data=time_to_conversion['histogram_data'], 
+                                       palette='viridis', ax=ax)
+                        
+                        # Add count labels
+                        for i, bar in enumerate(ax.patches):
+                            ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height()/2, 
+                                    f"{bar.get_width():.0f}", va='center')
+                        
+                        ax.set_title('Distribution of Time from Lead to Conversion')
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                
+                with time_col2:
+                    # Display conversion time by booking type
+                    if 'by_booking_type' in time_to_conversion and not time_to_conversion['by_booking_type'].empty:
+                        st.write("**Time to Conversion by Booking Type**")
+                        # Format columns for better display
+                        display_df = time_to_conversion['by_booking_type'].copy()
+                        display_df['mean'] = display_df['mean'].round(1)
+                        display_df['median'] = display_df['median'].round(1)
+                        display_df.columns = ['Booking Type', 'Avg Days', 'Median Days', 'Count']
+                        st.dataframe(display_df.sort_values(by='Avg Days'), use_container_width=True)
+            
+            # Create columns for additional metrics
             col1, col2, col3 = st.columns(3)
             
             with col1:

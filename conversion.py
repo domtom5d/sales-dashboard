@@ -2,13 +2,14 @@
 conversion.py - Conversion analysis and phone matching functionality
 
 This module contains functions for analyzing conversion rates, phone matching,
-and related data analysis.
+time to conversion, and related data analysis.
 """
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from datetime import datetime
 
 def analyze_phone_matches(df):
     """
@@ -189,6 +190,140 @@ def map_area_code_to_state(area_code):
     }
     
     return area_code_map.get(area_code)
+
+def analyze_time_to_conversion(df):
+    """
+    Analyze the average time between lead inquiry and conversion
+    
+    Args:
+        df (DataFrame): DataFrame with lead data including inquiry_date and won flag
+        
+    Returns:
+        dict: Dictionary containing time to conversion statistics
+        {
+            'average_days': float,
+            'median_days': float,
+            'min_days': int,
+            'max_days': int,
+            'by_outcome': DataFrame,
+            'by_booking_type': DataFrame,
+            'histogram_data': DataFrame
+        }
+    """
+    result = {}
+    
+    try:
+        # Make sure required columns exist
+        required_cols = ['inquiry_date', 'outcome', 'days_since_inquiry']
+        
+        if not all(col in df.columns for col in required_cols):
+            # Try fallback to days_since_inquiry if available
+            if 'days_since_inquiry' in df.columns and 'outcome' in df.columns:
+                # Filter for won deals
+                won_leads = df[df['outcome'] == 1]
+                
+                # Use days_since_inquiry directly
+                result['average_days'] = won_leads['days_since_inquiry'].mean()
+                result['median_days'] = won_leads['days_since_inquiry'].median()
+                result['min_days'] = won_leads['days_since_inquiry'].min()
+                result['max_days'] = won_leads['days_since_inquiry'].max()
+                
+                # Group by booking type if available
+                if 'booking_type' in df.columns:
+                    result['by_booking_type'] = won_leads.groupby('booking_type')['days_since_inquiry'].agg(
+                        ['mean', 'median', 'count']).reset_index()
+                
+                # Create histogram data
+                bins = [0, 1, 3, 7, 14, 30, 60, 90, float('inf')]
+                labels = ['Same day', '1-3 days', '4-7 days', '8-14 days', '15-30 days', '31-60 days', '61-90 days', '90+ days']
+                won_leads['time_bucket'] = pd.cut(won_leads['days_since_inquiry'], bins=bins, labels=labels)
+                result['histogram_data'] = won_leads['time_bucket'].value_counts().reset_index()
+                result['histogram_data'].columns = ['Time to Conversion', 'Count']
+                
+                # Sort properly
+                result['histogram_data']['Time to Conversion'] = pd.Categorical(
+                    result['histogram_data']['Time to Conversion'],
+                    categories=labels,
+                    ordered=True
+                )
+                result['histogram_data'] = result['histogram_data'].sort_values('Time to Conversion')
+                
+                return result
+            else:
+                raise ValueError("Required columns not found in dataframe")
+        
+        # Convert inquiry_date to datetime if it's not already
+        if df['inquiry_date'].dtype != 'datetime64[ns]':
+            df['inquiry_date'] = pd.to_datetime(df['inquiry_date'])
+            
+        # Calculate time to conversion for won deals
+        won_leads = df[df['outcome'] == 1].copy()
+        
+        if len(won_leads) == 0:
+            raise ValueError("No won leads found in the data")
+        
+        # If event_date exists, use it to calculate days between inquiry and event
+        if 'event_date' in df.columns:
+            # Convert event_date to datetime if it's not already
+            if won_leads['event_date'].dtype != 'datetime64[ns]':
+                won_leads['event_date'] = pd.to_datetime(won_leads['event_date'])
+                
+            # Calculate days between inquiry and event
+            won_leads['days_to_conversion'] = (won_leads['event_date'] - won_leads['inquiry_date']).dt.days
+        else:
+            # Use days_since_inquiry as fallback
+            won_leads['days_to_conversion'] = won_leads['days_since_inquiry']
+        
+        # Basic statistics
+        result['average_days'] = won_leads['days_to_conversion'].mean()
+        result['median_days'] = won_leads['days_to_conversion'].median()
+        result['min_days'] = won_leads['days_to_conversion'].min()
+        result['max_days'] = won_leads['days_to_conversion'].max()
+        
+        # By outcome (won vs lost)
+        df_with_days = df.copy()
+        if 'event_date' in df.columns:
+            if df_with_days['event_date'].dtype != 'datetime64[ns]':
+                df_with_days['event_date'] = pd.to_datetime(df_with_days['event_date'])
+            df_with_days['days_to_conversion'] = (df_with_days['event_date'] - df_with_days['inquiry_date']).dt.days
+        else:
+            df_with_days['days_to_conversion'] = df_with_days['days_since_inquiry']
+            
+        result['by_outcome'] = df_with_days.groupby('outcome')['days_to_conversion'].agg(
+            ['mean', 'median', 'count']).reset_index()
+        result['by_outcome']['outcome'] = result['by_outcome']['outcome'].map({1: 'Won', 0: 'Lost'})
+        
+        # By booking type if available
+        if 'booking_type' in won_leads.columns:
+            result['by_booking_type'] = won_leads.groupby('booking_type')['days_to_conversion'].agg(
+                ['mean', 'median', 'count']).reset_index()
+        
+        # Create histogram data
+        bins = [0, 1, 3, 7, 14, 30, 60, 90, float('inf')]
+        labels = ['Same day', '1-3 days', '4-7 days', '8-14 days', '15-30 days', '31-60 days', '61-90 days', '90+ days']
+        won_leads['time_bucket'] = pd.cut(won_leads['days_to_conversion'], bins=bins, labels=labels)
+        result['histogram_data'] = won_leads['time_bucket'].value_counts().reset_index()
+        result['histogram_data'].columns = ['Time to Conversion', 'Count']
+        
+        # Sort properly
+        result['histogram_data']['Time to Conversion'] = pd.Categorical(
+            result['histogram_data']['Time to Conversion'],
+            categories=labels,
+            ordered=True
+        )
+        result['histogram_data'] = result['histogram_data'].sort_values('Time to Conversion')
+        
+        return result
+    
+    except Exception as e:
+        # Return error in the result
+        return {
+            'error': str(e),
+            'average_days': None,
+            'median_days': None,
+            'by_booking_type': pd.DataFrame(),
+            'histogram_data': pd.DataFrame()
+        }
 
 def analyze_prediction_counts(y_scores, thresholds):
     """
