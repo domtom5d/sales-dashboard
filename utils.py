@@ -229,6 +229,19 @@ def calculate_conversion_rates(df):
         })
         conversion_rates['overall'] = overall_df
     
+    # Booking Type conversion rates
+    booking_type_col = None
+    if 'Booking Type' in df.columns:
+        booking_type_col = 'Booking Type'
+    elif 'booking_type' in df.columns:
+        booking_type_col = 'booking_type'
+    
+    if booking_type_col:
+        conv_booking_type = df.groupby(booking_type_col)['Outcome'].mean().reset_index()
+        conv_booking_type.columns = ['Booking Type', 'Conversion Rate']
+        if not conv_booking_type.empty:
+            conversion_rates['booking_type'] = conv_booking_type
+    
     # Event Type conversion rates
     if 'Event Type' in df.columns:
         conv_event_type = df.groupby('Event Type')['Outcome'].mean().reset_index(name='Conversion Rate')
