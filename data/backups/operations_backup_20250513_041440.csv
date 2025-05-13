@@ -1,0 +1,52 @@
+id,box_key,event_date,actual_deal_value,region,name,days_until_event,status,booking_type,event_type,city,state
+1,BK-04594,2025-01-25 01:00:00,0.0,WTFL LLC,BK-04594 Florida - ES & CBP - Debra Vitale Wedding,,Lost,Wedding 2025,Wedding 2024 - CBP,Fort Myers,Florida
+2,BK-01884,2024-10-19 01:00:00,0.0,WTFL LLC,BK-01884 Florida - BO - Kari Pope Wedding 2024,,Lost,Wedding 2024,Wedding 2024 - BO,Alachua,Florida
+3,BK-04471,2024-11-17 01:00:00,0.0,WTFL LLC,BK-04471 Florida - CBP -  Dolly Blaydes Wedding,,Definite,Wedding 2024,Wedding 2024 - CBPBW,Amelia Island,Florida
+4,BK-02864,2025-04-12 01:00:00,0.0,WTFL LLC,BK-02864 Florida -  CBPBW/ES - Angelica Valdez's Private Party,,Tentative,Private Party,Private Party - CBPBW,Boynton Beach,Florida
+5,BK-03777,2024-05-26 01:00:00,0.0,WTFL LLC,BK-03777 Florida - BO - Chloe Smith's Wedding,,Definite,Wedding 2024,Wedding 2024 - BO,Gainesville,Florida
+6,BK-03808,2024-07-07 01:00:00,0.0,WTFL LLC,BK-03808 Florida - CANCELLED - BO (TAM) - Kristina Soto's Wedding,,Definite,Wedding 2024,Wedding 2024 - BO,Polk City,Florida
+7,BK-04428,2024-05-05 01:00:00,0.0,WTFL LLC,BK-04428 Florida - CBP - Breana Payne's Bachelorette Party,,Lost,,Bachelor/Bachelorette Party - CBP,Miami,Florida
+8,BK-04459,2024-09-21 01:00:00,0.0,WTFL LLC,BK-04459 Florida - CBP - Katelyn  Matos Wedding,,Definite,Wedding 2024,Wedding 2024 - CBP,Arcadia,Florida
+9,BK-02085,2024-05-25 01:00:00,0.0,WTFL LLC,BK-02085 Florida - CBP - Brandy Thomas Wedding,,Lost,Wedding 2024,Wedding 2024 - CBP,Navarre Beach,Florida
+10,BK-04085,2024-09-01 01:00:00,0.0,WTFL LLC,BK-04085 Florida - BO (WPB) - Reyna Saint-Louis's Bachelorette Party,,Lost,,Bachelor/Bachelorette Party - BO,West Palm,Florida
+11,BK-05092,2024-09-07 01:00:00,0.0,WTFL LLC,BK-05092 Florida - CBP -  (FL-JAX) - Julieann Hanrahan Wedding,,Lost,Wedding 2024,Wedding 2024 - CBP,Jacksonville,Florida
+12,BK-04329,2025-02-23 01:00:00,0.0,WTFL LLC,BK-04329 Florida - CBP - Valentina Gutierrez's Wedding 2025,,Lost,Wedding 2025,Wedding 2024 - CBP,Miami,Florida
+13,BK-04614,2024-05-08 01:00:00,0.0,WTFL LLC,BK-04614 Florida - ES & CBP - Carli Bailey Corporate Event,,Lost,Corporate Event,Corporate Event - CBP,Kissimmee,Florida
+14,BK-04221,2024-05-12 01:00:00,0.0,WTFL LLC,BK-04221 Florida - CBP - Allyssa Powell's Wedding,,Lost,Wedding 2024,Wedding 2024 - CBP,Winter Park,Florida
+15,BK-03755,2024-03-23 01:00:00,0.0,WTFL LLC,BK-03755 Florida - CANCELLED - CBP FULL BAR (FTL) - Blanca Yarbrough Party,,Definite,Private Party,,Plantation,Florida
+16,BK-00178,2023-04-01 01:00:00,0.0,WTFL LLC,BK-00178 Florida - CANCELLED - Elizabeth Leiter - Marina Events (FTM),,Definite,,,Fort Myers,Florida
+17,BK-820d6698,2024-09-14 13:00:00,0.0,Twist Events Inc,BK-820d6698 Texas - BO - Ashley Little 's Reunion,,Lost,Reunion,Reunion - BO,Galveston,Texas
+18,BK-6f057aab,2024-08-24 13:00:00,0.0,Twist Events Inc,BK-6f057aab Arizona - CBP - Sam Morris's Birthday Party,,Lost,Birthday Party,Birthday Party - CBP,Scottsdale,Arizona
+19,BK-Nov15024,2024-11-15 12:00:00,0.0,Twist Events Inc,BK-Nov15024 Colorado - CBP - Frank Fidani's Military Medicine Event,,Definite,Corporate Event,Corporate Event - CBP,Parker,Colorado
+20,BK-2ndCorpE,2024-10-03 12:00:00,0.0,Twist Events Inc,BK-2ndCorpE - CO - CBPBW - Jazleen Aguillar's Company Party,,Lost,Corporate Event,Corporate Event - CBPBW,Thorton,Colorado
+21,BK-4b0115ea,2025-03-29 00:00:00,0.0,Twist Events Inc,BK-4b0115ea Texas - BO - Mayanna Jerome's Wedding 2025,,Lost,Wedding 2025,Wedding 2025 - BO,Conroe,Texas
+22,BK-fb003b0a,2024-09-28 09:00:00,0.0,Twist Events Inc,BK-fb003b0a Oklahoma - CBPBW- MICHELLE CLARKE's Wedding 2024,,Lost,Wedding 2024,Wedding 2024 - CBPBW,Tulsa,Oklahoma
+23,BK-000ec0ed,2024-10-25 00:00:00,0.0,Twist Events Inc,BK-000ec0ed Arizona - CBP - Deb Banerjee's Wedding 2024,,Lost,Wedding 2024,Wedding 2024 - CBP,Mesa,Arizona
+24,BK-1b045416,2025-07-12 00:00:00,0.0,Twist Events Inc,BK-1b045416 Colorado - BO - Garrett Hartigan's Wedding 2025,,Lost,Wedding 2025,Wedding 2025 - BO,Laporte,Colorado
+25,BK-bc0559e1,2025-04-05 13:00:00,0.0,WTFL LLC,BK-bc0559e1 Tennessee - CBP - Carly Hubbard Wedding 2025,,,Wedding 2025,Wedding 2025 - CBP,Dickson,Tennessee
+26,BK-660a00c0,2024-10-12 08:00:00,0.0,Twist Events Inc,BK-660a00c0 Colorado - BO - Samantha  Kirby 's Wedding 2024,,Lost,Wedding 2024,Wedding 2024 - BO,Golden,Colorado
+27,BK-5202abb9,2024-08-17 13:00:00,0.0,Twist Events Inc,BK-5202abb9 Nebraska - CBP - Jessica Brummer's Private Party,,Lost,Private Party,Private Party - CBP,Elkhorn,Nebraska
+28,BK-370d61cd,2024-10-05 08:00:00,0.0,Twist Events Inc,BK-370d61cd Arizona - CBP - Erin Jackson 's Wedding 2024,,Lost,Wedding 2024,Wedding 2024 - CBP,Pinetop,Arizona
+29,BK-2904a2cf,2024-09-20 08:00:00,0.0,Twist Events Inc,BK-2904a2cf Colorado -BO/ES - Jordan Needen's Wedding 2024,,Lost,Wedding 2024,Wedding 2024 - BO,Evergreen,Colorado
+30,BK-d105d7ca,2025-07-12 09:00:00,0.0,Twist Events Inc,BK-d105d7ca Colorado - BO - Greta Hartmann's Wedding 2025,,Lost,Wedding 2025,Wedding 2025 - BO,Bailey,Colorado
+31,BK-de0ac87a,2024-11-07 13:00:00,195.0,Twist Events Inc,BK-de0ac87a Arizona - BO - Iris Mayone-Paquin's Corporate Event,,Definite,Corporate Event,Corporate Event - BO,Phoenix,Arizona
+32,BK-ca0f9cfc,2024-07-26 13:00:00,0.0,Twist Events Inc,BK-ca0f9cfc Colorado - BO - Wendy Smith's Family camp,,Lost,Private Party,Private Party - BO,Westminster,Colorado
+33,BK-2b088aa4,2024-08-03 12:00:00,0.0,Twist Events Inc,BK-2b088aa4 Colorado - Kirklyn Simonton's Wedding 2024,,Lost,Wedding 2024,Wedding 2024 - CBPBW,Tabernash,Colorado
+34,BK-07496,2024-09-28 01:00:00,0.0,Twist Events Inc,BK-07496 CO - BO - Establishment -  Stark/Elges Wedding,,Lost,Venue,Venue - BO,Westminster,Colorado
+35,BK-04017,2024-11-01 01:00:00,0.0,Twist Events Inc,BK-04017 NM - BO - The Studio - Halloween Party,,Lost,Venue,Venue - BO,Albuquerque,New Mexico
+36,BK-07498,2024-11-02 13:00:00,0.0,Twist Events Inc,BK-07498 CO - BO - Establishment -  Rodgriguez/Chavelas Wedding,,Lost,,Venue - BO,,Colorado
+37,BK-07497,2024-10-12 01:00:00,0.0,Twist Events Inc,BK-07497 CO - BO - Establishment - Nygren/Hemphill Wedding,,Lost,,Venue - BO,Westminster,Colorado
+38,BK-07269,2024-08-31 01:00:00,0.0,Twist Events Inc,BK-07269 CO - Christina Aguirre's Highschool Reunion,,Lost,Reunion,Reunion - BO,Denver,Colorado
+39,BK-03675,2024-05-24 01:00:00,0.0,Twist Events Inc,BK-03675 NM - BO/WS - Net Zero Ranch Catering Company Help,,Lost,Venue,Venue - BO,,New Mexico
+40,BK-8e0b678f,2025-03-16 13:00:00,0.0,Twist Events Inc,BK-8e0b678f Colorado - BO - Jenna Southards 's Wedding 2025,,Lost,Wedding 2025,Wedding 2025 - BO,Montrose,Colorado
+41,BK-03145,2024-11-09 13:00:00,0.0,Twist Events Inc,BK-03145 Oklahoma - BO - Lee Winn's Wedding,,Lost,Wedding 2024,Wedding 2024 - BO,Oklahoma city,Oklahoma
+42,BK-06599,2024-09-02 13:00:00,0.0,Twist Events Inc,BK-06599 Colorado - BO - Casandra Hood - Work Party,,Lost,Corporate Event,Corporate Event - BO,DENVER,Colorado
+43,BK-05737,2024-08-30 13:00:00,0.0,Twist Events Inc,BK-05737 Colorado  - BO - Danielle DeYoung's Wedding,,Lost,Wedding 2024,Wedding 2024 - BO,Evergreen,Colorado
+44,BK-04365,2024-07-27 01:00:00,0.0,Twist Events Inc,BK-04365 Colorado  - CBP - Paige Tenski & Ryan Rearick's Wedding,,Lost,Wedding 2024,Wedding 2024 - CBP,Westcliffe ,Colorado
+45,BK-05706,2024-07-20 01:00:00,2260.5,Twist Events Inc,BK-05706 Colorado  - CBP - Katie Hernandez's Wedding,,Lost,Wedding 2024,Wedding 2024 - CBP,Firestone ,Colorado
+46,BK-07083,2024-09-14 13:00:00,1077.0,Twist Events Inc,BK-07083 CO - Haley Felchak's Wedding,,Lost,,,Breckenridge ,Colorado
+47,BK-03319,2024-02-10 13:00:00,175.0,Twist Events Inc,BK-03319 NM - BO - The Studio - Baby Shower,,Lost,Baby Shower,Baby Shower - BO,Albuquerque,New Mexico
+48,BK-03622,2024-03-31 13:00:00,0.0,Twist Events Inc,BK-03622 NM - BO - The Studio - Event,,Lost,Venue,Venue - BO,Albuquerque,New Mexico
+49,BK-06875,2024-08-30 13:00:00,0.0,Twist Events Inc,BK-06875 CO - BO - Olivia Yanez's Wedding,,Lost,Wedding 2024,Wedding 2024 - BO,Colorado Springs ,Colorado
+50,BK-05695,2024-07-01 01:00:00,504.0,Twist Events Inc,BK-05695 CO - BO - Kori Alberts's Wedding,,Lost,Wedding 2024,Wedding 2024 - BO,Fort Collins,Colorado
+51,BK-06991,2024-07-26 01:00:00,0.0,Twist Events Inc,BK-06991 CO - CBP - Emily Swift's Private Party,,Lost,Private Party,Private Party - CBP,denver,Colorado

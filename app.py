@@ -563,18 +563,40 @@ if data_loaded and df is not None:
                     # Calculate score
                     score = score_lead(lead_data, scorecard_df)
                     
+                    # Ensure score is numeric
+                    if isinstance(score, tuple):
+                        score = score[0]  # Extract numeric score from tuple if returned
+                    
+                    # Make sure we have a valid score
+                    try:
+                        score = float(score)
+                    except (ValueError, TypeError):
+                        score = 0
+                    
                     # Determine category
                     category = "Cold"
-                    for cat, threshold in thresholds.items():
-                        if score >= threshold:
-                            category = cat
-                            break
+                    if thresholds and isinstance(thresholds, dict):
+                        for cat, threshold in thresholds.items():
+                            try:
+                                if score >= threshold:
+                                    category = cat
+                                    break
+                            except (TypeError, ValueError):
+                                continue
                     
                     # Display score with fancy styling
                     st.markdown("### Lead Score Results")
                     
-                    # Create score display
-                    max_score = sum(scorecard_df[scorecard_df['Coefficient'] > 0]['Points'])
+                    # Calculate max possible score from positive coefficients
+                    try:
+                        max_score = sum(scorecard_df[scorecard_df['Coefficient'] > 0]['Points'])
+                    except:
+                        # Fallback if there's an issue
+                        max_score = sum(abs(scorecard_df['Points']))
+                    
+                    # Ensure we have valid values
+                    score = float(score) if not isinstance(score, (int, float)) else score
+                    max_score = float(max_score) if max_score else 100
                     
                     # Calculate percentage of maximum possible score
                     score_percent = min(100, max(0, (score / max_score) * 100)) if max_score > 0 else 0
@@ -584,25 +606,37 @@ if data_loaded and df is not None:
                     
                     with result_col1:
                         # Display numeric score and category
-                        st.metric("Lead Score", score)
+                        st.metric("Lead Score", int(score))
                         st.markdown(f"**Category:** {category}")
                     
                     with result_col2:
                         # Create a progress bar visualization of the score
-                        st.markdown(f"**Score: {score}/{max_score} points ({score_percent:.1f}%)**")
+                        st.markdown(f"**Score: {int(score)}/{int(max_score)} points ({score_percent:.1f}%)**")
                         st.progress(score_percent/100)
                         
                         # Add colored indicators for threshold ranges
                         threshold_cols = st.columns(4)
                         
-                        with threshold_cols[0]:
-                            st.markdown(f"<span style='color: blue'>Cold: < {thresholds['Cool']}</span>", unsafe_allow_html=True)
-                        with threshold_cols[1]:
-                            st.markdown(f"<span style='color: teal'>Cool: {thresholds['Cool']}+</span>", unsafe_allow_html=True)
-                        with threshold_cols[2]:
-                            st.markdown(f"<span style='color: orange'>Warm: {thresholds['Warm']}+</span>", unsafe_allow_html=True)
-                        with threshold_cols[3]:
-                            st.markdown(f"<span style='color: red'>Hot: {thresholds['Hot']}+</span>", unsafe_allow_html=True)
+                        # Safely display threshold info
+                        if thresholds and isinstance(thresholds, dict) and all(k in thresholds for k in ['Cool', 'Warm', 'Hot']):
+                            with threshold_cols[0]:
+                                st.markdown(f"<span style='color: blue'>Cold: < {thresholds['Cool']}</span>", unsafe_allow_html=True)
+                            with threshold_cols[1]:
+                                st.markdown(f"<span style='color: teal'>Cool: {thresholds['Cool']}+</span>", unsafe_allow_html=True)
+                            with threshold_cols[2]:
+                                st.markdown(f"<span style='color: orange'>Warm: {thresholds['Warm']}+</span>", unsafe_allow_html=True)
+                            with threshold_cols[3]:
+                                st.markdown(f"<span style='color: red'>Hot: {thresholds['Hot']}+</span>", unsafe_allow_html=True)
+                        else:
+                            # Fallback if thresholds not available
+                            with threshold_cols[0]:
+                                st.markdown(f"<span style='color: blue'>Cold: Low score</span>", unsafe_allow_html=True)
+                            with threshold_cols[1]:
+                                st.markdown(f"<span style='color: teal'>Cool: Medium-low</span>", unsafe_allow_html=True)
+                            with threshold_cols[2]:
+                                st.markdown(f"<span style='color: orange'>Warm: Medium-high</span>", unsafe_allow_html=True)
+                            with threshold_cols[3]:
+                                st.markdown(f"<span style='color: red'>Hot: High score</span>", unsafe_allow_html=True)
                     
                     # Add interpretation and recommendations
                     st.markdown("#### Interpretation")

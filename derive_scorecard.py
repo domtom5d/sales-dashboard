@@ -34,17 +34,46 @@ def generate_lead_scorecard(use_sample_data=True):
                 return None, None
 
         # 2) Merge and clean
-        # Normalize status field
-        if 'Status' in leads_df.columns:
+        # Make sure we have an Outcome field for the ML model to use
+        if 'outcome' in leads_df.columns:
+            # Use existing outcome field if it exists (from database processing)
+            leads_df['Outcome'] = leads_df['outcome']
+        elif 'Status' in leads_df.columns:
+            # Normalize status field
             leads_df['Status'] = leads_df['Status'].astype(str).str.lower().str.strip()
-            leads_df = leads_df[leads_df['Status'].isin(['definite', 'definte', 'lost', 'win', 'won'])]
-            leads_df['Outcome'] = leads_df['Status'].isin(['definite', 'definte', 'win', 'won']).astype(int)
+            # Use your correct status mapping (definite and tentative as wins)
+            win_statuses = ['definite', 'definte', 'tentative', 'win', 'won']
+            lost_statuses = ['lost']
+            # Keep only rows with definitive outcomes
+            leads_df = leads_df[leads_df['Status'].isin(win_statuses + lost_statuses)]
+            leads_df['Outcome'] = leads_df['Status'].isin(win_statuses).astype(int)
+        elif 'Lead Trigger' in leads_df.columns or any('lead trigger' in col.lower() for col in leads_df.columns):
+            # Use Lead Trigger if Status isn't available
+            trigger_col = 'Lead Trigger' if 'Lead Trigger' in leads_df.columns else next(col for col in leads_df.columns if 'lead trigger' in col.lower())
+            leads_df['Lead Trigger'] = leads_df[trigger_col].astype(str).str.lower().str.strip()
+            # Map Lead Trigger values to outcomes
+            win_triggers = ['hot', 'warm', 'super lead']
+            lost_triggers = ['cold', 'cool']
+            # Keep only rows with Lead Trigger values that have clear mapping
+            leads_df = leads_df[leads_df['Lead Trigger'].isin(win_triggers + lost_triggers)]
+            leads_df['Outcome'] = leads_df['Lead Trigger'].isin(win_triggers).astype(int)
+        elif 'Won' in leads_df.columns and 'Lost' in leads_df.columns:
+            # Use already processed Won/Lost fields if they exist
+            leads_df['Outcome'] = leads_df['Won'].astype(int)
         else:
-            # Use Won/Lost fields if Status isn't available
-            if 'Won' in leads_df.columns and 'Lost' in leads_df.columns:
-                leads_df['Outcome'] = leads_df['Won'].astype(int)
-            else:
-                return None, None
+            # If we can't find any relevant fields, we can't build a model
+            print("No usable Status, Lead Trigger, or Won/Lost fields found in data")
+            return None, None
+        
+        # Log info about our training data
+        win_count = leads_df['Outcome'].sum()
+        loss_count = len(leads_df) - win_count
+        print(f"Training data: {win_count} wins, {loss_count} losses, {len(leads_df)} total")
+        
+        # Need minimum samples for training
+        if win_count < 10 or loss_count < 10:
+            print("Insufficient training data: need at least 10 examples of each outcome")
+            return None, None
 
         # Merge with operations data if it exists
         if ops_df is not None and not ops_df.empty:
@@ -207,6 +236,7 @@ def score_lead(lead_data, scorecard):
         return 0, "Unknown"
         
     total_score = 0
+    feature_contributions = {}
     
     for _, row in scorecard.iterrows():
         feature = row['Feature']
@@ -215,9 +245,77 @@ def score_lead(lead_data, scorecard):
         
         # Check if feature exists in lead data
         if feature in lead_data:
-            # Apply points if the feature has a value
-            if lead_data[feature]:
-                total_score += points * coef_sign
+            feature_value = lead_data[feature]
+            
+            # For numeric features, we need to apply appropriate scaling
+            if feature in ['NumberOfGuests', 'DaysUntilEvent', 'DaysSinceInquiry', 'PricePerGuest', 'BartendersNeeded']:
+                # Apply points proportional to the value for numeric fields
+                # But normalize first using domain knowledge
+                
+                if feature == 'NumberOfGuests' and feature_value:
+                    # More guests is usually better (up to a reasonable limit)
+                    normalized_value = min(float(feature_value) / 100.0, 1.0)  # Normalize guests with cap at 100
+                    contribution = points * coef_sign * normalized_value
+                    total_score += contribution
+                    feature_contributions[feature] = contribution
+                    
+                elif feature == 'DaysUntilEvent' and feature_value:
+                    # Closer events might be more likely to close (if coefficient is negative)
+                    # For positive coefficient, farther events are better
+                    # Cap at 365 days (1 year)
+                    normalized_value = min(float(feature_value) / 365.0, 1.0)
+                    contribution = points * coef_sign * normalized_value
+                    total_score += contribution
+                    feature_contributions[feature] = contribution
+                    
+                elif feature == 'DaysSinceInquiry' and feature_value:
+                    # Faster follow-up is better (if coefficient is negative)
+                    # Cap at 30 days
+                    normalized_value = min(float(feature_value) / 30.0, 1.0)
+                    contribution = points * coef_sign * normalized_value
+                    total_score += contribution
+                    feature_contributions[feature] = contribution
+                    
+                elif feature == 'PricePerGuest' and feature_value:
+                    # Higher price per guest is usually better (if coefficient is positive)
+                    # Cap at $100 per guest
+                    normalized_value = min(float(feature_value) / 100.0, 1.0)
+                    contribution = points * coef_sign * normalized_value
+                    total_score += contribution
+                    feature_contributions[feature] = contribution
+                    
+                elif feature == 'BartendersNeeded' and feature_value:
+                    # More bartenders usually means more revenue (if coefficient is positive)
+                    # Cap at 10 bartenders
+                    normalized_value = min(float(feature_value) / 10.0, 1.0)
+                    contribution = points * coef_sign * normalized_value
+                    total_score += contribution
+                    feature_contributions[feature] = contribution
+                
+            # For boolean/categorical features, apply full points if present
+            elif feature in ['IsCorporate', 'PhoneMatch', 'ReferralTier']:
+                if feature_value:
+                    # For ReferralTier, scale by the tier value (1-3)
+                    if feature == 'ReferralTier':
+                        tier_value = min(float(feature_value) / 3.0, 1.0)
+                        contribution = points * coef_sign * tier_value
+                    else:
+                        # For boolean features, apply full points
+                        contribution = points * coef_sign if feature_value else 0
+                        
+                    total_score += contribution
+                    feature_contributions[feature] = contribution
+            
+            # For any other features, use simple presence check
+            elif feature_value:
+                contribution = points * coef_sign
+                total_score += contribution
+                feature_contributions[feature] = contribution
+                
+    # Print info for debugging
+    print(f"Lead scored {total_score} points")
+    for feature, contribution in feature_contributions.items():
+        print(f"  - {feature}: {contribution:.1f} points")
                 
     return total_score
 
