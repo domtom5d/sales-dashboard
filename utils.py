@@ -220,6 +220,15 @@ def calculate_conversion_rates(df):
     """
     conversion_rates = {}
     
+    # Overall conversion rate
+    if 'Outcome' in df.columns:
+        overall_rate = df['Outcome'].mean()
+        overall_df = pd.DataFrame({
+            'Category': ['Overall'],
+            'Conversion Rate': [overall_rate]
+        })
+        conversion_rates['overall'] = overall_df
+    
     # Event Type conversion rates
     if 'Event Type' in df.columns:
         conv_event_type = df.groupby('Event Type')['Outcome'].mean().reset_index(name='Conversion Rate')
