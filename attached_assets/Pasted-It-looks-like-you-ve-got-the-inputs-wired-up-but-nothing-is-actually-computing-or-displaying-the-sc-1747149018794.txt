@@ -1,0 +1,68 @@
+It looks like you’ve got the inputs wired up, but nothing is actually computing or displaying the score. Let’s drop in a small block right after your “2. Lead Scoring Calculator” inputs in app.py to make it work:
+
+python
+Copy
+Edit
+# … your existing calculator inputs …
+guests      = st.number_input("Number of Guests",      min_value=0, value=100)
+bartenders  = st.number_input("Bartenders Needed",      min_value=0, value=2)
+is_corp     = (st.selectbox("Is Corporate Event?", ["No","Yes"]) == "Yes")
+referral    = st.selectbox("Referral Tier (1–3)",    [1,2,3])
+phone_match = (st.selectbox("Phone Area Code Matches State?", ["No","Yes"]) == "Yes")
+
+# ———————————————— Compute & Display Score ————————————————
+
+if 'weights_df' not in st.session_state:
+    st.warning("Please click **Generate Lead Scoring Model** first.")
+else:
+    # grab the points-per-feature from session
+    weights    = st.session_state['weights_df'].set_index('Feature')['Points']
+    thresholds = st.session_state['thresholds']
+    
+    # build a dict of exactly the same feature names your derive_scorecard uses
+    feature_vals = {
+        'Guests':       guests,
+        'Bartenders':   bartenders,
+        'IsCorporate':  int(is_corp),
+        'ReferralTier': referral,
+        'PhoneMatch':   int(phone_match),
+        # PricePerGuest, DaysUntilEvent, DaysSinceInquiry not known for new leads → assume 0
+    }
+
+    # sum up points
+    score = sum(weights.get(f, 0) * feature_vals.get(f, 0) for f in feature_vals)
+
+    # decide category
+    if score >= thresholds['hot']:
+        category = "Hot"
+    elif score >= thresholds['warm']:
+        category = "Warm"
+    elif score >= thresholds['cool']:
+        category = "Cool"
+    else:
+        category = "Cold"
+
+    # show results
+    st.markdown(f"### Lead Score: **{score}** / {int(weights.sum())} points")
+    st.markdown(f"### Category: **{category}**")
+What this does:
+
+Checks that you’ve already generated and cached your data‐driven weights (weights_df) and thresholds.
+
+Reads exactly the same feature names your model used (Guests, Bartenders, IsCorporate, etc.).
+
+Calculates the total score by multiplying each feature’s input value by its learned “Points.”
+
+Buckets the score into Hot/Warm/Cool/Cold using your thresholds.
+
+Renders the numeric score and category immediately below the inputs.
+
+Just paste that into your Calculator section, restart the app, and you should see real scores instead of blanks.
+
+
+
+
+
+
+
+

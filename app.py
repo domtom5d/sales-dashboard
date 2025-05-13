@@ -573,14 +573,50 @@ if data_loaded and df is not None:
                     except (ValueError, TypeError):
                         score = 0
                     
+                    # Calculate feature contributions - gives us a breakdown of how each feature affects score
+                    feature_contributions = {}
+                    try:
+                        # Get weights and coefficients from scorecard
+                        weights = scorecard_df.set_index('Feature')['Points']
+                        coefs = scorecard_df.set_index('Feature')['Coefficient']
+                        
+                        # Calculate each feature's contribution
+                        for feature, value in lead_data.items():
+                            if feature in weights.index:
+                                points = weights[feature]
+                                coef_sign = 1 if coefs.get(feature, 0) > 0 else -1
+                                
+                                # Apply normalization for numeric features
+                                if feature == 'NumberOfGuests':
+                                    norm_value = min(float(value) / 100.0, 1.0) if value else 0
+                                    contribution = points * coef_sign * norm_value
+                                elif feature == 'DaysUntilEvent':
+                                    norm_value = min(float(value) / 365.0, 1.0) if value else 0
+                                    contribution = points * coef_sign * norm_value
+                                elif feature == 'DaysSinceInquiry':
+                                    norm_value = min(float(value) / 30.0, 1.0) if value else 0
+                                    contribution = points * coef_sign * norm_value
+                                elif feature == 'BartendersNeeded':
+                                    norm_value = min(float(value) / 10.0, 1.0) if value else 0
+                                    contribution = points * coef_sign * norm_value
+                                elif feature == 'ReferralTier':
+                                    tier_value = min(float(value) / 3.0, 1.0) if value else 0
+                                    contribution = points * coef_sign * tier_value
+                                else:
+                                    # Boolean features
+                                    contribution = points * coef_sign * float(value) if value else 0
+                                
+                                feature_contributions[feature] = contribution
+                    except Exception as e:
+                        st.warning(f"Couldn't calculate feature contributions: {str(e)}")
+                    
                     # Determine category
                     category = "Cold"
                     if thresholds and isinstance(thresholds, dict):
-                        for cat, threshold in thresholds.items():
+                        for cat, threshold in sorted(thresholds.items(), key=lambda x: x[1]):
                             try:
                                 if score >= threshold:
                                     category = cat
-                                    break
                             except (TypeError, ValueError):
                                 continue
                     
@@ -638,8 +674,64 @@ if data_loaded and df is not None:
                             with threshold_cols[3]:
                                 st.markdown(f"<span style='color: red'>Hot: High score</span>", unsafe_allow_html=True)
                     
+                    # Show feature contribution breakdown
+                    if feature_contributions:
+                        st.markdown("#### Feature Contributions")
+                        
+                        # Create a sorted DataFrame of feature contributions for display
+                        contribution_df = pd.DataFrame({
+                            'Feature': list(feature_contributions.keys()),
+                            'Impact': list(feature_contributions.values())
+                        }).sort_values(by='Impact', ascending=False)
+                        
+                        # Create a bar chart of feature impacts
+                        fig = px.bar(
+                            contribution_df,
+                            x='Impact',
+                            y='Feature',
+                            orientation='h',
+                            color='Impact',
+                            color_continuous_scale=['red', 'gray', 'green'],
+                            title='Feature Impact on Lead Score'
+                        )
+                        fig.update_layout(height=300)
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Also show as a table
+                        contrib_col1, contrib_col2 = st.columns([1, 1])
+                        with contrib_col1:
+                            st.markdown("**Positive Factors:**")
+                            positive_factors = contribution_df[contribution_df['Impact'] > 0]
+                            for _, row in positive_factors.iterrows():
+                                st.markdown(f"• {row['Feature']}: +{row['Impact']:.1f} points")
+                                
+                        with contrib_col2:
+                            st.markdown("**Negative Factors:**")
+                            negative_factors = contribution_df[contribution_df['Impact'] < 0]
+                            for _, row in negative_factors.iterrows():
+                                st.markdown(f"• {row['Feature']}: {row['Impact']:.1f} points")
+                    
                     # Add interpretation and recommendations
                     st.markdown("#### Interpretation")
+                    
+                    # Add feature-specific insights based on contributions
+                    if feature_contributions:
+                        top_positive = None
+                        top_negative = None
+                        
+                        for feature, impact in sorted(feature_contributions.items(), key=lambda x: x[1], reverse=True):
+                            if impact > 0 and top_positive is None:
+                                top_positive = feature
+                            
+                        for feature, impact in sorted(feature_contributions.items(), key=lambda x: x[1]):
+                            if impact < 0 and top_negative is None:
+                                top_negative = feature
+                        
+                        if top_positive:
+                            st.markdown(f"• ✅ **Strongest Positive**: {top_positive} is driving the score up")
+                        
+                        if top_negative:
+                            st.markdown(f"• ⚠️ **Strongest Negative**: {top_negative} is driving the score down")
                     
                     if category == "Hot":
                         st.success("This lead has a very high probability of converting based on your historical data. Prioritize immediate follow-up.")
