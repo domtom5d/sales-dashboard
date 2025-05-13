@@ -30,13 +30,17 @@ def process_data(leads_df, operations_df=None):
     if 'Number Of Guests' in df.columns:
         bins_guests = [0, 50, 100, 200, np.inf]
         labels_guests = ['0–50', '51–100', '101–200', '200+']
-        df['Guests Bin'] = pd.cut(df['Number Of Guests'], bins=bins_guests, labels=labels_guests)
+        # Convert to numeric and handle NaN values
+        df['Number Of Guests'] = pd.to_numeric(df['Number Of Guests'], errors='coerce')
+        df['Guests Bin'] = pd.cut(df['Number Of Guests'].fillna(-1), bins=bins_guests, labels=labels_guests)
     
     # Define bins for days until event
     if 'Days Until Event' in df.columns:
         bins_days = [0, 7, 30, 90, np.inf]
         labels_days = ['0–7 days', '8–30 days', '31–90 days', '91+ days']
-        df['DaysUntilBin'] = pd.cut(df['Days Until Event'], bins=bins_days, labels=labels_days)
+        # Convert to numeric and handle NaN values
+        df['Days Until Event'] = pd.to_numeric(df['Days Until Event'], errors='coerce')
+        df['DaysUntilBin'] = pd.cut(df['Days Until Event'].fillna(-1), bins=bins_days, labels=labels_days)
     
     # Merge in operations data if available
     if operations_df is not None:
@@ -92,13 +96,13 @@ def calculate_conversion_rates(df):
     
     # Guests Bin conversion rates
     if 'Guests Bin' in df.columns:
-        conv_guests = df.groupby('Guests Bin')['Outcome'].mean().reset_index(name='Conversion Rate')
+        conv_guests = df.groupby('Guests Bin', observed=True)['Outcome'].mean().reset_index(name='Conversion Rate')
         if not conv_guests.empty:
             conversion_rates['Guests Bin'] = conv_guests
     
     # Days Until Event Bin conversion rates
     if 'DaysUntilBin' in df.columns:
-        conv_days = df.groupby('DaysUntilBin')['Outcome'].mean().reset_index(name='Conversion Rate')
+        conv_days = df.groupby('DaysUntilBin', observed=True)['Outcome'].mean().reset_index(name='Conversion Rate')
         if not conv_days.empty:
             conversion_rates['DaysUntilBin'] = conv_days
     

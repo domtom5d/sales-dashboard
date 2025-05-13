@@ -64,6 +64,10 @@ def load_data():
             # Fetch data from database
             df = db.get_lead_data()
             
+            if df is None or df.empty:
+                st.error("No data found in the database. Please try uploading your own data.")
+                return
+            
             # Process data if not empty
             if not df.empty:
                 # Add Guests Bin and DaysUntilBin if not present
@@ -400,10 +404,10 @@ if data_loaded and df is not None:
             st.error(f"Error generating conversion rate charts: {str(e)}")
     
     with tab2:
+        # Feature correlations with outcome
+        st.subheader("Feature Correlation with Outcome")
+        
         try:
-            # Feature correlations with outcome
-            st.subheader("Feature Correlation with Outcome")
-            
             # Calculate correlations
             corr_df = calculate_correlations(filtered_df)
             
@@ -432,20 +436,26 @@ if data_loaded and df is not None:
                                 if col in filtered_df.columns]
                 
                 for i, feature in enumerate(numeric_features):
-                    temp_df = filtered_df[[feature, 'Outcome']].dropna()
-                    
-                    if not temp_df.empty:
-                        fig = px.scatter(
-                            temp_df,
-                            x=feature,
-                            y='Outcome',
-                            color='Outcome',
-                            color_continuous_scale='blues',
-                            trendline='ols',
-                            labels={'Outcome': 'Won (1) / Lost (0)'}
-                        )
-                        fig.update_layout(title=f"{feature} vs. Outcome")
-                        st.plotly_chart(fig, key=f"scatter_{i}", use_container_width=True)
+                    try:
+                        temp_df = filtered_df[[feature, 'Outcome']].copy()
+                        # Convert to numeric and handle missing values
+                        temp_df[feature] = pd.to_numeric(temp_df[feature], errors='coerce')
+                        temp_df = temp_df.dropna()
+                        
+                        if not temp_df.empty:
+                            fig = px.scatter(
+                                temp_df,
+                                x=feature,
+                                y='Outcome',
+                                color='Outcome',
+                                color_continuous_scale='blues',
+                                trendline='ols',
+                                labels={'Outcome': 'Won (1) / Lost (0)'}
+                            )
+                            fig.update_layout(title=f"{feature} vs. Outcome")
+                            st.plotly_chart(fig, key=f"scatter_{i}", use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Error generating scatter plot for {feature}: {str(e)}")
             else:
                 st.info("No correlation data available for the current selection.")
         except Exception as e:
