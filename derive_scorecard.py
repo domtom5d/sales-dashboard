@@ -1,8 +1,10 @@
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import roc_curve, roc_auc_score, precision_recall_curve, auc, confusion_matrix, classification_report
+from sklearn.metrics import roc_curve, roc_auc_score, precision_recall_curve, auc, confusion_matrix, classification_report, f1_score
+from sklearn.model_selection import cross_val_score
 import database as db
 import sqlite3
 import streamlit as st
@@ -198,6 +200,31 @@ def generate_lead_scorecard(use_sample_data=True):
             'ReferralTier', 'PhoneMatch'
         ]
         
+        # Add richer features
+        # Calculate price per guest if we have the data
+        if all(col in df.columns for col in ['actual_deal_value', 'number_of_guests']):
+            df['PricePerGuest'] = df['actual_deal_value'] / df['number_of_guests'].replace(0, 1)
+        
+        # Add seasonality features
+        if 'event_date' in df.columns:
+            df['Month'] = pd.to_datetime(df['event_date']).dt.month
+            df['DayOfWeek'] = pd.to_datetime(df['event_date']).dt.dayofweek
+            # Add month and day of week to features
+            features.extend(['Month', 'DayOfWeek'])
+            
+        # Add urgency factor if we have both dates
+        if all(col in df.columns for col in ['inquiry_date', 'event_date']):
+            df['InquiryToEventDays'] = (pd.to_datetime(df['event_date']) - pd.to_datetime(df['inquiry_date'])).dt.days
+            # Replace negative values with 0
+            df['InquiryToEventDays'] = df['InquiryToEventDays'].clip(lower=0)
+            features.append('InquiryToEventDays')
+            
+        # Add geographic features if available
+        if 'state' in df.columns:
+            # Convert state to categorical to capture regional differences
+            df['Region'] = df['state'].astype('category').cat.codes
+            features.append('Region')
+        
         # Select only features that have data
         available_features = []
         for feature in features:
@@ -211,24 +238,66 @@ def generate_lead_scorecard(use_sample_data=True):
         X = df[available_features].fillna(0)
         y = df['Outcome']
 
-        # 5) Standardize & fit logistic regression
+        # 5) Prepare data and train both models
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
-        model = LogisticRegression(max_iter=1000, solver='liblinear')
-        model.fit(X_scaled, y)
+        
+        # Train a Random Forest model (better performance)
+        rf_model = RandomForestClassifier(
+            n_estimators=100, 
+            max_depth=5,
+            min_samples_split=10,
+            random_state=42
+        )
+        
+        # Use cross-validation to evaluate model robustness
+        cv_scores = cross_val_score(rf_model, X_scaled, y, cv=5, scoring='roc_auc')
+        print(f"Cross-validation ROC AUC scores: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
+        
+        # Fit the model on all training data
+        rf_model.fit(X_scaled, y)
+        
+        # Also train a Logistic Regression for interpretability
+        lr_model = LogisticRegression(max_iter=1000, solver='liblinear')
+        lr_model.fit(X_scaled, y)
+        
+        # Use Random Forest for predictions (better performance)
+        model = rf_model
+        
+        # But use Logistic Regression for feature importance (more interpretable)
+        interpretation_model = lr_model
 
-        # 6) Extract & normalize coefficients
-        coefs = pd.Series(model.coef_[0], index=available_features)
-        # Absolute importance
-        imp = coefs.abs().sort_values(ascending=False)
+        # 6) Extract feature importance from both models
+        # For Random Forest, use built-in feature_importances_
+        rf_importance = pd.Series(model.feature_importances_, index=available_features)
+        
+        # For Logistic Regression, use coefficients (more interpretable direction)
+        coefs = pd.Series(interpretation_model.coef_[0], index=available_features)
+        
+        # Create a hybrid importance metric that uses magnitude from RF but direction from LR
+        importance = rf_importance.copy()
+        
+        # Apply direction from logistic regression
+        for feat in available_features:
+            if coefs[feat] < 0:
+                importance[feat] = -importance[feat]
+                
+        # Sort by absolute importance
+        imp = importance.abs().sort_values(ascending=False)
+        
         # Scale to a 0–10 point system proportional to relative size
         max_points = 10
         weights = (imp / imp.max() * max_points).round().astype(int)
         
+        # For display, use the direction from logistic regression
+        feature_direction = {feat: "+" if coefs[feat] > 0 else "-" for feat in available_features}
+        
         # Create DataFrame for display
         result_df = pd.DataFrame({
             'Feature': weights.index,
+            'Direction': [feature_direction[feat] for feat in weights.index],
             'Coefficient': [coefs[feat] for feat in weights.index],
+            'RandomForest': [rf_importance[feat] for feat in weights.index],
             'Points': weights.values
         })
         
@@ -243,10 +312,33 @@ def generate_lead_scorecard(use_sample_data=True):
         precision, recall, thresholds_pr = precision_recall_curve(y, y_pred_proba)
         pr_auc = auc(recall, precision)
         
-        # Compute optimal threshold using Youden's J statistic (sensitivity + specificity - 1)
+        # Compute optimal threshold using F1 score maximization (instead of Youden's J)
+        # First calculate F1 scores for different thresholds
+        f1_scores = []
+        for threshold in thresholds_roc:
+            if threshold > 0 and threshold < 1:  # Skip edge cases
+                y_pred = (y_pred_proba >= threshold).astype(int)
+                f1 = f1_score(y, y_pred, zero_division=0)
+                f1_scores.append((threshold, f1))
+        
+        # Find threshold that maximizes F1 score
+        if f1_scores:
+            f1_df = pd.DataFrame(f1_scores, columns=['threshold', 'f1_score'])
+            best_f1_idx = f1_df['f1_score'].argmax()
+            best_f1_threshold = f1_df.iloc[best_f1_idx]['threshold']
+            max_f1_score = f1_df.iloc[best_f1_idx]['f1_score']
+            print(f"Best F1 Score: {max_f1_score:.3f} at threshold {best_f1_threshold:.3f}")
+        else:
+            best_f1_threshold = 0.5  # Default if we can't calculate
+            
+        # Also compute Youden's J statistic (sensitivity + specificity - 1) as an alternative
         j_scores = tpr + (1 - fpr) - 1
-        best_idx = np.argmax(j_scores)
-        best_threshold = thresholds_roc[best_idx]
+        j_best_idx = np.argmax(j_scores)
+        j_best_threshold = thresholds_roc[j_best_idx]
+        
+        # Use F1 maximizing threshold (better for imbalanced classes) instead of Youden's J
+        best_idx = j_best_idx  # Keep for reference
+        best_threshold = best_f1_threshold if 'best_f1_threshold' in locals() else j_best_threshold
         
         # Get confusion matrix at the optimal threshold
         optimal_preds = (y_pred_proba >= best_threshold).astype(int)
@@ -266,6 +358,8 @@ def generate_lead_scorecard(use_sample_data=True):
             'recall': recall,
             'thresholds_roc': thresholds_roc,
             'best_threshold': best_threshold,
+            'f1_threshold': best_f1_threshold if 'best_f1_threshold' in locals() else best_threshold,
+            'j_threshold': j_best_threshold,
             'confusion_matrix': cm,
             'y_pred_proba': y_pred_proba,
             'y_true': y,
@@ -274,6 +368,11 @@ def generate_lead_scorecard(use_sample_data=True):
             'best_idx': best_idx,
             'j_scores': j_scores
         }
+        
+        # Add f1 scores if calculated
+        if 'f1_df' in locals() and 'max_f1_score' in locals():
+            model_metrics['f1_scores'] = f1_df
+            model_metrics['max_f1_score'] = max_f1_score
         
         # 8) Set data-driven thresholds
         # Convert model probabilities to point scale for easier interpretation

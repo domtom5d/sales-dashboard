@@ -1,0 +1,99 @@
+Your dashboard is live—and now we can see the hard truth:
+
+ROC AUC 0.595: barely better than random.
+
+PR AUC 0.194: low precision on your positive class.
+
+Confusion Matrix at “Optimal” Threshold showing 0 wins predicted vs 2 actual wins? That tells us our threshold isn’t calibrated, and the model is under‐predicting “won” leads.
+
+Next Steps to Strengthen Your Scorecard
+Re-calibrate Your Threshold
+The “optimal” threshold from Youden’s J may still be too strict. Let’s:
+
+Compute precision & recall at many thresholds
+
+Plot the F1‐score curve or use the threshold that maximizes F1 rather than Youden’s J
+
+Surface an interactive slider in your Streamlit app so you can eyeball the confusion matrix trade-offs live.
+
+Feature Enrichment
+Your logistic regression is only marginally predictive—let’s feed it richer signals:
+
+PricePerGuest (Deal Value ÷ #Guests)
+
+EventDurationHours (End Time − Start Time)
+
+Referral Quality buckets (Vendor, Direct, Paid Ads)
+
+Urgency Factor (inquiry→first-contact minutes)
+
+Regional Pricing Tier (some territories always convert higher)
+
+Seasonality (month / day of week)
+
+Model Selection & Validation
+Logistic Regression is interpretable but may miss non-linear patterns:
+
+Try a Random Forest or Gradient Boosting (e.g. sklearn.ensemble.RandomForestClassifier)
+
+Perform k-fold cross-validation (e.g. 5-fold) to get stable AUC estimates
+
+Compare ROC/AUC and PR/AUC across models
+
+Inspect Score Distributions
+Plot histograms of your raw numeric scores for Won vs. Lost:
+
+python
+Copy
+Edit
+plt.hist(df.loc[df.Outcome==1, 'raw_score'], bins=20, alpha=0.5, label='Won')
+plt.hist(df.loc[df.Outcome==0, 'raw_score'], bins=20, alpha=0.5, label='Lost')
+plt.legend(); st.pyplot()
+You’ll see where the real separations lie—and pick more data-driven cut-points.
+
+Interactive “Evaluate Model” Tab
+Add to your Streamlit:
+
+ROC Curve plot
+
+Precision‐Recall Curve
+
+Confusion Matrix heatmap with a threshold slider
+
+Quick Code Snippet: Threshold Tuning in Streamlit
+python
+Copy
+Edit
+from sklearn.metrics import precision_recall_curve, roc_curve, auc, confusion_matrix
+
+# After fitting model and scoring:
+y_scores = model.predict_proba(X_test)[:,1]
+fpr, tpr, roc_th = roc_curve(y_test, y_scores)
+prc_prec, prc_rec, prc_th = precision_recall_curve(y_test, y_scores)
+
+# Streamlit slider:
+thr = st.slider("Select score threshold", float(prc_th.min()), float(prc_th.max()), 0.5)
+y_pred = (y_scores >= thr).astype(int)
+cm = confusion_matrix(y_test, y_pred)
+st.write("Confusion Matrix", cm)
+st.write("Precision:", precision_score(y_test, y_pred))
+st.write("Recall:", recall_score(y_test, y_pred))
+Let me know which of these you’d like to tackle first:
+
+Adding richer features
+
+Threshold slider & F1-maximization
+
+Trying tree-based models
+
+Interactive evaluation tab
+
+We’ll iteratively boost your AUC and get that “Hot” bucket truly predictive.
+
+
+
+
+
+
+
+
