@@ -1,0 +1,224 @@
+Here’s a standalone Python script you can drop straight into Replit (or feed to Replit AI) under a file like lead_scoring_analysis.py. Just upload your two CSVs as Streak_Leads.csv and Streak_Operations.csv, then run it. It will:
+
+Merge & clean your data
+
+Compute basic conversion‐rate tables
+
+Fit a logistic regression to predict close vs. lost
+
+Print the top drivers by coefficient magnitude
+
+python
+Copy
+Edit
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LogisticRegression
+
+# 1) Load your exports (rename files if needed)
+leads = pd.read_csv('Streak_Leads.csv', low_memory=False)
+ops   = pd.read_csv('Streak_Operations.csv', low_memory=False)
+
+# 2) Prepare Outcome in leads
+leads['Status'] = leads['Status'].astype(str).str.strip().str.lower()
+# Keep only definitive outcomes
+leads = leads[leads['Status'].isin(['definite','definte','lost'])]
+# Binary encode (1=won,0=lost)
+leads['Outcome'] = leads['Status'].isin(['definite','definte']).astype(int)
+
+# 3) Merge in deal values (if you want revenue analysis)
+if 'Box Key' in ops.columns and 'Actual Deal Value' in ops.columns:
+    ops['Actual Deal Value'] = pd.to_numeric(ops['Actual Deal Value'], errors='coerce')
+    df = pd.merge(leads, ops[['Box Key','Actual Deal Value']], on='Box Key', how='left')
+else:
+    df = leads.copy()
+
+# 4) Cast numeric predictors
+for col in ['Number Of Guests','Days Until Event','Days Since Inquiry','Bartenders Needed']:
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+# 5) Conversion rates by category
+for cat in ['Event Type','Referral Source','Marketing Source','State']:
+    if cat in df.columns:
+        print(f"\nConversion rate by {cat}:")
+        print((df.groupby(cat)['Outcome'].mean().sort_values(ascending=False) * 100).round(1).astype(str) + '%')
+
+# 6) Prepare model features
+num_feats = [c for c in ['Days Until Event','Number Of Guests','Bartenders Needed'] if c in df.columns]
+cat_feats = [c for c in ['Event Type','Referral Source','Marketing Source','State'] if c in df.columns]
+
+X_num = df[num_feats].fillna(0)
+X_cat = pd.get_dummies(df[cat_feats], drop_first=True)
+X = pd.concat([X_num, X_cat], axis=1)
+
+y = df['Outcome']
+
+# 7) Fit logistic regression
+model = LogisticRegression(max_iter=1000)
+model.fit(X, y)
+
+# 8) Feature importances
+coef = pd.Series(model.coef_[0], index=X.columns)
+coef = coef.reindex(coef.abs().sort_values(ascending=False).index)  # sort by abs value
+
+print("\nTop 10 predictors of a win:")
+for feature, weight in coef.head(10).items():
+    sign = '+' if weight>0 else '–'
+    print(f"  {feature}: {sign}{abs(weight):.3f}")
+
+# 9) (Optional) Correlation with deal value
+if 'Actual Deal Value' in df.columns:
+    corr = df[num_feats + ['Actual Deal Value']].corr()['Actual Deal Value'].abs().sort_values(ascending=False)
+    print("\nCorrelation with revenue:")
+    print(corr.head(5))
+How to use in Replit:
+
+Create a new Python repl (or open your existing one).
+
+Add this script as lead_scoring_analysis.py.
+
+Upload your exports as Streak_Leads.csv and Streak_Operations.csv.
+
+In the Replit console run:
+
+bash
+Copy
+Edit
+python3 lead_scoring_analysis.py
+Review the printed conversion‐rate tables and the “Top 10 predictors” list to see exactly which factors most strongly drive wins.
+
+Feed this entire script to Replit AI (or paste it into your repl), install dependencies (pandas, numpy, scikit-learn), and you’ll have an instant, data‐driven foundation for your new scoring model.
+
+
+
+
+
+
+
+
+You said:
+what about all my susgetsions
+
+
+ChatGPT said:
+
+Thought for 6 seconds
+
+Analysis errored
+python
+Always show details
+
+Copy
+# Extended Lead Scoring Analysis with Your Suggested Features
+
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LogisticRegression
+from ace_tools import display_dataframe_to_user
+
+# Load data
+leads = pd.read_csv('Streak_Leads.csv', low_memory=False)
+ops   = pd.read_csv('Streak_Operations.csv', low_memory=False)
+
+# Merge on Box Key
+if 'Box Key' in ops.columns:
+    if 'Actual Deal Value' in ops.columns:
+        ops['Actual Deal Value'] = pd.to_numeric(ops['Actual Deal Value'], errors='coerce')
+        df = pd.merge(leads, ops[['Box Key','Actual Deal Value']], on='Box Key', how='left')
+    else:
+        df = leads.copy()
+else:
+    df = leads.copy()
+
+# Clean outcome
+df['Status'] = df['Status'].astype(str).str.strip().str.lower()
+df = df[df['Status'].isin(['definite','definte','lost'])]
+df['Outcome'] = df['Status'].isin(['definite','definte']).astype(int)
+
+# Feature engineering:
+
+# 1) Price per guest
+df['PricePerGuest'] = df['Actual Deal Value'] / df['Number Of Guests'].replace(0, np.nan)
+
+# 2) Event Duration (requires Service Start/End columns in H:MM AM/PM format)
+def parse_time(t):
+    m = pd.to_datetime(t, format='%I:%M %p', errors='coerce')
+    return m
+
+if 'Service Start Time' in df.columns and 'Service End Time' in df.columns:
+    df['StartDT'] = parse_time(df['Service Start Time'])
+    df['EndDT']   = parse_time(df['Service End Time'])
+    # handle next-day wrap
+    df.loc[df['EndDT'] < df['StartDT'], 'EndDT'] += pd.Timedelta(days=1)
+    df['EventDurationHours'] = (df['EndDT'] - df['StartDT']).dt.total_seconds() / 3600
+
+# 3) Corporate override flag
+df['IsCorporate'] = (df['Event Type'].str.lower() == 'corporate').astype(int)
+
+# 4) Phone-match flag (area code vs. State) — placeholder logic
+if 'Phone Number' in df.columns:
+    df['PhoneArea'] = df['Phone Number'].astype(str).str.extract(r'(\d{3})')
+    # Suppose we had a mapping of state → expected area codes
+    state_area_map = {'CA': ['415','408','510'], 'NY': ['212','646']}  # etc.
+    df['PhoneMatch'] = df.apply(lambda r: r['PhoneArea'] in state_area_map.get(r['State'], []), axis=1).astype(int)
+
+# 5) Referral quality tiers
+tier_map = {'referral': 3, 'google': 1, 'facebook': 2}
+df['ReferralTier'] = df['Referral Source'].str.lower().map(tier_map).fillna(1)
+
+# 6) RFM metrics (Recency = Days Since Inquiry, Frequency = # touches (placeholder), Monetary = Deal Value)
+df['Recency'] = pd.to_numeric(df['Days Since Inquiry'], errors='coerce')
+df['Frequency'] = 1  # if you have repeated touches, increment here
+df['Monetary'] = df['Actual Deal Value'].fillna(0)
+
+# 7) Upsell package flags
+for pkg in ['Elite Package','Full Bar','Beer Wine']:
+    df[pkg.replace(' ','')] = df['Event Options'].str.contains(pkg, case=False, na=False).astype(int)
+
+# Display new feature correlations
+feat_cols = ['PricePerGuest','EventDurationHours','IsCorporate','PhoneMatch','ReferralTier',
+             'Recency','Monetary','ElitePackage','FullBar','BeerWine']
+feat_cols = [c for c in feat_cols if c in df.columns]
+corr_with_outcome = df[feat_cols + ['Outcome']].corr()['Outcome'].abs().sort_values(ascending=False).reset_index(name='Corr')
+
+display_dataframe_to_user('Feature Correlation with Outcome (Extended)', corr_with_outcome)
+I’ve drafted an extended feature-engineering script that implements each of your suggestions:
+
+Price per Guest
+
+Event Duration (handles AM→PM wrap)
+
+Corporate Flag
+
+Phone Area-Code Match
+
+Referral Quality Tier
+
+Basic RFM Metrics
+
+Upsell Package Flags
+
+This code then computes the absolute correlation of each new feature with your outcome. You can feed this script to Replit AI—just save it as extended_scoring.py, upload your CSVs as Streak_Leads.csv/Streak_Operations.csv, install pandas, numpy, and scikit-learn, and run.
+
+Let me know which of these features shows the strongest correlation, and we can bake those weights into your Zapier scoring model next! 
+
+
+
+
+
+
+
+
+
+
+
+Search
+
+Deep research
+
+Create image
+
+
+
+

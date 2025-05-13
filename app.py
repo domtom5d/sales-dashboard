@@ -420,12 +420,14 @@ if data_loaded and df is not None:
         st.subheader("Feature Correlation with Outcome")
         
         try:
-            # Calculate correlations
-            corr_df = calculate_correlations(filtered_df)
+            # Calculate correlations - now returns both outcome correlations and full matrix
+            corr_df, full_corr_matrix = calculate_correlations(filtered_df)
             
-            if not corr_df.empty:
+            # Check if we have correlation data
+            if not corr_df.empty if hasattr(corr_df, 'empty') else False:
                 # Remove the 'Outcome' row if it exists (it will always have correlation 1.0)
-                corr_df = corr_df[corr_df['index'] != 'Outcome']
+                if 'index' in corr_df.columns:
+                    corr_df = corr_df[corr_df['index'] != 'Outcome']
                 
                 # Create bar chart of correlations
                 fig = px.bar(
@@ -441,11 +443,32 @@ if data_loaded and df is not None:
                 st.plotly_chart(fig, key="correlation_chart", use_container_width=True)
                 
                 # Scatter plots for each numeric feature
-                st.subheader("Relationship Between Numeric Features and Conversion")
+                st.subheader("Relationship Between Features and Conversion")
                 
-                numeric_features = [col for col in ['Days Since Inquiry', 'Days Until Event', 
-                                                'Number Of Guests', 'Bartenders Needed']
-                                if col in filtered_df.columns]
+                # Include both original and advanced features
+                numeric_features = [col for col in [
+                    # Original features
+                    'Days Since Inquiry', 'Days Until Event', 'Number Of Guests', 'Bartenders Needed',
+                    # Advanced features
+                    'Price Per Guest', 'Is Corporate', 'Event Duration Hours', 'Referral Tier',
+                    'Actual Deal Value'
+                ] if col in filtered_df.columns]
+                
+                # Add correlation heatmap
+                if not full_corr_matrix.empty if hasattr(full_corr_matrix, 'empty') else False:
+                    st.subheader("Feature Correlation Heatmap")
+                    fig_heatmap = px.imshow(
+                        full_corr_matrix,
+                        color_continuous_scale='RdBu_r',  # Blue (negative) to Red (positive)
+                        zmin=-1, zmax=1,  # Fix scale from -1 to 1
+                        text_auto='.2f',  # Show 2 decimal places
+                        aspect="auto"
+                    )
+                    fig_heatmap.update_layout(height=600)
+                    st.plotly_chart(fig_heatmap, use_container_width=True)
+                
+                # Create columns for displaying scatter charts side by side
+                cols = st.columns(2)
                 
                 for i, feature in enumerate(numeric_features):
                     try:
@@ -455,6 +478,7 @@ if data_loaded and df is not None:
                         temp_df = temp_df.dropna()
                         
                         if not temp_df.empty:
+                            # Create scatter plot
                             fig = px.scatter(
                                 temp_df,
                                 x=feature,
@@ -462,10 +486,31 @@ if data_loaded and df is not None:
                                 color='Outcome',
                                 color_continuous_scale='blues',
                                 trendline='ols',
-                                labels={'Outcome': 'Won (1) / Lost (0)'}
+                                labels={'Outcome': 'Won (1) / Lost (0)'},
+                                opacity=0.7,  # Make dots slightly transparent
+                                height=400    # Fixed height for consistent layout
                             )
-                            fig.update_layout(title=f"{feature} vs. Outcome")
-                            st.plotly_chart(fig, key=f"scatter_{i}", use_container_width=True)
+                            
+                            # Add jitter for binary outcome to see density better
+                            fig.update_traces(
+                                jitter=0.2,  # Add horizontal jitter
+                                marker=dict(size=8),  # Slightly larger markers
+                            )
+                            
+                            # Update layout with better formatting
+                            fig.update_layout(
+                                title=f"{feature} vs. Outcome",
+                                xaxis_title=feature,
+                                yaxis_title="Won (1) / Lost (0)",
+                                # Add grid for better readability
+                                xaxis=dict(showgrid=True, gridcolor='lightgray'),
+                                yaxis=dict(showgrid=True, gridcolor='lightgray'),
+                                plot_bgcolor='white'  # White background
+                            )
+                            
+                            # Display in alternating columns
+                            with cols[i % 2]:
+                                st.plotly_chart(fig, key=f"scatter_{i}", use_container_width=True)
                     except Exception as e:
                         st.error(f"Error generating scatter plot for {feature}: {str(e)}")
             else:

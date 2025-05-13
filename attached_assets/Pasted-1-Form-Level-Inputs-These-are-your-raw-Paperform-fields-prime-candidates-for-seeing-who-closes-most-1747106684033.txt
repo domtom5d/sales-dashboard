@@ -1,0 +1,121 @@
+1. Form-Level Inputs
+These are your raw Paperform fields—prime candidates for seeing who closes most reliably:
+
+Event Type (Corporate, Wedding, Birthday, Nonprofit, etc.)
+
+Number of Guests
+
+Event Date → derive Days Until Event
+
+Service Start Time & End Time → derive Event Duration
+
+Bartenders Needed
+
+Upsell Options (Elite Package, Full Bar, Beer/Wine, Staffing Add-ons)
+
+Marketing Source (Google, Facebook, Referral, Organic Search)
+
+Referral Details (Friend, Vendor Partner, Social Media)
+
+Contact Preferences (Call vs. Text opt-in)
+
+Location (State, City, ZIP)
+
+Phone Number → extract Area Code for PhoneMatch vs. claimed location
+
+2. Derived Lead Signals
+Crunch these from your raw inputs to surface hidden patterns:
+
+Price per Guest = Deal Value ÷ Number of Guests
+
+Lead Urgency = Days Until Event bucket (0–7, 8–30, etc.)
+
+RFM Metrics
+
+Recency: Days Since Inquiry
+
+Frequency: # of manual updates or follow-ups logged
+
+Monetary: Actual Deal Value
+
+Response Time = Timestamp(First Rep Contact) – Timestamp(Form Submission)
+
+Phone-Location Match flag (area code in correct state)
+
+Corporate Flag / Binary for high-value event types
+
+Regional Pricing Tier (some territories charge more)
+
+Seasonality (month of event)
+
+3. CRM Interaction Points
+Every Streak stage transition and manual action is an opportunity for correlation:
+
+Time in “New Leads” before ➔ “Contacted”
+
+Number of Touches (emails / calls logged)
+
+Proposal Sent checkbox vs. Proposal Viewed automation
+
+Follow-up Count and Last Contact Date
+
+Stage Duration (days spent in each pipeline stage)
+
+Manual Overrides (e.g. when someone manually edits a field)
+
+4. Email & Proposal Engagement
+Tie in your email-tracking data for powerful insights:
+
+Email Open Rate on initial proposal
+
+Click-through on proposal links or attachments
+
+Time to First Open (how quickly prospects engage)
+
+Sequence Completion (did they receive all planned follow-ups?)
+
+5. Payment & Scheduling Metrics
+Post-proposal actions that drive true conversion:
+
+Time to Deposit after proposal
+
+Invoice Viewed flag (via Invoice Ninja)
+
+Nowsta Calendar Sync → time between “Definite” in Streak and slot appearing in Nowsta
+
+Scheduling Errors (number of manual fixes for timezone/refresh issues)
+
+6. Outcome & Revenue
+Your “ground truth” for every lead:
+
+Outcome (Won vs. Lost)
+
+Actual Deal Value (for closed leads)
+
+Revenue per Lead = Deal Value
+
+Upsell Uptake (%) – who adds staffing or package upgrades
+
+7. External Signals (Bonus Layers)
+If you can pull in any of these, they often move the needle:
+
+Google Analytics Source/Medium for the form page
+
+UTM Parameters on embedded form links
+
+Social Proof Triggers: did they engage a customer testimonial video?
+
+Weather / Local Events (e.g. big festival weekend) impacting close rates
+
+How to Deploy This
+Feature-Engineer all of the above in your Replit dashboard / Python scripts.
+
+Run Correlation & Regression analyses (heatmap + logistic regression) to rank the features.
+
+Prioritize the top 5–7 strongest predictors (e.g. “Referral Tier,” “Days ≤ 7,” “Event Duration”) for your scoring model.
+
+Embed those weights into your Zapier Code or Streak formula so every new lead gets a data-driven score.
+
+Monitor & Iterate monthly—re-run the analysis on fresh data to catch shifts in your market.
+
+With this full funnel mapped out, you’ll know exactly which signals to pounce on—and which to ignore—so your team can focus on the leads most likely to book. Let’s pick your top three predictors once we see the initial correlation matrix!

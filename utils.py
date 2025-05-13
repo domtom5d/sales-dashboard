@@ -53,8 +53,78 @@ def process_data(leads_df, operations_df=None):
                 
                 # Convert to numeric
                 df['Actual Deal Value'] = pd.to_numeric(df['Actual Deal Value'], errors='coerce')
+                
+                # Calculate Price per Guest
+                if 'Number Of Guests' in df.columns:
+                    df['Price Per Guest'] = df['Actual Deal Value'] / df['Number Of Guests'].replace(0, np.nan)
         except Exception as e:
             print(f"Error merging operations data: {str(e)}")
+    
+    # Add additional advanced features
+    
+    # 1. Corporate Flag
+    if 'Event Type' in df.columns:
+        df['Is Corporate'] = df['Event Type'].str.lower().str.contains('corporate', na=False).astype(int)
+    
+    # 2. RFM Metrics (Using what's available)
+    # Recency already captured in 'Days Since Inquiry'
+    # Monetary captured in 'Actual Deal Value'
+    # (Frequency would require tracking interactions, not available in the data)
+    
+    # 3. Event Time Analysis (if columns are available)
+    if 'Service Start Time' in df.columns and 'Service End Time' in df.columns:
+        try:
+            # Parse times (assuming format is like "7:00 PM")
+            df['Start Time'] = pd.to_datetime(df['Service Start Time'], format='%I:%M %p', errors='coerce')
+            df['End Time'] = pd.to_datetime(df['Service End Time'], format='%I:%M %p', errors='coerce')
+            
+            # Handle overnight events (where end time is earlier than start time)
+            mask = df['End Time'] < df['Start Time']
+            if 'End Time' in df.columns and mask is not None:
+                df.loc[mask, 'End Time'] = df.loc[mask, 'End Time'] + pd.Timedelta(days=1)
+            
+            # Calculate duration in hours
+            if 'Start Time' in df.columns and 'End Time' in df.columns:
+                df['Event Duration Hours'] = (df['End Time'] - df['Start Time']).dt.total_seconds() / 3600
+        except Exception as e:
+            print(f"Error processing event times: {str(e)}")
+    
+    # 4. Referral Quality Tiers (if column available)
+    if 'Referral Source' in df.columns:
+        tier_map = {
+            'referral': 3,  # Highest quality
+            'google': 1,
+            'facebook': 2,
+            'instagram': 2,
+            'yelp': 1,
+            'vendor': 3  # Assuming vendor referrals are high quality
+        }
+        
+        # Create a function to map referral sources to tiers
+        def map_to_tier(referral):
+            if pd.isnull(referral) or not isinstance(referral, str):
+                return 0
+            
+            referral = referral.lower()
+            for key, value in tier_map.items():
+                if key in referral:
+                    return value
+            return 0  # Default tier
+        
+        df['Referral Tier'] = df['Referral Source'].apply(map_to_tier)
+    
+    # 5. Seasonality (if event date is available)
+    if 'Event Date' in df.columns:
+        try:
+            df['Event Date'] = pd.to_datetime(df['Event Date'], errors='coerce')
+            df['Event Month'] = df['Event Date'].dt.month
+            df['Event Season'] = df['Event Date'].dt.month.apply(
+                lambda x: 'Winter' if x in [12, 1, 2] else
+                         'Spring' if x in [3, 4, 5] else
+                         'Summer' if x in [6, 7, 8] else 'Fall'
+            )
+        except Exception as e:
+            print(f"Error processing event date: {str(e)}")
     
     return df
 
@@ -116,21 +186,43 @@ def calculate_correlations(df):
         df (DataFrame): Processed dataframe with outcome
     
     Returns:
-        DataFrame: Dataframe with correlations
+        tuple: (
+            DataFrame: Dataframe with correlations to outcome,
+            DataFrame: Full correlation matrix between all features
+        )
     """
-    # Identify numeric features
-    numeric_features = [col for col in ['Days Since Inquiry', 'Days Until Event', 
-                                        'Number Of Guests', 'Bartenders Needed']
-                        if col in df.columns]
+    # Identify all potential numeric features - both original and new derived features
+    all_numeric_features = [
+        # Original features
+        'Days Since Inquiry', 'Days Until Event', 'Number Of Guests', 'Bartenders Needed',
+        # New derived features
+        'Price Per Guest', 'Is Corporate', 'Event Duration Hours', 'Referral Tier',
+        'Event Month', 'Actual Deal Value'
+    ]
+    
+    # Filter to only include features that exist in the dataframe
+    numeric_features = [col for col in all_numeric_features if col in df.columns]
     
     if numeric_features and 'Outcome' in df.columns:
         # Calculate correlations
         try:
-            corr_outcome = df[numeric_features + ['Outcome']].corr()['Outcome'].abs()
+            # Create a temporary dataframe with just the numeric columns we need
+            temp_df = df[numeric_features + ['Outcome']].copy()
+            
+            # Convert all to numeric, handling errors
+            for col in numeric_features:
+                temp_df[col] = pd.to_numeric(temp_df[col], errors='coerce')
+            
+            # Calculate full correlation matrix
+            full_corr_matrix = temp_df.corr()
+            
+            # Extract and format the outcome correlations
+            corr_outcome = full_corr_matrix['Outcome'].abs()
             corr_outcome = corr_outcome.sort_values(ascending=False).reset_index(name='Correlation with Outcome')
-            return corr_outcome
+            
+            return corr_outcome, full_corr_matrix
         except Exception as e:
             print(f"Error calculating correlations: {str(e)}")
-            return pd.DataFrame()
+            return pd.DataFrame(), pd.DataFrame()
     else:
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
