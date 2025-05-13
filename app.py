@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import base64
 import os
 import datetime
+import seaborn as sns
 from sqlalchemy import create_engine
 from sklearn.metrics import confusion_matrix
 from database import import_leads_data, import_operations_data, get_lead_data, get_operation_data, get_merged_data, initialize_db_if_empty, migrate_database, process_phone_matching
@@ -286,10 +287,10 @@ if st.session_state.processed_df is not None:
                                        data=time_to_conversion['histogram_data'], 
                                        palette='viridis', ax=ax)
                         
-                        # Add count labels
-                        for i, bar in enumerate(ax.patches):
-                            ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height()/2, 
-                                    f"{bar.get_width():.0f}", va='center')
+                        # Add count labels - in a more type-safe way
+                        for i, (_, row) in enumerate(time_to_conversion['histogram_data'].iterrows()):
+                            count = row['Count']
+                            ax.text(count + 0.5, i, f"{count:.0f}", va='center')
                         
                         ax.set_title('Distribution of Time from Lead to Conversion')
                         plt.tight_layout()
