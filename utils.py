@@ -19,26 +19,32 @@ def process_data(leads_df, operations_df=None):
     # Create a mapping of column names to standardized versions
     column_map = {}
     for col in df.columns:
-        if col.lower() == 'status':
+        # Check for common column names in different formats
+        col_lower = col.lower()
+        if col_lower == 'status':
             column_map[col] = 'Status'
-        elif col.lower() == 'days since inquiry':
+        elif col_lower == 'days since inquiry':
             column_map[col] = 'Days Since Inquiry'
-        elif col.lower() == 'days until event':
+        elif col_lower == 'days until event':
             column_map[col] = 'Days Until Event'
-        elif col.lower() == 'number of guests':
+        elif col_lower == 'number of guests':
             column_map[col] = 'Number Of Guests'
-        elif col.lower() == 'bartenders needed':
+        elif col_lower == 'bartenders needed':
             column_map[col] = 'Bartenders Needed'
-        elif col.lower() == 'marketing source':
+        elif col_lower == 'marketing source':
             column_map[col] = 'Marketing Source'
-        elif col.lower() == 'referral source':
+        elif col_lower == 'referral source':
             column_map[col] = 'Referral Source'
-        elif col.lower() == 'event type':
+        elif col_lower == 'event type':
             column_map[col] = 'Event Type'
-        elif col.lower() == 'state':
+        elif col_lower == 'state':
             column_map[col] = 'State'
-        elif col.lower() == 'box key':
+        elif col_lower == 'box key':
             column_map[col] = 'Box Key'
+        elif col_lower == 'lead trigger':
+            column_map[col] = 'Lead Trigger'
+        elif col_lower == 'actual deal value':
+            column_map[col] = 'Actual Deal Value'
     
     # Rename columns if needed
     if column_map:
@@ -48,14 +54,41 @@ def process_data(leads_df, operations_df=None):
     if 'Status' not in df.columns:
         df['Status'] = 'unknown'  # Default value if status column is missing
     
-    # Clean status & define outcome
-    df['Status'] = df['Status'].astype(str).str.strip().str.lower()
-    df['Won'] = df['Status'].isin(['definite', 'definte'])
-    df['Lost'] = df['Status'] == 'lost'
+    # Check for 'Lead Trigger' column which indicates lead status in Streak exports
+    lead_trigger_col = next((col for col in df.columns if 'lead trigger' in col.lower()), None)
     
-    # Filter to only definitive outcomes
-    df = df[df['Status'].isin(['definite', 'definte', 'lost'])].copy()
-    df['Outcome'] = df['Won'].astype(int)
+    if lead_trigger_col:
+        # Map Lead Trigger statuses to a won/lost flag
+        df['Lead Trigger'] = df[lead_trigger_col].astype(str)
+        
+        # We'll use the temperature-based model:
+        # Hot = most likely to convert (highest value)
+        # Warm = medium chance of conversion
+        # Cool = lower chance but still possible
+        # Cold = unlikely to convert
+        # Let's calculate a probability based on this and set a threshold
+        
+        df['Won'] = (df['Lead Trigger'].str.lower() == 'hot')
+        df['Lost'] = (df['Lead Trigger'].str.lower().isin(['cold', 'cool']))
+        
+        # For Warm and Super Lead, we'll include them but treat differently
+        df.loc[df['Lead Trigger'].str.lower() == 'warm', 'Won'] = True
+        df.loc[df['Lead Trigger'].str.lower() == 'super lead', 'Won'] = True
+        
+        # Filter to leads that have a clear status
+        df = df[df['Lead Trigger'].str.lower().isin(['hot', 'warm', 'cool', 'cold', 'super lead'])].copy()
+        
+        # Set outcome (1 = won, 0 = lost)
+        df['Outcome'] = df['Won'].astype(int)
+    else:
+        # Fallback to Status column if Lead Trigger isn't found
+        df['Status'] = df['Status'].astype(str).str.strip().str.lower()
+        df['Won'] = df['Status'].isin(['definite', 'definte'])
+        df['Lost'] = df['Status'] == 'lost'
+        
+        # Filter to only definitive outcomes
+        df = df[df['Status'].isin(['definite', 'definte', 'lost'])].copy()
+        df['Outcome'] = df['Won'].astype(int)
     
     # Convert numeric fields
     for col in ['Number Of Guests', 'Days Until Event', 'Days Since Inquiry', 'Bartenders Needed']:
