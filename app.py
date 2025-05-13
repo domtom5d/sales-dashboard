@@ -6,10 +6,17 @@ import base64
 import os
 import datetime
 from sqlalchemy import create_engine
-from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score, roc_curve, auc
+from sklearn.metrics import confusion_matrix
 from database import import_leads_data, import_operations_data, get_lead_data, get_operation_data, get_merged_data, initialize_db_if_empty
 from utils import process_data, calculate_conversion_rates, calculate_correlations
 from derive_scorecard import generate_lead_scorecard, score_lead
+from evaluate import (
+    calculate_model_metrics, 
+    plot_roc_curve, 
+    plot_precision_recall_curve, 
+    plot_score_distributions,
+    get_custom_threshold_metrics
+)
 
 # Set page config and title
 st.set_page_config(
@@ -376,81 +383,19 @@ if st.session_state.processed_df is not None:
                         st.dataframe(pd.DataFrame(metrics_data))
                     
                     with viz_col:
-                        # Plot ROC curve
+                        # Plot ROC curve using our evaluation module
                         fig, ax = plt.subplots(figsize=(8, 6))
-                        ax.plot(model_metrics['fpr'], model_metrics['tpr'], label=f'ROC curve (AUC = {model_metrics["roc_auc"]:.3f})')
-                        ax.plot([0, 1], [0, 1], 'k--', label='Random')
-                        ax.set_xlabel('False Positive Rate')
-                        ax.set_ylabel('True Positive Rate')
-                        ax.set_title('Receiver Operating Characteristic (ROC) Curve')
-                        
-                        # Plot the optimal threshold point
-                        best_idx = model_metrics['best_idx']
-                        ax.plot(model_metrics['fpr'][best_idx], model_metrics['tpr'][best_idx], 'ro', 
-                                label=f'Optimal threshold: {model_metrics["best_threshold"]:.3f}')
-                        
-                        ax.legend(loc="lower right")
+                        plot_roc_curve(model_metrics, ax)
                         st.pyplot(fig)
                         
-                        # Plot score distributions
+                        # Plot score distributions using our evaluation module
                         fig, ax = plt.subplots(figsize=(8, 6))
+                        plot_score_distributions(model_metrics, ax)
+                        st.pyplot(fig)
                         
-                        # Plot histograms of scores for Won and Lost leads
-                        won_scores = model_metrics['won_scores']
-                        lost_scores = model_metrics['lost_scores']
-                        
-                        bins = np.linspace(0, 1, 20)
-                        
-                        if len(won_scores) > 0:
-                            ax.hist(won_scores, bins=bins, alpha=0.5, color='green', label='Won Leads')
-                        if len(lost_scores) > 0:
-                            ax.hist(lost_scores, bins=bins, alpha=0.5, color='red', label='Lost Leads')
-                        
-                        # Plot thresholds
-                        best_threshold = model_metrics['best_threshold']
-                        
-                        # If we have F1 threshold, show it
-                        if 'f1_threshold' in model_metrics:
-                            f1_threshold = model_metrics['f1_threshold']
-                            ax.axvline(x=f1_threshold, color='blue', linestyle='--', 
-                                      label=f'Hot threshold (F1): {f1_threshold:.3f}')
-                            
-                            # Show Youden's J as comparison
-                            if 'j_threshold' in model_metrics:
-                                j_threshold = model_metrics['j_threshold']
-                                ax.axvline(x=j_threshold, color='purple', linestyle=':', 
-                                          label=f'Alt (Youden\'s J): {j_threshold:.3f}')
-                                
-                            # Calculate warm/cool thresholds based on F1
-                            second_threshold = f1_threshold / 2
-                            third_threshold = f1_threshold / 4
-                        else:
-                            # Fall back to previous approach
-                            ax.axvline(x=best_threshold, color='blue', linestyle='--', 
-                                      label=f'Hot threshold: {best_threshold:.3f}')
-                            
-                            second_threshold = best_threshold / 2
-                            third_threshold = best_threshold / 4
-                        
-                        # Add warm threshold
-                        ax.axvline(x=second_threshold, color='orange', linestyle='--', 
-                                  label=f'Warm threshold: {second_threshold:.3f}')
-                        
-                        # Add cool threshold
-                        ax.axvline(x=third_threshold, color='green', linestyle='--', 
-                                  label=f'Cool threshold: {third_threshold:.3f}')
-                                  
-                        # Show F1 score if available
-                        if 'max_f1_score' in model_metrics:
-                            ax.text(0.05, 0.95, f"Best F1 Score: {model_metrics['max_f1_score']:.3f}", 
-                                   transform=ax.transAxes, fontsize=10,
-                                   verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-                        
-                        ax.set_xlabel('Model Score')
-                        ax.set_ylabel('Number of Leads')
-                        ax.set_title('Score Distribution: Won vs. Lost Leads')
-                        ax.legend()
-                        
+                        # Add Precision-Recall curve
+                        fig, ax = plt.subplots(figsize=(8, 6))
+                        plot_precision_recall_curve(model_metrics, ax)
                         st.pyplot(fig)
                         
                         # Add interactive threshold slider for fine-tuning
@@ -585,17 +530,17 @@ return {
                             href = f'<a href="data:file/csv;base64,{b64}" download="lead_performance_tracker.csv">Download Performance Tracking Template</a>'
                             st.markdown(href, unsafe_allow_html=True)
                         
-                        # Show confusion matrix for selected threshold
+                        # Get custom threshold metrics using the evaluation module
                         y_true = model_metrics['y_true']
-                        y_pred = (y_pred_proba >= custom_threshold).astype(int)
-                        custom_cm = confusion_matrix(y_true, y_pred)
+                        y_pred_proba = model_metrics['y_pred_proba']
+                        custom_metrics = get_custom_threshold_metrics(y_true, y_pred_proba, custom_threshold)
                         
                         col1, col2 = st.columns(2)
                         
                         with col1:
                             # Display confusion matrix
                             cm_df = pd.DataFrame(
-                                custom_cm, 
+                                custom_metrics['confusion_matrix'], 
                                 index=["Actual: Lost", "Actual: Won"],
                                 columns=["Predicted: Lost", "Predicted: Won"]
                             )
@@ -603,25 +548,37 @@ return {
                             st.dataframe(cm_df)
                         
                         with col2:
-                            # Calculate metrics
-                            tn, fp, fn, tp = custom_cm.ravel()
-                            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-                            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-                            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-                            accuracy = (tp + tn) / (tp + tn + fp + fn)
-                            
                             # Show metrics
                             metrics_data = {
-                                "Metric": ["Precision", "Recall", "F1 Score", "Accuracy"],
-                                "Value": [f"{precision:.3f}", f"{recall:.3f}", f"{f1:.3f}", f"{accuracy:.3f}"]
+                                "Metric": ["Precision", "Recall", "F1 Score", "Accuracy", "Specificity"],
+                                "Value": [
+                                    f"{custom_metrics['precision']:.3f}", 
+                                    f"{custom_metrics['recall']:.3f}", 
+                                    f"{custom_metrics['f1']:.3f}", 
+                                    f"{custom_metrics['accuracy']:.3f}",
+                                    f"{custom_metrics['specificity']:.3f}"
+                                ]
                             }
                             st.dataframe(pd.DataFrame(metrics_data))
                             
                             # Recommendations based on metrics
-                            if precision < 0.3:
+                            if custom_metrics['precision'] < 0.3:
                                 st.warning("⚠️ Low precision! Consider increasing the threshold.")
-                            if recall < 0.3:
+                            if custom_metrics['recall'] < 0.3:
                                 st.warning("⚠️ Low recall! Consider decreasing the threshold.")
+                            
+                            # Display actual counts
+                            count_data = {
+                                "Category": ["True Positives", "False Positives", "True Negatives", "False Negatives"],
+                                "Count": [
+                                    custom_metrics['tp'],
+                                    custom_metrics['fp'],
+                                    custom_metrics['tn'],
+                                    custom_metrics['fn']
+                                ]
+                            }
+                            st.write("**Prediction Counts:**")
+                            st.dataframe(pd.DataFrame(count_data))
                 
                 # Section 2: Lead Scoring Calculator
                 st.markdown("### 2. Lead Scoring Calculator")
