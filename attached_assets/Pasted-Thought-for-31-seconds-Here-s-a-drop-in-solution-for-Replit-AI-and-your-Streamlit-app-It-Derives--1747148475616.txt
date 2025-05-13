@@ -1,0 +1,133 @@
+Thought for 31 seconds
+Here’s a drop-in solution for Replit AI and your Streamlit app. It:
+
+Derives a data-driven scorecard from your historical data
+
+Exposes it as a function you can call in app.py to render the weights and thresholds
+
+Keeps your dashboard clean and dynamic
+
+1. derive_scorecard.py
+Save this as /mnt/data/derive_scorecard.py (or in your project root):
+
+python
+Copy
+Edit
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+
+def derive_scorecard(leads_df: pd.DataFrame, ops_df: pd.DataFrame):
+    """
+    Given two DataFrames (leads + operations), returns:
+      - weights_df: DataFrame with Feature, Coefficient, Points
+      - thresholds: dict with keys 'hot','warm','cool'
+    """
+    # Merge in deal value
+    if 'Actual Deal Value' in ops_df.columns:
+        ops_df['Actual Deal Value'] = pd.to_numeric(ops_df['Actual Deal Value'], errors='coerce')
+        df = pd.merge(leads_df, ops_df[['Box Key','Actual Deal Value']], on='Box Key', how='left')
+    else:
+        df = leads_df.copy()
+
+    # Map statuses to 0/1 outcomes
+    status = df['Status'].astype(str).str.lower().str.strip()
+    wins, losses = {'definite','tentative'}, {'lost'}
+    df['Outcome'] = status.map(lambda s: 1 if s in wins else 0 if s in losses else np.nan)
+    df = df.dropna(subset=['Outcome'])
+    df['Outcome'] = df['Outcome'].astype(int)
+
+    # Feature engineering
+    df['PricePerGuest']    = df['Actual Deal Value'] / df['Number Of Guests'].replace(0, np.nan)
+    df['DaysUntilEvent']   = pd.to_numeric(df['Days Until Event'], errors='coerce')
+    df['DaysSinceInquiry'] = pd.to_numeric(df['Days Since Inquiry'], errors='coerce')
+    df['Guests']           = pd.to_numeric(df['Number Of Guests'], errors='coerce')
+    df['Bartenders']       = pd.to_numeric(df['Bartenders Needed'], errors='coerce')
+    df['IsCorporate']      = (df['Event Type'].str.lower()=='corporate').astype(int)
+    tier_map = {'referral':3,'facebook':2,'google':1}
+    df['ReferralTier']     = df['Referral Source'].str.lower().map(tier_map).fillna(1)
+    df['PhoneArea']        = df['Phone Number'].astype(str).str[:3]
+    state_map = {'California':'415','New York':'212'}  # extend as needed
+    df['PhoneMatch']       = (df['PhoneArea']==df['State'].map(state_map)).astype(int)
+
+    # Prepare X/y
+    features = [
+        'PricePerGuest','DaysUntilEvent','DaysSinceInquiry',
+        'Guests','Bartenders','IsCorporate',
+        'ReferralTier','PhoneMatch'
+    ]
+    X = df[features].fillna(0)
+    y = df['Outcome']
+
+    # Standardize & fit model
+    Xs = StandardScaler().fit_transform(X)
+    model = LogisticRegression(max_iter=1000).fit(Xs, y)
+
+    # Get coefficients & compute points
+    coefs  = pd.Series(model.coef_[0], index=features)
+    imp    = coefs.abs().sort_values(ascending=False)
+    max_pt = 5
+    points = (imp/imp.max()*max_pt).round().astype(int)
+
+    # Build weights DataFrame
+    weights_df = pd.DataFrame({
+        'Feature':    features,
+        'Coefficient': coefs.values,
+        'Points':     points.values
+    }).sort_values('Points', ascending=False)
+
+    # Thresholds: 60/40/20% of total possible points
+    total_pts = points.sum()
+    thresholds = {
+        'hot':  int(total_pts * 0.6),
+        'warm': int(total_pts * 0.4),
+        'cool': int(total_pts * 0.2),
+    }
+
+    return weights_df, thresholds
+2. Integrate into app.py
+In your Streamlit app, import and call this function:
+
+diff
+Copy
+Edit
+--- app.py
++++ app.py
+@@
+-from utils import process_data
++from derive_scorecard import derive_scorecard
+
+ # ... wherever you load your CSVs ...
+ df_leads = pd.read_csv(leads_file)
+ df_ops   = pd.read_csv(ops_file)
+
++if st.button("Generate Lead Scoring Model"):
++    weights_df, thresholds = derive_scorecard(df_leads, df_ops)
++    st.subheader("Feature Weights (Data-Driven)")
++    st.dataframe(weights_df)
++
++    st.subheader("Score Thresholds")
++    st.markdown(f"- **Hot**: score ≥ {thresholds['hot']}")
++    st.markdown(f"- **Warm**: score ≥ {thresholds['warm']}")
++    st.markdown(f"- **Cool**: score ≥ {thresholds['cool']}")
++    st.markdown(f"- **Cold**: score < {thresholds['cool']}")
++
+ # … rest of your app …
+3. Result
+When you click “Generate Lead Scoring Model”, the dashboard will:
+
+Show a table of features, their logistic‐regression coefficients, and point values derived from your own data
+
+Display Hot/Warm/Cool/Cold thresholds based on total possible points
+
+You can then wire your Lead Scoring Calculator to use those same point values and thresholds for new submissions.
+
+This gives you a true historic‐data-driven scorecard, optimized on your own close/loss patterns. Let me know how it looks once you restart and test!
+
+
+
+
+
+
+

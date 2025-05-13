@@ -94,16 +94,18 @@ def generate_lead_scorecard(use_sample_data=True):
         df['actual_deal_value'] = pd.to_numeric(df['actual_deal_value'], errors='coerce')
 
         # 3) Feature engineering
-        # Handle various column name formats
-        price_col = next((col for col in df.columns if 'actual_deal_value' in col.lower()), None)
-        guests_col = next((col for col in df.columns if 'number of guests' in col.lower() or 'number_of_guests' in col.lower()), None)
-        days_until_col = next((col for col in df.columns if 'days until event' in col.lower() or 'days_until_event' in col.lower()), None)
-        days_since_col = next((col for col in df.columns if 'days since inquiry' in col.lower() or 'days_since_inquiry' in col.lower()), None)
-        bartenders_col = next((col for col in df.columns if 'bartenders needed' in col.lower() or 'bartenders_needed' in col.lower()), None)
-        event_type_col = next((col for col in df.columns if 'event type' in col.lower() or 'event_type' in col.lower() or 'booking_type' in col.lower()), None)
-        referral_col = next((col for col in df.columns if 'referral source' in col.lower() or 'referral_source' in col.lower() or 'marketing_source' in col.lower()), None)
+        # Handle various column name formats - add all possible names for robustness
+        price_col = next((col for col in df.columns if any(name in col.lower() for name in ['actual_deal_value', 'actual deal value', 'price'])), None)
+        guests_col = next((col for col in df.columns if any(name in col.lower() for name in ['number of guests', 'number_of_guests', 'guests'])), None)
+        days_until_col = next((col for col in df.columns if any(name in col.lower() for name in ['days until event', 'days_until_event'])), None)
+        days_since_col = next((col for col in df.columns if any(name in col.lower() for name in ['days since inquiry', 'days_since_inquiry'])), None)
+        bartenders_col = next((col for col in df.columns if any(name in col.lower() for name in ['bartenders needed', 'bartenders_needed', 'bartenders'])), None)
+        event_type_col = next((col for col in df.columns if any(name in col.lower() for name in ['event type', 'event_type', 'booking_type', 'booking type'])), None)
+        referral_col = next((col for col in df.columns if any(name in col.lower() for name in ['referral source', 'referral_source', 'marketing_source', 'marketing source'])), None)
         state_col = next((col for col in df.columns if 'state' in col.lower()), None)
         phone_col = next((col for col in df.columns if 'phone' in col.lower()), None)
+        
+        print(f"Found columns: price={price_col}, guests={guests_col}, days_until={days_until_col}, bartenders={bartenders_col}")
 
         # Price per guest
         if price_col and guests_col:
@@ -141,17 +143,24 @@ def generate_lead_scorecard(use_sample_data=True):
         else:
             df['IsCorporate'] = 0
             
-        # Referral tier
-        tier_map = {'referral': 3, 'friend': 3, 'facebook': 2, 'google': 1, 'instagram': 2, 'social': 2}
+        # Referral tier - expanded with more social sources
+        tier_map = {
+            'referral': 3, 'friend': 3, 'facebook': 2, 'google': 1, 
+            'instagram': 2, 'social': 2, 'linkedin': 2, 'twitter': 2, 
+            'tiktok': 2, 'pinterest': 2, 'yelp': 1, 'thumbtack': 1
+        }
         if referral_col:
             df['ReferralTier'] = df[referral_col].astype(str).str.lower().map(tier_map).fillna(1)
         else:
             df['ReferralTier'] = 1
             
-        # Phone match with area code
+        # Phone match with area code - expanded with more states
         state_code_map = {
             'California': '415', 'New York': '212', 'Texas': '214', 'Florida': '305', 
-            'Illinois': '312', 'Massachusetts': '617', 'Colorado': '303'
+            'Illinois': '312', 'Massachusetts': '617', 'Colorado': '303', 'Pennsylvania': '215',
+            'Ohio': '216', 'Michigan': '313', 'Georgia': '404', 'Washington': '206',
+            'Arizona': '602', 'Nevada': '702', 'Oregon': '503', 'New Jersey': '201',
+            'Oklahoma': '405', 'New Mexico': '505'
         }
         
         if phone_col and state_col:
