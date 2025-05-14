@@ -88,20 +88,25 @@ def generate_data_insights(df, prompt_context=""):
     """
     
     try:
-        # Call Mistral AI API
-        messages = [
-            ChatMessage(role="system", content=system_prompt),
-            ChatMessage(role="user", content=user_prompt)
-        ]
-        
-        response = client.chat(
+        # Call Mistral AI API using the new structure
+        response = client.chat.completions.create(
             model="mistral-medium",
-            messages=messages,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
             temperature=0.7,
             max_tokens=1000
         )
         
-        return response.choices[0].message.content
+        # Extract content from the response
+        if hasattr(response, 'choices') and len(response.choices) > 0:
+            if hasattr(response.choices[0], 'message'):
+                return response.choices[0].message.content
+            else:
+                return "⚠️ Unexpected response format from Mistral API"
+        else:
+            return "⚠️ No response content from Mistral API"
     
     except Exception as e:
         st.error(f"Error generating insights: {str(e)}")
