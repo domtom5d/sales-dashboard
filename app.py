@@ -202,17 +202,48 @@ if st.session_state.processed_df is not None:
         "📊 Advanced Analytics"
     ])
     
+    # Apply filters to the dataframe
+    filtered_copy = filtered_df.copy()
+    if 'date_filter' in st.session_state and st.session_state.date_filter and len(st.session_state.date_filter) == 2:
+        date_range = st.session_state.date_filter
+        start_date, end_date = date_range
+        
+        date_col = None
+        for col in ['inquiry_date', 'created', 'event_date']:
+            if col in filtered_copy.columns:
+                date_col = col
+                break
+                
+        if date_col:
+            mask = (
+                (filtered_copy[date_col].dt.date >= start_date) & 
+                (filtered_copy[date_col].dt.date <= end_date)
+            )
+            filtered_copy = filtered_copy[mask]
+            st.info(f"Filtered to {len(filtered_copy)} leads from {start_date} to {end_date}")
+    
+    if 'status_filter' in st.session_state and st.session_state.status_filter != 'All':
+        if st.session_state.status_filter == 'Won':
+            filtered_copy = filtered_copy[filtered_copy['outcome'] == 1]
+        elif st.session_state.status_filter == 'Lost':
+            filtered_copy = filtered_copy[filtered_copy['outcome'] == 0]
+    
+    if 'region_filter' in st.session_state and 'All' not in st.session_state.region_filter:
+        state_col = 'State' if 'State' in filtered_copy.columns else 'state' 
+        if state_col in filtered_copy.columns:
+            filtered_copy = filtered_copy[filtered_copy[state_col].isin(st.session_state.region_filter)]
+
     with tab1:
         try:
             # --- Intro copy for Conversion Analysis tab ---
             st.markdown("## Conversion Analysis<br>Get a top-level view of overall leads and how many are converting into won deals, all over time.", unsafe_allow_html=True)
             
             # Calculate conversion rates by different categories
-            conversion_rates = calculate_conversion_rates(filtered_df)
+            conversion_rates = calculate_conversion_rates(filtered_copy)
             
             # --- KPI Summary cards ---
-            total_leads = len(filtered_df)
-            won = filtered_df['outcome'].sum() if 'outcome' in filtered_df.columns else 0
+            total_leads = len(filtered_copy)
+            won = filtered_copy['outcome'].sum() if 'outcome' in filtered_copy.columns else 0
             lost = total_leads - won
             conv_rate = won / total_leads if total_leads > 0 else 0
 
@@ -225,14 +256,14 @@ if st.session_state.processed_df is not None:
             # Sparkline under the conversion rate
             date_col = None
             for col in ['inquiry_date', 'created', 'event_date']:
-                if col in filtered_df.columns:
+                if col in filtered_copy.columns:
                     date_col = col
                     break
             
             if date_col:
                 try:
                     # Create weekly conversion rate data for sparkline
-                    weekly = filtered_df.set_index(date_col).resample('W')['outcome'].agg(['size','sum'])
+                    weekly = filtered_copy.set_index(date_col).resample('W')['outcome'].agg(['size','sum'])
                     weekly['rate'] = weekly['sum'] / weekly['size']
                     weekly['rate'] = weekly['rate'].fillna(0)
                     
@@ -245,7 +276,7 @@ if st.session_state.processed_df is not None:
                         st.info("Weekly trend data not available")
             
             # Comment out the run_conversion_analysis call for now
-            # run_conversion_analysis(filtered_df)
+            # run_conversion_analysis(filtered_copy)
             
             filter_col1, filter_col2, filter_col3 = st.columns(3)
             
@@ -263,30 +294,49 @@ if st.session_state.processed_df is not None:
                         default_start = max_date - datetime.timedelta(days=90)
                         default_start = max(default_start, min_date)
                         
+                        # Get current selection or use default
+                        current_selection = st.session_state.date_filter if 'date_filter' in st.session_state else (default_start, max_date)
+                        
                         date_range = st.date_input(
                             "Date Range",
-                            value=(default_start, max_date),
+                            value=current_selection,
                             min_value=min_date,
-                            max_value=max_date
+                            max_value=max_date,
+                            key="date_input"
                         )
                         
-                        st.session_state.date_filter = date_range
+                        # Store selection and trigger rerun if changed
+                        if 'date_filter' not in st.session_state or st.session_state.date_filter != date_range:
+                            st.session_state.date_filter = date_range
+                            st.rerun()
                     except:
                         st.warning("Date filtering unavailable - check date format in data")
             
             with filter_col2:
                 # Status filter
                 status_options = ['All', 'Won', 'Lost']
-                selected_status = st.selectbox("Status", options=status_options)
-                st.session_state.status_filter = selected_status
+                # Get current selection or use default
+                current_status = st.session_state.status_filter if 'status_filter' in st.session_state else 'All'
+                selected_status = st.selectbox("Status", options=status_options, key="status_selectbox")
+                
+                # Store selection and trigger rerun if changed
+                if 'status_filter' not in st.session_state or st.session_state.status_filter != selected_status:
+                    st.session_state.status_filter = selected_status
+                    st.rerun()
             
             with filter_col3:
                 # Region filter
                 if 'State' in filtered_df.columns or 'state' in filtered_df.columns:
                     state_col = 'State' if 'State' in filtered_df.columns else 'state'
                     states = filtered_df[state_col].dropna().unique().tolist()
-                    selected_states = st.multiselect("State/Region", options=['All'] + states, default='All')
-                    st.session_state.region_filter = selected_states
+                    # Get current selection or use default
+                    current_states = st.session_state.region_filter if 'region_filter' in st.session_state else ['All']
+                    selected_states = st.multiselect("State/Region", options=['All'] + states, default=current_states, key="region_multiselect")
+                    
+                    # Store selection and trigger rerun if changed
+                    if 'region_filter' not in st.session_state or st.session_state.region_filter != selected_states:
+                        st.session_state.region_filter = selected_states
+                        st.rerun()
             
             # 3. Trend Analysis
             st.subheader("Conversion Trends")
