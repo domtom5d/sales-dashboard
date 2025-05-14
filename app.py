@@ -325,43 +325,38 @@ if st.session_state.processed_df is not None:
             
             # Add annotations for min and max values safely
             if not daily_counts.empty:
-                min_idx = daily_counts['count'].idxmin()
-                max_idx = daily_counts['count'].idxmax()
+                # Get min and max counts directly
+                min_count_val = daily_counts['count'].min()
+                max_count_val = daily_counts['count'].max()
                 
-                if min_idx is not None and max_idx is not None:
-                    try:
-                        min_date = daily_counts.loc[min_idx, 'inquiry_date']
-                        min_count = daily_counts.loc[min_idx, 'count']
-                        max_date = daily_counts.loc[max_idx, 'inquiry_date']
-                        max_count = daily_counts.loc[max_idx, 'count']
-                    except (KeyError, IndexError):
-                        # Fallback if indexing fails
-                        min_row = daily_counts.loc[daily_counts['count'] == daily_counts['count'].min()].iloc[0]
-                        max_row = daily_counts.loc[daily_counts['count'] == daily_counts['count'].max()].iloc[0]
-                        min_date = min_row['inquiry_date']
-                        min_count = min_row['count']
-                        max_date = max_row['inquiry_date']
-                        max_count = max_row['count']
+                # Get corresponding rows safely
+                min_rows = daily_counts[daily_counts['count'] == min_count_val]
+                max_rows = daily_counts[daily_counts['count'] == max_count_val]
                 
-                # Add min marker
-                ax.scatter(min_date, min_count, color='#FF474C', s=50, zorder=5)
-                ax.annotate(f"{min_count:,}", 
-                           (min_date, min_count),
-                           xytext=(0, -15),
-                           textcoords='offset points',
-                           ha='center',
-                           fontsize=9,
-                           color='#FF474C')
-                
-                # Add max marker
-                ax.scatter(max_date, max_count, color='#00CC96', s=50, zorder=5)
-                ax.annotate(f"{max_count:,}", 
-                           (max_date, max_count),
-                           xytext=(0, 10),
-                           textcoords='offset points',
-                           ha='center',
-                           fontsize=9,
-                           color='#00CC96')
+                if not min_rows.empty and not max_rows.empty:
+                    # Get the first occurrence of min and max
+                    min_date_val = min_rows.iloc[0]['inquiry_date']
+                    max_date_val = max_rows.iloc[0]['inquiry_date']
+                    
+                    # Add min marker
+                    ax.scatter(min_date_val, min_count_val, color='#FF474C', s=50, zorder=5)
+                    ax.annotate(f"{min_count_val:,}", 
+                               (min_date_val, min_count_val),
+                               xytext=(0, -15),
+                               textcoords='offset points',
+                               ha='center',
+                               fontsize=9,
+                               color='#FF474C')
+                    
+                    # Add max marker
+                    ax.scatter(max_date_val, max_count_val, color='#00CC96', s=50, zorder=5)
+                    ax.annotate(f"{max_count_val:,}", 
+                               (max_date_val, max_count_val),
+                               xytext=(0, 10),
+                               textcoords='offset points',
+                               ha='center',
+                               fontsize=9,
+                               color='#00CC96')
             
             # Add statistics
             total_leads = daily_counts['count'].sum()
@@ -639,7 +634,15 @@ if st.session_state.processed_df is not None:
                     
                     # Display conversion time by standardized event type categories
                     if 'by_event_type' in time_to_conversion and not time_to_conversion['by_event_type'].empty:
-                        st.write("**Time to Conversion by Event Type Category**")
+                        st.markdown("""
+                        <div style="background-color:#f0f5ff; padding:10px; border-radius:5px; border-left:5px solid #1E88E5;">
+                            <h4 style="color:#0d47a1; margin-top:0;">Time to Conversion by Event Type</h4>
+                            <p style="margin-bottom:0;">
+                                Comparing conversion speed across different event categories reveals patterns in sales cycle duration.
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
                         # Format columns for better display
                         display_df = time_to_conversion['by_event_type'].copy()
                         display_df['mean'] = display_df['mean'].round(1)
@@ -688,36 +691,59 @@ if st.session_state.processed_df is not None:
                             # Define the y positions
                             y_pos = np.arange(len(sorted_df))
                             
+                            # Use a colorful palette for different event types
+                            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+                            # Ensure we have enough colors
+                            if len(sorted_df) > len(colors):
+                                # Repeat colors if needed
+                                colors = colors * (len(sorted_df) // len(colors) + 1)
+                            # Limit to needed colors
+                            colors = colors[:len(sorted_df)]
+                            
                             # Check if we have std deviation data for error bars
                             if 'Std Dev' in sorted_df.columns:
-                                # Create horizontal bar chart with error bars
+                                # Create horizontal bar chart with error bars and gradient colors
                                 bars = ax.barh(sorted_df['Event Type'], sorted_df['Avg Days'], 
                                               xerr=sorted_df['Std Dev'],
-                                              color='skyblue', alpha=0.7, capsize=5,
-                                              error_kw={'ecolor': 'darkblue', 'alpha': 0.6, 'capthick': 2})
+                                              color=colors, alpha=0.85, capsize=5,
+                                              error_kw={'ecolor': 'navy', 'alpha': 0.7, 'capthick': 2})
                                 
-                                # Add a note about error bars
+                                # Add a note about error bars with improved styling
                                 ax.text(0.05, 0.98, "Error bars: ±1 standard deviation", 
-                                        transform=ax.transAxes, fontsize=8, verticalalignment='top',
-                                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
+                                        transform=ax.transAxes, fontsize=9, verticalalignment='top',
+                                        bbox=dict(boxstyle='round,pad=0.5', facecolor='lightyellow', alpha=0.9,
+                                                 edgecolor='#dddddd', linewidth=1))
                             else:
-                                # Simple bars without error bars
-                                bars = ax.barh(sorted_df['Event Type'], sorted_df['Avg Days'], color='skyblue')
+                                # Simple bars without error bars but still with gradient colors
+                                bars = ax.barh(sorted_df['Event Type'], sorted_df['Avg Days'], color=colors)
                             
-                            # Add data labels with counts
+                            # Add data labels with counts and enhanced formatting
                             for i, bar in enumerate(bars):
                                 count = sorted_df.iloc[i]['Count']
+                                avg_days = sorted_df.iloc[i]['Avg Days']
+                                
                                 # Position the text at the end of the bar plus any error bar
                                 if 'Std Dev' in sorted_df.columns:
-                                    x_pos = sorted_df.iloc[i]['Avg Days'] + sorted_df.iloc[i]['Std Dev'] + 0.5
+                                    x_pos = avg_days + sorted_df.iloc[i]['Std Dev'] + 0.5
                                 else:
                                     x_pos = bar.get_width() + 0.5
                                 
+                                # Add count at the end
                                 ax.text(x_pos, bar.get_y() + bar.get_height()/2, 
-                                        f"n={count}", va='center', fontsize=8)
+                                        f"n={count}", va='center', fontsize=9)
+                                        
+                                # Add days at beginning of bar for better readability
+                                ax.text(0.05, bar.get_y() + bar.get_height()/2, 
+                                        f"{avg_days:.1f} days", va='center', fontsize=8,
+                                        color='white', fontweight='bold')
                             
-                            ax.set_xlabel('Average Days to Conversion')
-                            ax.set_title('Average Conversion Time by Event Type')
+                            # Add grid for better readability
+                            ax.grid(axis='x', linestyle='--', alpha=0.3)
+                            
+                            # Customize appearance
+                            ax.set_xlabel('Average Days to Conversion', fontsize=11)
+                            ax.set_title('Average Conversion Time by Event Type Category', 
+                                         fontsize=14, fontweight='bold')
                             plt.tight_layout()
                             st.pyplot(fig)
                     
