@@ -399,7 +399,18 @@ def plot_top_categories(df, col, title, min_count=10):
                     
                     # Display the chart
                     with chart_container:
-                        chart = st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                    # Add interactive filter selection with direct clicks
+                    st.write("🔍 **Filter by category:**")
+                    col_filters = st.columns(min(5, len(plot_df)))
+                    for i, (idx, row) in enumerate(plot_df.iterrows()):
+                        category_name = row[title]
+                        with col_filters[i % 5]:
+                            if st.button(f"{category_name}", key=f"filter_{title}_{i}"):
+                                # Store in session state as filter
+                                st.session_state.filter_values[title] = category_name
+                                st.rerun()
                     
                     # Setup session state for filtering if not already present
                     if 'filter_values' not in st.session_state:
@@ -409,7 +420,7 @@ def plot_top_categories(df, col, title, min_count=10):
                     if title in st.session_state.filter_values:
                         if st.button(f"Clear {title} filter", key=f"clear_{title}"):
                             del st.session_state.filter_values[title]
-                            st.experimental_rerun()
+                            st.rerun()
                     
                     # Add best/worst metrics below the chart
                     best_cat = plot_df.iloc[0]
