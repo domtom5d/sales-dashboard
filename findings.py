@@ -32,7 +32,7 @@ def generate_findings(df, y_scores, thresholds):
             median_days = time_result.get('median_days')
             findings.append(f"**Time to Conversion:** Average: {avg_days:.1f} days, Median: {median_days:.1f} days.")
             
-            # Add insights by event type if available
+            # Add insights by event type if available - using the categorized event types
             if 'by_event_type' in time_result and not time_result['by_event_type'].empty:
                 # Find fastest and slowest converting event types with at least 3 data points
                 event_df = time_result['by_event_type']
@@ -45,6 +45,14 @@ def generate_findings(df, y_scores, thresholds):
                     # Only add if there's a meaningful difference (more than 1 day)
                     if abs(fastest['mean'] - slowest['mean']) > 1:
                         findings.append(f"**Event Type Conversion Speed:** {fastest['event_type']} events convert fastest ({fastest['mean']:.1f} days), while {slowest['event_type']} events take longest ({slowest['mean']:.1f} days).")
+                        
+                        # Add the comparison with average
+                        avg_days = time_result.get('average_days')
+                        if fastest['mean'] < avg_days * 0.7:  # If notably faster than average
+                            findings.append(f"**Conversion Opportunity:** {fastest['event_type']} events convert {(avg_days - fastest['mean']):.1f} days faster than average, suggesting a sales focus area.")
+                        
+                        if slowest['mean'] > avg_days * 1.3:  # If notably slower than average
+                            findings.append(f"**Conversion Challenge:** {slowest['event_type']} events take {(slowest['mean'] - avg_days):.1f} days longer than average, suggesting a need for improved follow-up.")
             
             # Add insights by booking type if available
             if 'by_booking_type' in time_result and not time_result['by_booking_type'].empty:

@@ -298,15 +298,57 @@ def analyze_time_to_conversion(df):
             result['by_booking_type'] = won_leads.groupby('booking_type')['days_to_conversion'].agg(
                 ['mean', 'median', 'count']).reset_index()
         
-        # By event type if available
-        if 'event_type' in won_leads.columns:
-            result['by_event_type'] = won_leads.groupby('event_type')['days_to_conversion'].agg(
+        # By event type if available - with grouping of similar event types
+        if 'event_type' in won_leads.columns or 'lead_trigger' in won_leads.columns:
+            # Create a copy with standardized event type
+            analysis_df = won_leads.copy()
+            
+            # Get the event type column from whatever is available
+            if 'event_type' in analysis_df.columns:
+                event_col = 'event_type'
+            else:
+                event_col = 'lead_trigger'
+                analysis_df.rename(columns={'lead_trigger': 'event_type'}, inplace=True)
+                event_col = 'event_type'
+            
+            # Standardize event types into main categories
+            def categorize_event_type(event_type):
+                if pd.isna(event_type) or not event_type:
+                    return "Uncategorized"
+                
+                event_lower = str(event_type).lower().strip()
+                
+                # Define main categories and their keywords
+                categories = {
+                    'Corporate': ['corporate', 'corp', 'company', 'business', 'office', 'conference', 'meeting'],
+                    'Wedding': ['wedding', 'bride', 'groom', 'bridal', 'engagement'],
+                    'Birthday': ['birthday', 'bday', 'birth day'],
+                    'Social': ['social', 'party', 'gathering', 'celebration'],
+                    'Holiday': ['holiday', 'christmas', 'halloween', 'thanksgiving', 'new year']
+                }
+                
+                # Check if event_type contains any of the keywords
+                for category, keywords in categories.items():
+                    if any(keyword in event_lower for keyword in keywords):
+                        return category
+                
+                # If no match, return as is (but ensure it's a string)
+                return str(event_type)
+            
+            # Add standardized category
+            analysis_df['event_category'] = analysis_df['event_type'].apply(categorize_event_type)
+            
+            # Get both the detailed and categorized analyses
+            result['by_event_type_detailed'] = analysis_df.groupby('event_type')['days_to_conversion'].agg(
                 ['mean', 'median', 'count']).reset_index()
-        elif 'lead_trigger' in won_leads.columns:
-            # Use lead_trigger as fallback for event type
-            result['by_event_type'] = won_leads.groupby('lead_trigger')['days_to_conversion'].agg(
+            
+            # Get the categorized version which will have fewer categories
+            result['by_event_type'] = analysis_df.groupby('event_category')['days_to_conversion'].agg(
                 ['mean', 'median', 'count']).reset_index()
-            result['by_event_type'].rename(columns={'lead_trigger': 'event_type'}, inplace=True)
+            result['by_event_type'].rename(columns={'event_category': 'event_type'}, inplace=True)
+            
+            # Filter to keep only categories with at least 3 data points
+            result['by_event_type'] = result['by_event_type'][result['by_event_type']['count'] >= 3]
         
         # Create histogram data
         bins = [0, 1, 3, 7, 14, 30, 60, 90, float('inf')]

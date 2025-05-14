@@ -307,15 +307,66 @@ if st.session_state.processed_df is not None:
                         display_df.columns = ['Booking Type', 'Avg Days', 'Median Days', 'Count']
                         st.dataframe(display_df.sort_values(by='Avg Days'), use_container_width=True)
                     
-                    # Display conversion time by event type
+                    # Display conversion time by standardized event type categories
                     if 'by_event_type' in time_to_conversion and not time_to_conversion['by_event_type'].empty:
-                        st.write("**Time to Conversion by Event Type**")
+                        st.write("**Time to Conversion by Event Type Category**")
                         # Format columns for better display
                         display_df = time_to_conversion['by_event_type'].copy()
                         display_df['mean'] = display_df['mean'].round(1)
                         display_df['median'] = display_df['median'].round(1)
                         display_df.columns = ['Event Type', 'Avg Days', 'Median Days', 'Count']
+                        
+                        # Add total row if there's more than one row
+                        if len(display_df) > 1:
+                            total_row = pd.DataFrame({
+                                'Event Type': ['Overall Average'],
+                                'Avg Days': [display_df['Avg Days'].mean().round(1)],
+                                'Median Days': [display_df['Median Days'].median().round(1)],
+                                'Count': [display_df['Count'].sum()]
+                            })
+                            display_df = pd.concat([display_df, total_row])
+                        
+                        # Sort by ascending average days
                         st.dataframe(display_df.sort_values(by='Avg Days'), use_container_width=True)
+                        
+                        # Create a bar chart for visual comparison of categories
+                        if len(display_df) > 2:  # Only create chart if we have enough categories
+                            chart_df = display_df[display_df['Event Type'] != 'Overall Average'].copy()
+                            fig, ax = plt.subplots(figsize=(10, 5))
+                            
+                            # Plot in descending order of conversion time
+                            sorted_df = chart_df.sort_values(by='Avg Days', ascending=False)
+                            bars = ax.barh(sorted_df['Event Type'], sorted_df['Avg Days'], color='skyblue')
+                            
+                            # Add data labels
+                            for i, bar in enumerate(bars):
+                                count = sorted_df.iloc[i]['Count']
+                                ax.text(bar.get_width() + 0.3, bar.get_y() + bar.get_height()/2, 
+                                        f"{bar.get_width():.1f} days (n={count})", va='center')
+                            
+                            ax.set_xlabel('Average Days to Conversion')
+                            ax.set_title('Average Conversion Time by Event Type')
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                    
+                    # Show detailed event types if available
+                    if 'by_event_type_detailed' in time_to_conversion and not time_to_conversion['by_event_type_detailed'].empty:
+                        with st.expander("View Detailed Event Types"):
+                            st.write("**All Event Types (Uncategorized)**")
+                            # Format columns for better display
+                            display_df = time_to_conversion['by_event_type_detailed'].copy()
+                            display_df['mean'] = display_df['mean'].round(1)
+                            display_df['median'] = display_df['median'].round(1)
+                            display_df.columns = ['Event Type', 'Avg Days', 'Median Days', 'Count']
+                            
+                            # Sort by count descending and only show types with at least 2 occurrences
+                            filtered_df = display_df[display_df['Count'] >= 2].sort_values(by='Count', ascending=False)
+                            if not filtered_df.empty:
+                                st.dataframe(filtered_df, use_container_width=True)
+                            else:
+                                st.info("No detailed event types with sufficient data.")
+                            
+                            st.caption("Note: The main categories above group similar event types together for more meaningful analysis.")
             
             # Create columns for additional metrics
             col1, col2, col3 = st.columns(3)
