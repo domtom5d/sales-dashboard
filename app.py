@@ -476,23 +476,63 @@ if st.session_state.processed_df is not None:
                 time_col1, time_col2 = st.columns(2)
                 
                 with time_col1:
-                    if 'histogram_data' in time_to_conversion and not time_to_conversion['histogram_data'].empty:
+                    if 'days_data' in time_to_conversion and len(time_to_conversion['days_data']) > 0:
                         st.write("**Distribution of Time to Conversion**")
                         
-                        # Create a horizontal bar chart
+                        # Create a violin plot for better density insights
                         fig, ax = plt.subplots(figsize=(10, 6))
-                        bars = sns.barplot(x='Count', y='Time to Conversion', 
-                                       data=time_to_conversion['histogram_data'], 
-                                       palette='viridis', ax=ax)
                         
-                        # Add count labels - in a more type-safe way
-                        for i, (_, row) in enumerate(time_to_conversion['histogram_data'].iterrows()):
-                            count = row['Count']
-                            ax.text(count + 0.5, i, f"{count:.0f}", va='center')
-                        
-                        ax.set_title('Distribution of Time from Lead to Conversion')
-                        plt.tight_layout()
-                        st.pyplot(fig)
+                        # Filter out extreme outliers to make visualization cleaner
+                        days_data = np.array(time_to_conversion['days_data'])
+                        # Apply a reasonable cap if we have data
+                        if len(days_data) > 0:
+                            # Cap at 95th percentile + 1.5 IQR to remove extreme outliers
+                            q1, q3 = np.percentile(days_data, [25, 75])
+                            iqr = q3 - q1
+                            upper_limit = q3 + 1.5 * iqr
+                            upper_limit = max(30, min(upper_limit, 180))  # Ensure reasonable bounds
+                            
+                            # Bin data for display
+                            filtered_data = days_data[days_data <= upper_limit]
+                            
+                            # Create violin plot
+                            sns.violinplot(y=filtered_data, ax=ax, orient='h', color='#6495ED')
+                            
+                            # Add metrics as vertical lines
+                            if 'median_days' in time_to_conversion:
+                                median = time_to_conversion.get('median_days', 0)
+                                if median <= upper_limit:
+                                    ax.axhline(y=median, color='red', linestyle='--', alpha=0.7,
+                                            label=f'Median: {median:.1f} days')
+                            
+                            if 'average_days' in time_to_conversion:
+                                mean = time_to_conversion.get('average_days', 0)
+                                if mean <= upper_limit:
+                                    ax.axhline(y=mean, color='green', linestyle='--', alpha=0.7,
+                                            label=f'Mean: {mean:.1f} days')
+                            
+                            # Add legend
+                            ax.legend()
+                            
+                            # Set labels
+                            ax.set_xlabel('Density')
+                            ax.set_ylabel('Days to Conversion')
+                            ax.set_title('Distribution of Time from Lead to Conversion')
+                            
+                            # Show statistics in a text box
+                            props = dict(boxstyle='round', facecolor='wheat', alpha=0.3)
+                            textstr = (f"n = {len(days_data)}\n"
+                                    f"Mean = {time_to_conversion.get('average_days', 0):.1f}\n"
+                                    f"Median = {time_to_conversion.get('median_days', 0):.1f}\n"
+                                    f"90th % = {time_to_conversion.get('percentile_90', 0):.1f}")
+                            
+                            ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=10,
+                                verticalalignment='top', bbox=props)
+                            
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                        else:
+                            st.info("Not enough data for visualization")
                 
                 with time_col2:
                     # Display conversion time by booking type
@@ -502,8 +542,89 @@ if st.session_state.processed_df is not None:
                         display_df = time_to_conversion['by_booking_type'].copy()
                         display_df['mean'] = display_df['mean'].round(1)
                         display_df['median'] = display_df['median'].round(1)
-                        display_df.columns = ['Booking Type', 'Avg Days', 'Median Days', 'Count']
-                        st.dataframe(display_df.sort_values(by='Avg Days'), use_container_width=True)
+                        
+                        # Group low-volume types into 'Other'
+                        MIN_COUNT = 3  # Minimum count to show as individual category
+                        TOP_N = 5  # Show only top N categories
+                        
+                        # Copy the dataframe
+                        grouped_df = display_df.copy()
+                        
+                        # Sort by count descending to get top types by volume
+                        grouped_df = grouped_df.sort_values('count', ascending=False)
+                        
+                        # If we have more than TOP_N booking types, create an 'Other' category
+                        if len(grouped_df) > TOP_N:
+                            # Select top categories
+                            top_categories = grouped_df.iloc[:TOP_N].copy()
+                            
+                            # Group everything else into 'Other'
+                            other_categories = grouped_df.iloc[TOP_N:].copy()
+                            
+                            # Only create 'Other' if we have something to group
+                            if len(other_categories) > 0:
+                                # Calculate weighted mean, median, and sum of counts for 'Other'
+                                other_count = other_categories['count'].sum()
+                                other_mean = (other_categories['mean'] * other_categories['count']).sum() / other_count
+                                other_median = np.median(
+                                    np.repeat(
+                                        other_categories['median'].values, 
+                                        other_categories['count'].astype(int).values
+                                    )
+                                )
+                                
+                                # Calculate weighted standard deviation if available
+                                if 'std' in other_categories.columns:
+                                    other_std = np.sqrt(
+                                        (other_categories['count'] * other_categories['std']**2).sum() / other_count
+                                    )
+                                else:
+                                    other_std = 0
+                                
+                                # Create a row for 'Other'
+                                other_row = pd.DataFrame({
+                                    'booking_type': ['Other'],
+                                    'mean': [other_mean],
+                                    'median': [other_median],
+                                    'count': [other_count]
+                                })
+                                
+                                if 'std' in grouped_df.columns:
+                                    other_row['std'] = other_std
+                                
+                                # Combine top categories with 'Other'
+                                grouped_df = pd.concat([top_categories, other_row])
+                            else:
+                                grouped_df = top_categories
+                        
+                        # Format final dataframe for display
+                        grouped_df.columns = ['Booking Type', 'Avg Days', 'Median Days'] + \
+                                         (['Std Dev'] if 'std' in grouped_df.columns else []) + \
+                                         ['Count']
+                        
+                        # Display the table
+                        st.dataframe(grouped_df.sort_values(by='Avg Days'), use_container_width=True)
+                        
+                        # Create a chart visualization
+                        if len(grouped_df) > 1:
+                            fig, ax = plt.subplots(figsize=(10, max(3, min(8, len(grouped_df)))))
+                            
+                            # Plot in ascending order of average days
+                            sorted_df = grouped_df.sort_values(by='Avg Days')
+                            
+                            # Generate the bar chart
+                            bars = ax.barh(sorted_df['Booking Type'], sorted_df['Avg Days'], color='skyblue')
+                            
+                            # Add count annotations
+                            for i, bar in enumerate(bars):
+                                count = sorted_df.iloc[i]['Count']
+                                ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height()/2, 
+                                        f"n={count}", va='center', fontsize=8)
+                            
+                            ax.set_xlabel('Average Days to Conversion')
+                            ax.set_title('Conversion Time by Booking Type')
+                            plt.tight_layout()
+                            st.pyplot(fig)
                     
                     # Display conversion time by standardized event type categories
                     if 'by_event_type' in time_to_conversion and not time_to_conversion['by_event_type'].empty:
@@ -512,35 +633,77 @@ if st.session_state.processed_df is not None:
                         display_df = time_to_conversion['by_event_type'].copy()
                         display_df['mean'] = display_df['mean'].round(1)
                         display_df['median'] = display_df['median'].round(1)
-                        display_df.columns = ['Event Type', 'Avg Days', 'Median Days', 'Count']
+                        
+                        # Handle column names based on whether std is included
+                        column_names = ['Event Type', 'Avg Days', 'Median Days']
+                        if 'std' in display_df.columns:
+                            display_df['std'] = display_df['std'].round(1)
+                            column_names.append('Std Dev')
+                        column_names.append('Count')
+                        
+                        display_df.columns = column_names
                         
                         # Add total row if there's more than one row
                         if len(display_df) > 1:
-                            total_row = pd.DataFrame({
-                                'Event Type': ['Overall Average'],
-                                'Avg Days': [display_df['Avg Days'].mean().round(1)],
-                                'Median Days': [display_df['Median Days'].median().round(1)],
-                                'Count': [display_df['Count'].sum()]
-                            })
+                            # Create dictionary for total row
+                            total_dict = {
+                                'Event Type': 'Overall Average',
+                                'Avg Days': display_df['Avg Days'].mean().round(1),
+                                'Median Days': display_df['Median Days'].median().round(1),
+                                'Count': display_df['Count'].sum()
+                            }
+                            
+                            # Add std dev to total if it exists
+                            if 'Std Dev' in display_df.columns:
+                                # Calculate weighted std dev
+                                weights = display_df['Count'] / display_df['Count'].sum()
+                                total_dict['Std Dev'] = (weights * display_df['Std Dev']).sum().round(1)
+                            
+                            # Create and append the total row
+                            total_row = pd.DataFrame([total_dict])
                             display_df = pd.concat([display_df, total_row])
                         
                         # Sort by ascending average days
                         st.dataframe(display_df.sort_values(by='Avg Days'), use_container_width=True)
                         
-                        # Create a bar chart for visual comparison of categories
+                        # Create a bar chart with error bars for visual comparison of categories
                         if len(display_df) > 2:  # Only create chart if we have enough categories
                             chart_df = display_df[display_df['Event Type'] != 'Overall Average'].copy()
-                            fig, ax = plt.subplots(figsize=(10, 5))
+                            fig, ax = plt.subplots(figsize=(10, max(5, min(8, len(chart_df)))))
                             
                             # Plot in descending order of conversion time
                             sorted_df = chart_df.sort_values(by='Avg Days', ascending=False)
-                            bars = ax.barh(sorted_df['Event Type'], sorted_df['Avg Days'], color='skyblue')
                             
-                            # Add data labels
+                            # Define the y positions
+                            y_pos = np.arange(len(sorted_df))
+                            
+                            # Check if we have std deviation data for error bars
+                            if 'Std Dev' in sorted_df.columns:
+                                # Create horizontal bar chart with error bars
+                                bars = ax.barh(sorted_df['Event Type'], sorted_df['Avg Days'], 
+                                              xerr=sorted_df['Std Dev'],
+                                              color='skyblue', alpha=0.7, capsize=5,
+                                              error_kw={'ecolor': 'darkblue', 'alpha': 0.6, 'capthick': 2})
+                                
+                                # Add a note about error bars
+                                ax.text(0.05, 0.98, "Error bars: ±1 standard deviation", 
+                                        transform=ax.transAxes, fontsize=8, verticalalignment='top',
+                                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
+                            else:
+                                # Simple bars without error bars
+                                bars = ax.barh(sorted_df['Event Type'], sorted_df['Avg Days'], color='skyblue')
+                            
+                            # Add data labels with counts
                             for i, bar in enumerate(bars):
                                 count = sorted_df.iloc[i]['Count']
-                                ax.text(bar.get_width() + 0.3, bar.get_y() + bar.get_height()/2, 
-                                        f"{bar.get_width():.1f} days (n={count})", va='center')
+                                # Position the text at the end of the bar plus any error bar
+                                if 'Std Dev' in sorted_df.columns:
+                                    x_pos = sorted_df.iloc[i]['Avg Days'] + sorted_df.iloc[i]['Std Dev'] + 0.5
+                                else:
+                                    x_pos = bar.get_width() + 0.5
+                                
+                                ax.text(x_pos, bar.get_y() + bar.get_height()/2, 
+                                        f"n={count}", va='center', fontsize=8)
                             
                             ax.set_xlabel('Average Days to Conversion')
                             ax.set_title('Average Conversion Time by Event Type')

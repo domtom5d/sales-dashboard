@@ -304,7 +304,10 @@ def analyze_time_to_conversion(df):
         # By booking type if available
         if 'booking_type' in won_leads.columns:
             result['by_booking_type'] = won_leads.groupby('booking_type')['days_to_conversion'].agg(
-                ['mean', 'median', 'count']).reset_index()
+                ['mean', 'median', 'std', 'count']).reset_index()
+            # Fill any missing std values with 0
+            if 'std' in result['by_booking_type'].columns:
+                result['by_booking_type']['std'] = result['by_booking_type']['std'].fillna(0)
         
         # Save raw days data for violin plots
         result['days_data'] = won_leads['days_to_conversion'].dropna().tolist()
@@ -349,14 +352,20 @@ def analyze_time_to_conversion(df):
             # Add standardized category
             analysis_df['event_category'] = analysis_df['event_type'].apply(categorize_event_type)
             
-            # Get both the detailed and categorized analyses
+            # Get both the detailed and categorized analyses with standard deviation
             result['by_event_type_detailed'] = analysis_df.groupby('event_type')['days_to_conversion'].agg(
-                ['mean', 'median', 'count']).reset_index()
+                ['mean', 'median', 'std', 'count']).reset_index()
+            # Fill any missing std values
+            if 'std' in result['by_event_type_detailed'].columns:
+                result['by_event_type_detailed']['std'] = result['by_event_type_detailed']['std'].fillna(0)
             
             # Get the categorized version which will have fewer categories
             result['by_event_type'] = analysis_df.groupby('event_category')['days_to_conversion'].agg(
-                ['mean', 'median', 'count']).reset_index()
+                ['mean', 'median', 'std', 'count']).reset_index()
             result['by_event_type'].rename(columns={'event_category': 'event_type'}, inplace=True)
+            # Fill any missing std values
+            if 'std' in result['by_event_type'].columns:
+                result['by_event_type']['std'] = result['by_event_type']['std'].fillna(0)
             
             # Filter to keep only categories with at least 3 data points
             result['by_event_type'] = result['by_event_type'][result['by_event_type']['count'] >= 3]
