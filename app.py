@@ -1847,15 +1847,46 @@ return {
                     mkt_df = analytics_results['marketing_sources']
                     st.dataframe(mkt_df.iloc[:5][['marketing_source', 'Total', 'Won', 'Conversion %']], use_container_width=True)
                     
-                    # Plot
+                    # Add toggle for marketing source view
+                    show_counts = st.checkbox("Show volume instead of conversion rates", key="marketing_source_toggle")
+                    
+                    # Plot based on toggle selection
                     fig, ax = plt.subplots(figsize=(10, 6))
-                    plot_conversion_by_category(
-                        st.session_state.processed_df,
-                        'marketing_source',
-                        'Conversion Rate by Marketing Source',
-                        ax=ax,
-                        top_n=8
-                    )
+                    
+                    if show_counts:
+                        # Create a custom summary for counts
+                        source_counts = (
+                            st.session_state.processed_df['marketing_source']
+                            .value_counts()
+                            .reset_index()
+                            .rename(columns={'index': 'marketing_source', 'marketing_source': 'count'})
+                            .sort_values('count', ascending=False)
+                            .head(8)
+                        )
+                        
+                        # Plot the count bars
+                        bars = ax.barh(source_counts['marketing_source'], source_counts['count'], color='skyblue')
+                        
+                        # Add data labels
+                        for i, bar in enumerate(bars):
+                            width = bar.get_width()
+                            ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, 
+                                    f"{width:,.0f}", va='center')
+                        
+                        # Customize plot
+                        ax.set_title('Lead Volume by Marketing Source', fontsize=14)
+                        ax.set_xlabel('Number of Leads', fontsize=12)
+                        ax.grid(axis='x', linestyle='--', alpha=0.7)
+                    else:
+                        # Use standard conversion rate plot
+                        plot_conversion_by_category(
+                            st.session_state.processed_df,
+                            'marketing_source',
+                            'Conversion Rate by Marketing Source',
+                            ax=ax,
+                            top_n=8
+                        )
+                    
                     st.pyplot(fig)
                 else:
                     st.info("No marketing source data available. Make sure your data includes a 'marketing_source' column.")

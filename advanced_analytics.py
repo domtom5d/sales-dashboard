@@ -411,21 +411,44 @@ def plot_conversion_by_category(df, category_col, title, ax=None, sort_by='conve
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 6))
     
-    # Plot bars
-    bars = ax.barh(summary[category_col], summary['conversion'], color='dodgerblue')
+    # Plot bars with special coloring for referral sources
+    if category_col == 'referral_source':
+        # Create a color list with top 2 sources highlighted
+        colors = ['#1E88E5' if i >= 2 else '#FFC107' for i in range(len(summary))]
+        bars = ax.barh(summary[category_col], summary['conversion'], color=colors)
+    else:
+        # Default color for other categories
+        bars = ax.barh(summary[category_col], summary['conversion'], color='dodgerblue')
     
-    # Add data labels
+    # Add data labels - format depends on the category type
     for i, bar in enumerate(bars):
         width = bar.get_width()
         volume = summary.iloc[i]['volume']
-        ax.text(width + 0.01, bar.get_y() + bar.get_height()/2, 
-                f"{width:.1%} (n={volume})", va='center')
+        category = summary.iloc[i][category_col]
+        
+        # Special formatting for booking types - show conversion% and count more prominently
+        if category_col == 'booking_type' or category_col == 'booking_type_clean':
+            ax.text(0.01, bar.get_y() + bar.get_height()/2, 
+                    f"{width:.1%}", va='center', color='white', fontweight='bold', fontsize=10)
+            ax.text(width + 0.01, bar.get_y() + bar.get_height()/2, 
+                    f"n={volume}", va='center')
+        else:
+            # Default formatting for other categories
+            ax.text(width + 0.01, bar.get_y() + bar.get_height()/2, 
+                    f"{width:.1%} (n={volume})", va='center')
     
     # Customize plot
     ax.set_title(title, fontsize=14)
     ax.set_xlabel('Conversion Rate', fontsize=12)
     ax.set_xlim(0, max(summary['conversion']) * 1.2)
     ax.grid(axis='x', linestyle='--', alpha=0.7)
+    
+    # Add a note for referral sources to explain the highlighting
+    if category_col == 'referral_source':
+        # Add a note about highlighted top sources
+        ax.text(0.98, 0.02, "Top 2 sources highlighted", 
+                transform=ax.transAxes, fontsize=9, ha='right',
+                bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.7))
     
     return ax
 
