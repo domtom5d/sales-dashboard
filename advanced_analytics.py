@@ -140,8 +140,21 @@ def analyze_price_per_guest(df):
     
     # Create a copy with price per guest calculation
     ppg_df = df.copy()
+    
+    # Clean and convert data
+    ppg_df['actual_deal_value'] = pd.to_numeric(ppg_df['actual_deal_value'], errors='coerce')
     ppg_df['number_of_guests'] = pd.to_numeric(ppg_df['number_of_guests'], errors='coerce')
-    ppg_df['price_per_guest'] = ppg_df['actual_deal_value'] / ppg_df['number_of_guests'].replace(0, np.nan)
+    
+    # Drop rows with missing or invalid values
+    ppg_df = ppg_df.dropna(subset=['actual_deal_value', 'number_of_guests'])
+    ppg_df = ppg_df[ppg_df['number_of_guests'] > 0]  # Avoid division by zero
+    
+    # Calculate price per guest
+    ppg_df['price_per_guest'] = ppg_df['actual_deal_value'] / ppg_df['number_of_guests']
+    
+    # If we don't have enough data after cleaning
+    if len(ppg_df) < 5:
+        return None
     
     # Define buckets
     ppg_bins = [0, 50, 100, 200, np.inf]
@@ -175,12 +188,23 @@ def analyze_days_since_inquiry(df):
     if 'days_since_inquiry' not in df.columns:
         return None
     
+    # Create a copy with binned days since inquiry
+    dsi_df = df.copy()
+    
+    # Drop nulls and ensure numeric
+    dsi_df = dsi_df.dropna(subset=['days_since_inquiry'])
+    dsi_df['days_since_inquiry'] = pd.to_numeric(dsi_df['days_since_inquiry'], errors='coerce')
+    dsi_df = dsi_df.dropna(subset=['days_since_inquiry'])
+    
+    # If we don't have enough data
+    if len(dsi_df) < 5:
+        return None
+    
     # Define buckets
     dsi_bins = [0, 1, 3, 7, 30, np.inf]
     dsi_labels = ['Same day', '1-3 days', '4-7 days', '8-30 days', '30+ days']
     
-    # Create a copy with binned days since inquiry
-    dsi_df = df.copy()
+    # Create binned column
     dsi_df['dsi_bin'] = pd.cut(dsi_df['days_since_inquiry'], bins=dsi_bins, labels=dsi_labels)
     
     # Create summary
@@ -213,6 +237,13 @@ def analyze_event_month(df):
     # Create a copy with event month extracted
     month_df = df.copy()
     month_df['event_date'] = pd.to_datetime(month_df['event_date'], errors='coerce')
+    month_df = month_df.dropna(subset=['event_date'])
+    
+    # If we don't have enough data after cleaning
+    if len(month_df) < 5:
+        return None
+    
+    # Extract month name
     month_df['event_month'] = month_df['event_date'].dt.month_name()
     
     # Create summary
@@ -255,6 +286,13 @@ def analyze_inquiry_weekday(df):
     # Create a copy with inquiry weekday extracted
     wkday_df = df.copy()
     wkday_df['inquiry_date'] = pd.to_datetime(wkday_df['inquiry_date'], errors='coerce')
+    wkday_df = wkday_df.dropna(subset=['inquiry_date'])
+    
+    # If we don't have enough data after cleaning
+    if len(wkday_df) < 5:
+        return None
+    
+    # Extract weekday name
     wkday_df['inquiry_weekday'] = wkday_df['inquiry_date'].dt.day_name()
     
     # Create summary
@@ -293,9 +331,21 @@ def analyze_staff_ratio(df):
     
     # Create a copy with staff ratio calculated
     staff_df = df.copy()
+    
+    # Clean and convert data
     staff_df['number_of_guests'] = pd.to_numeric(staff_df['number_of_guests'], errors='coerce')
     staff_df['bartenders_needed'] = pd.to_numeric(staff_df['bartenders_needed'], errors='coerce')
-    staff_df['staff_ratio'] = staff_df['bartenders_needed'] / staff_df['number_of_guests'].replace(0, np.nan)
+    
+    # Drop rows with missing or invalid values
+    staff_df = staff_df.dropna(subset=['bartenders_needed', 'number_of_guests'])
+    staff_df = staff_df[staff_df['number_of_guests'] > 0]  # Avoid division by zero
+    
+    # Calculate staff ratio
+    staff_df['staff_ratio'] = staff_df['bartenders_needed'] / staff_df['number_of_guests']
+    
+    # If we don't have enough data after cleaning
+    if len(staff_df) < 5:
+        return None
     
     # Define buckets
     bins = [0, 0.01, 0.02, 0.05, np.inf]
