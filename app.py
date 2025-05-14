@@ -137,38 +137,14 @@ if data_source == "Upload CSV Files":
             st.session_state.operation_df
         )
 else:
-    # Load from database with filters
-    st.sidebar.header("Filter Database Data")
+    # Simplified loading from database without filters
+    st.sidebar.header("Database Data")
+    st.sidebar.info("Using all available data from the database")
     
-    # Date range filters
-    start_date = st.sidebar.date_input(
-        "Start Date",
-        datetime.date.today() - datetime.timedelta(days=365)
-    )
-    end_date = st.sidebar.date_input(
-        "End Date",
-        datetime.date.today()
-    )
-    
-    # Status filter
-    status_options = ["All", "Won", "Lost", "In Progress"]
-    status_filter = st.sidebar.multiselect(
-        "Status",
-        status_options,
-        default=["All"]
-    )
-    
-    # Apply filters
-    if st.sidebar.button("Load Data"):
+    # Add a load button without filters
+    if st.sidebar.button("Load All Data"):
         try:
-            # Convert status filter to database format
-            db_status_filter = None
-            if status_filter and "All" not in status_filter:
-                db_status_filter = {
-                    "status": status_filter
-                }
-            
-            # Load data from database
+            # Load all data from database
             leads_df = get_lead_data()
             operations_df = get_operation_data()
             
@@ -188,31 +164,22 @@ else:
 
 # Main content area with tabs
 if st.session_state.processed_df is not None:
-    # Get the processed dataframe - this is the raw dataframe before filtering
-    raw_df = st.session_state.processed_df
+    # Get the processed dataframe and use it directly without filtering
+    filtered_df = st.session_state.processed_df.copy()
+    raw_df = filtered_df  # For backward compatibility
     
-    # Build the filters dict from session state
+    # Define filters with default values for compatibility
     filters = {
-        'date_range': st.session_state.get('date_filter', None),
-        'status': st.session_state.get('status_filter', 'All'),
-        'states': st.session_state.get('region_filter', ['All']),
-        # Pick the best date column from the data
-        'date_col': 'inquiry_date' if 'inquiry_date' in raw_df.columns else
-                   'created' if 'created' in raw_df.columns else
-                   'event_date' if 'event_date' in raw_df.columns else
-                   None
+        'date_range': None,
+        'status': 'All',
+        'states': ['All'],
+        'date_col': 'inquiry_date' if 'inquiry_date' in filtered_df.columns else
+                    'created' if 'created' in filtered_df.columns else
+                    'event_date' if 'event_date' in filtered_df.columns else None
     }
     
-    # Apply all filters once, up front in a safe way
-    try:
-        filtered_df = apply_filters(raw_df, filters)
-        if filtered_df is None or filtered_df.empty:
-            st.warning("No data matches your current filters. Please try adjusting your filter criteria.")
-            st.stop()
-    except Exception as e:
-        st.error(f"Error applying filters: {e}")
-        filtered_df = raw_df  # Fallback to unfiltered data
-        st.warning("Filter application failed. Showing all data instead.")
+    # Display a notice about filters being disabled
+    st.info("Filters are currently disabled. Dashboard shows all available data.")
     
     # Create tabs for different analysis views
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
