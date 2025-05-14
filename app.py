@@ -210,20 +210,6 @@ if st.session_state.processed_df is not None:
             # Use our comprehensive conversion analysis module 
             run_conversion_analysis(filtered_df)
             
-            # Display metrics in 4 columns
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Total Leads", f"{total_leads:,}")
-            with col2:
-                st.metric("Won Deals", f"{won_deals:,}")
-            with col3:
-                st.metric("Lost Deals", f"{lost_deals:,}")
-            with col4:
-                st.metric("Overall Conversion Rate", f"{overall_conversion:.1%}")
-            
-            # 2. Date & Status Filters
-            st.subheader("Filter Your Data")
-            
             filter_col1, filter_col2, filter_col3 = st.columns(3)
             
             with filter_col1:
