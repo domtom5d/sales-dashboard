@@ -188,8 +188,23 @@ else:
 
 # Main content area with tabs
 if st.session_state.processed_df is not None:
-    # Get the processed dataframe
-    filtered_df = st.session_state.processed_df
+    # Get the processed dataframe - this is the raw dataframe before filtering
+    raw_df = st.session_state.processed_df
+    
+    # Build the filters dict from session state
+    filters = {
+        'date_range': st.session_state.get('date_filter', None),
+        'status': st.session_state.get('status_filter', 'All'),
+        'states': st.session_state.get('region_filter', ['All']),
+        # Pick the best date column from the data
+        'date_col': 'inquiry_date' if 'inquiry_date' in raw_df.columns else
+                   'created' if 'created' in raw_df.columns else
+                   'event_date' if 'event_date' in raw_df.columns else
+                   None
+    }
+    
+    # Apply all filters once, up front
+    filtered_df = apply_filters(raw_df, filters)
     
     # Create tabs for different analysis views
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
@@ -204,7 +219,7 @@ if st.session_state.processed_df is not None:
         "🧠 AI Insights"
     ])
     
-    # Apply filters to the dataframe
+    # Create a filtered copy for the tabs
     filtered_copy = filtered_df.copy()
     
     # First ensure all date columns are properly formatted as datetime
@@ -216,63 +231,16 @@ if st.session_state.processed_df is not None:
                 except Exception as e:
                     st.warning(f"Error converting {col} to datetime: {str(e)}")
     
-    # Apply date filter if set
+    # Show info about applied filters
     if 'date_filter' in st.session_state and st.session_state.date_filter and len(st.session_state.date_filter) == 2:
-        date_range = st.session_state.date_filter
-        start_date, end_date = date_range
-        
-        # Convert start_date and end_date to pandas datetime
-        start_date_pd = pd.to_datetime(start_date)
-        end_date_pd = pd.to_datetime(end_date)
-        
-        date_col = None
-        for col in ['inquiry_date', 'created', 'event_date']:
-            if col in filtered_copy.columns:
-                date_col = col
-                break
-                
-        if date_col:
-            # Apply filter using more robust method
-            mask = (
-                (filtered_copy[date_col] >= start_date_pd) & 
-                (filtered_copy[date_col] <= end_date_pd + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
-            )
-            filtered_copy = filtered_copy[mask.fillna(False)]  # Handle NaN values
-            st.info(f"Filtered to {len(filtered_copy)} leads from {start_date} to {end_date}")
+        start_date, end_date = st.session_state.date_filter
+        st.info(f"Filtered to {len(filtered_copy)} leads from {start_date} to {end_date}")
     
-    if 'status_filter' in st.session_state and st.session_state.status_filter != 'All':
-        # First convert outcome to numeric if needed
-        for outcome_col in ['outcome', 'Outcome']:
-            if outcome_col in filtered_copy.columns:
-                try:
-                    filtered_copy[outcome_col] = pd.to_numeric(filtered_copy[outcome_col], errors='coerce').fillna(0)
-                except Exception as e:
-                    st.warning(f"Error converting {outcome_col} to numeric: {str(e)}")
-        
-        # Apply the appropriate filter based on the outcome column name
-        outcome_col = 'outcome' if 'outcome' in filtered_copy.columns else 'Outcome' if 'Outcome' in filtered_copy.columns else None
-        
-        if outcome_col:
-            if st.session_state.status_filter == 'Won':
-                filtered_copy = filtered_copy[filtered_copy[outcome_col] == 1]
-            elif st.session_state.status_filter == 'Lost':
-                filtered_copy = filtered_copy[filtered_copy[outcome_col] == 0]
+    # Note: We're not applying the filters here anymore, as it's already done with apply_filters() above
     
+    # Region filter information
     if 'region_filter' in st.session_state and st.session_state.region_filter and 'All' not in st.session_state.region_filter:
-        # Find the state column with various case patterns
-        state_col = None
-        for col_name in ['State', 'state', 'STATE']:
-            if col_name in filtered_copy.columns:
-                state_col = col_name
-                break
-        
-        if state_col:
-            # Convert to string to ensure matching works correctly
-            filtered_copy[state_col] = filtered_copy[state_col].astype(str)
-            
-            # Create a mask using case-insensitive matching for better results
-            mask = filtered_copy[state_col].str.lower().isin([s.lower() for s in st.session_state.region_filter])
-            filtered_copy = filtered_copy[mask.fillna(False)]
+        st.info(f"Applied region filter: {', '.join(st.session_state.region_filter)}")
 
     with tab1:
         try:
