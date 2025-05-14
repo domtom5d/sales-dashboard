@@ -1268,7 +1268,7 @@ if st.session_state.processed_df is not None:
                     labels = ['< 1%', '1-2%', '2-5%', '> 5%']
                     df_ratio['ratio_bin'] = pd.cut(df_ratio['staff_ratio'], bins=bins, labels=labels)
                     
-                    ratio_conv = df_ratio.groupby('ratio_bin').agg(
+                    ratio_conv = df_ratio.groupby('ratio_bin', observed=True).agg(
                         won=('Won', 'sum'),
                         total=('Won', 'count')
                     ).assign(rate=lambda d: d['won']/d['total']).reset_index()
