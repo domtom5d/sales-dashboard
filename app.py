@@ -204,14 +204,48 @@ if st.session_state.processed_df is not None:
     
     with tab1:
         try:
-            st.header("📊 Conversion Analysis Dashboard")
-            st.markdown("Analyze how leads move through your sales funnel")
+            # --- Intro copy for Conversion Analysis tab ---
+            st.markdown("## Conversion Analysis<br>Get a top-level view of overall leads and how many are converting into won deals, all over time.", unsafe_allow_html=True)
             
             # Calculate conversion rates by different categories
             conversion_rates = calculate_conversion_rates(filtered_df)
             
-            # Use our comprehensive conversion analysis module 
-            run_conversion_analysis(filtered_df)
+            # --- KPI Summary cards ---
+            total_leads = len(filtered_df)
+            won = filtered_df['outcome'].sum() if 'outcome' in filtered_df.columns else 0
+            lost = total_leads - won
+            conv_rate = won / total_leads if total_leads > 0 else 0
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Total Leads", f"{total_leads:,}")
+            c2.metric("Won Deals", f"{won:,}")
+            c3.metric("Lost Deals", f"{lost:,}")
+            c4.metric("Conversion Rate", f"{conv_rate:.1%}")
+            
+            # Sparkline under the conversion rate
+            date_col = None
+            for col in ['inquiry_date', 'created', 'event_date']:
+                if col in filtered_df.columns:
+                    date_col = col
+                    break
+            
+            if date_col:
+                try:
+                    # Create weekly conversion rate data for sparkline
+                    weekly = filtered_df.set_index(date_col).resample('W')['outcome'].agg(['size','sum'])
+                    weekly['rate'] = weekly['sum'] / weekly['size']
+                    weekly['rate'] = weekly['rate'].fillna(0)
+                    
+                    # Only show sparkline if we have data
+                    if not weekly.empty and weekly['size'].sum() > 0:
+                        with c4:
+                            st.line_chart(weekly['rate'], height=100, use_container_width=True)
+                except Exception as e:
+                    with c4:
+                        st.info("Weekly trend data not available")
+            
+            # Comment out the run_conversion_analysis call for now
+            # run_conversion_analysis(filtered_df)
             
             filter_col1, filter_col2, filter_col3 = st.columns(3)
             
