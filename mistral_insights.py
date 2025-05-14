@@ -8,15 +8,14 @@ and generate insights from data.
 import os
 import pandas as pd
 import streamlit as st
-from mistralai.client import MistralClient
-from mistralai.models.chat_completion import ChatMessage
+from mistralai.sdk import Mistral
 
 def initialize_mistral_client():
     """
     Initialize the Mistral AI client using the API key.
     
     Returns:
-        MistralClient or None: Initialized client or None if API key is missing
+        Mistral or None: Initialized client or None if API key is missing
     """
     api_key = os.environ.get("MISTRAL_API_KEY")
     
@@ -24,7 +23,7 @@ def initialize_mistral_client():
         return None
     
     try:
-        client = MistralClient(api_key=api_key)
+        client = Mistral(api_key=api_key)
         return client
     except Exception as e:
         st.error(f"Error initializing Mistral client: {str(e)}")
