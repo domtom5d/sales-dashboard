@@ -286,65 +286,9 @@ if st.session_state.processed_df is not None:
             # Comment out the run_conversion_analysis call for now
             # run_conversion_analysis(filtered_df)
             
-            filter_col1, filter_col2, filter_col3 = st.columns(3)
-            
-            with filter_col1:
-                # Date range filter
-                if 'inquiry_date' in filtered_df.columns or 'Inquiry Date' in filtered_df.columns:
-                    date_col = 'inquiry_date' if 'inquiry_date' in filtered_df.columns else 'Inquiry Date'
-                    
-                    # Get min and max dates from data
-                    try:
-                        min_date = filtered_df[date_col].min().date()
-                        max_date = filtered_df[date_col].max().date()
-                        
-                        # Default to last 90 days if range is large enough
-                        default_start = max_date - datetime.timedelta(days=90)
-                        default_start = max(default_start, min_date)
-                        
-                        # Get current selection or use default
-                        current_selection = st.session_state.date_filter if 'date_filter' in st.session_state else (default_start, max_date)
-                        
-                        date_range = st.date_input(
-                            "Date Range",
-                            value=current_selection,
-                            min_value=min_date,
-                            max_value=max_date,
-                            key="date_input"
-                        )
-                        
-                        # Store selection and trigger rerun if changed
-                        if 'date_filter' not in st.session_state or st.session_state.date_filter != date_range:
-                            st.session_state.date_filter = date_range
-                            st.rerun()
-                    except:
-                        st.warning("Date filtering unavailable - check date format in data")
-            
-            with filter_col2:
-                # Status filter
-                status_options = ['All', 'Won', 'Lost']
-                # Get current selection or use default
-                current_status = st.session_state.status_filter if 'status_filter' in st.session_state else 'All'
-                selected_status = st.selectbox("Status", options=status_options, key="status_selectbox")
-                
-                # Store selection and trigger rerun if changed
-                if 'status_filter' not in st.session_state or st.session_state.status_filter != selected_status:
-                    st.session_state.status_filter = selected_status
-                    st.rerun()
-            
-            with filter_col3:
-                # Region filter
-                if 'State' in filtered_df.columns or 'state' in filtered_df.columns:
-                    state_col = 'State' if 'State' in filtered_df.columns else 'state'
-                    states = filtered_df[state_col].dropna().unique().tolist()
-                    # Get current selection or use default
-                    current_states = st.session_state.region_filter if 'region_filter' in st.session_state else ['All']
-                    selected_states = st.multiselect("State/Region", options=['All'] + states, default=current_states, key="region_multiselect")
-                    
-                    # Store selection and trigger rerun if changed
-                    if 'region_filter' not in st.session_state or st.session_state.region_filter != selected_states:
-                        st.session_state.region_filter = selected_states
-                        st.rerun()
+            # Filter UI replaced with a simple notice
+            st.subheader("Data Overview")
+            st.markdown("Showing all data without filtering. The dashboard displays your complete dataset.")
             
             # 3. Trend Analysis
             st.subheader("Conversion Trends")
