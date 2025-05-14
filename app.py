@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
+import matplotlib.ticker as mticker
 import base64
 import os
 import datetime
@@ -205,20 +206,163 @@ if st.session_state.processed_df is not None:
             # Calculate conversion rates by different categories
             conversion_rates = calculate_conversion_rates(filtered_df)
             
-            st.subheader("Conversion Rate Analysis")
+            st.header("📊 Conversion Analysis Dashboard")
+            st.markdown("Analyze how leads move through your sales funnel")
             
-            # Summary metrics
+            # 1. KPI Summary Cards (4 key metrics in a row)
+            st.subheader("Key Performance Indicators")
+            
+            # Count metrics from the data
+            total_leads = len(filtered_df)
+            won_deals = filtered_df['Won'].sum() if 'Won' in filtered_df.columns else 0
+            lost_deals = filtered_df['Lost'].sum() if 'Lost' in filtered_df.columns else 0
             overall_conversion = conversion_rates["overall"]["Conversion Rate"][0]
-            st.metric("Overall Conversion Rate", f"{overall_conversion:.1%}")
             
-            # Create columns for metrics
-            col1, col2, col3 = st.columns(3)
-            
+            # Display metrics in 4 columns
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
-                # Plot conversion by booking type
+                st.metric("Total Leads", f"{total_leads:,}")
+            with col2:
+                st.metric("Won Deals", f"{won_deals:,}")
+            with col3:
+                st.metric("Lost Deals", f"{lost_deals:,}")
+            with col4:
+                st.metric("Overall Conversion Rate", f"{overall_conversion:.1%}")
+            
+            # 2. Date & Status Filters
+            st.subheader("Filter Your Data")
+            
+            filter_col1, filter_col2, filter_col3 = st.columns(3)
+            
+            with filter_col1:
+                # Date range filter
+                if 'inquiry_date' in filtered_df.columns or 'Inquiry Date' in filtered_df.columns:
+                    date_col = 'inquiry_date' if 'inquiry_date' in filtered_df.columns else 'Inquiry Date'
+                    
+                    # Get min and max dates from data
+                    try:
+                        min_date = filtered_df[date_col].min().date()
+                        max_date = filtered_df[date_col].max().date()
+                        
+                        # Default to last 90 days if range is large enough
+                        default_start = max_date - datetime.timedelta(days=90)
+                        default_start = max(default_start, min_date)
+                        
+                        date_range = st.date_input(
+                            "Date Range",
+                            value=(default_start, max_date),
+                            min_value=min_date,
+                            max_value=max_date
+                        )
+                        
+                        st.session_state.date_filter = date_range
+                    except:
+                        st.warning("Date filtering unavailable - check date format in data")
+            
+            with filter_col2:
+                # Status filter
+                status_options = ['All', 'Won', 'Lost']
+                selected_status = st.selectbox("Status", options=status_options)
+                st.session_state.status_filter = selected_status
+            
+            with filter_col3:
+                # Region filter
+                if 'State' in filtered_df.columns or 'state' in filtered_df.columns:
+                    state_col = 'State' if 'State' in filtered_df.columns else 'state'
+                    states = filtered_df[state_col].dropna().unique().tolist()
+                    selected_states = st.multiselect("State/Region", options=['All'] + states, default='All')
+                    st.session_state.region_filter = selected_states
+            
+            # 3. Trend Analysis
+            st.subheader("Conversion Trends")
+            
+            trend_col1, trend_col2 = st.columns(2)
+            
+            with trend_col1:
+                st.write("#### Conversion Rate Over Time")
+                # Code for conversion rate over time will go here
+                if 'inquiry_date' in filtered_df.columns or 'Inquiry Date' in filtered_df.columns:
+                    try:
+                        date_col = 'inquiry_date' if 'inquiry_date' in filtered_df.columns else 'Inquiry Date'
+                        
+                        # Ensure date column is datetime
+                        df_trend = filtered_df.copy()
+                        df_trend[date_col] = pd.to_datetime(df_trend[date_col])
+                        
+                        # Add week and month columns
+                        df_trend['week'] = df_trend[date_col].dt.to_period('W').astype(str)
+                        
+                        # Weekly conversion rate
+                        weekly_conv = df_trend.groupby('week').agg(
+                            won=('Won', 'sum'),
+                            total=('Won', 'count')
+                        ).assign(rate=lambda d: d['won']/d['total'])
+                        
+                        # Plot weekly trend
+                        fig, ax = plt.subplots(figsize=(10, 5))
+                        weekly_conv['rate'].plot(kind='line', marker='o', ax=ax)
+                        ax.set_ylabel('Conversion Rate')
+                        ax.set_xlabel('Week')
+                        ax.set_ylim(0, min(1, weekly_conv['rate'].max() * 1.2))
+                        plt.xticks(rotation=45)
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                    except Exception as e:
+                        st.error(f"Error creating time trend: {str(e)}")
+                else:
+                    st.info("Date information not available for trend analysis")
+            
+            with trend_col2:
+                st.write("#### Lead Volume Over Time")
+                # Code for lead volume over time will go here
+                if 'inquiry_date' in filtered_df.columns or 'Inquiry Date' in filtered_df.columns:
+                    try:
+                        date_col = 'inquiry_date' if 'inquiry_date' in filtered_df.columns else 'Inquiry Date'
+                        
+                        # Ensure date column is datetime
+                        df_trend = filtered_df.copy()
+                        df_trend[date_col] = pd.to_datetime(df_trend[date_col])
+                        
+                        # Add week column
+                        df_trend['week'] = df_trend[date_col].dt.to_period('W').astype(str)
+                        
+                        # Weekly volumes
+                        weekly_vol = df_trend.groupby('week').agg(
+                            leads=('Won', 'count'),
+                            won=('Won', 'sum')
+                        )
+                        
+                        # Plot weekly volume
+                        fig, ax = plt.subplots(figsize=(10, 5))
+                        weekly_vol[['leads', 'won']].plot(kind='bar', ax=ax)
+                        ax.set_ylabel('Count')
+                        ax.set_xlabel('Week')
+                        plt.xticks(rotation=45)
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        
+                        # Week-over-week change
+                        if len(weekly_vol) >= 2:
+                            last_week = weekly_vol.iloc[-1]['leads']
+                            prev_week = weekly_vol.iloc[-2]['leads']
+                            wow_change = (last_week - prev_week) / prev_week if prev_week > 0 else 0
+                            st.metric("Week-over-Week Change", f"{wow_change:.1%}")
+                    except Exception as e:
+                        st.error(f"Error creating volume trend: {str(e)}")
+                else:
+                    st.info("Date information not available for trend analysis")
+            
+            # 4. Top-Level Drill-Downs 
+            st.subheader("Conversion by Category")
+            
+            # 4. Top-Level Drill-Downs (2 rows of 2 columns each)
+            drill_row1_col1, drill_row1_col2 = st.columns(2)
+            
+            with drill_row1_col1:
+                # Plot conversion by booking type with sample size
                 st.write("#### Conversion by Booking Type")
                 try:
-                    fig, ax = plt.subplots(figsize=(8, 5))
+                    fig, ax = plt.subplots(figsize=(10, 6))
                     # Check if the key exists in either case
                     if "booking_type" in conversion_rates:
                         booking_key = "booking_type"
@@ -229,19 +373,59 @@ if st.session_state.processed_df is not None:
                         booking_key = None
                         
                     if booking_key:
-                        conversion_rates[booking_key].plot(kind="bar", x=booking_key, y="Conversion Rate", ax=ax)
-                        ax.set_xlabel("Booking Type")
-                        ax.set_ylabel("Conversion Rate")
-                        ax.set_ylim(0, min(1, conversion_rates[booking_key]["Conversion Rate"].max() * 1.5))
+                        # Sort by conversion rate and get top 5
+                        df_plot = conversion_rates[booking_key].sort_values("Conversion Rate", ascending=False)
+                        
+                        # Limit to top 5 and group others if more than 5
+                        if len(df_plot) > 5:
+                            top5 = df_plot.iloc[:5]
+                            others = df_plot.iloc[5:].copy()
+                            if len(others) > 0:
+                                # Create an "Other" category with average conversion rate
+                                other_row = pd.DataFrame({
+                                    "Booking Type": ["Other"],
+                                    "Conversion Rate": [others["Conversion Rate"].mean()]
+                                })
+                                df_plot = pd.concat([top5, other_row])
+                        
+                        # Plot with sample size annotations
+                        bars = df_plot.plot(kind="barh", x="Booking Type", y="Conversion Rate", 
+                                           color='skyblue', legend=False, ax=ax)
+                        
+                        # Add count annotations if available
+                        if "total" in df_plot.columns:
+                            for i, (idx, row) in enumerate(df_plot.iterrows()):
+                                ax.text(
+                                    row["Conversion Rate"] + 0.01, 
+                                    i, 
+                                    f"n={int(row['total'])}", 
+                                    va='center'
+                                )
+                        
+                        # Format the plot
+                        ax.set_xlabel("Conversion Rate")
+                        ax.set_xlim(0, min(1, df_plot["Conversion Rate"].max() * 1.2))
+                        
+                        # Format y-axis to show percentage
+                        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
+                        
+                        plt.tight_layout()
                         st.pyplot(fig)
+                        
+                        # Highlight best and worst if we have at least 2 categories
+                        if len(df_plot) >= 2:
+                            best = df_plot.iloc[0]
+                            worst = df_plot.iloc[-1]
+                            st.info(f"**{best['Booking Type']}** converts {(best['Conversion Rate'] - worst['Conversion Rate']):.1%} better than **{worst['Booking Type']}**.")
+                            
                 except Exception as e:
                     st.error(f"Error displaying booking type data: {str(e)}")
             
-            with col2:
-                # Plot conversion by referral source
+            with drill_row1_col2:
+                # Plot conversion by referral source with sample size
                 st.write("#### Conversion by Referral Source")
                 try:
-                    fig, ax = plt.subplots(figsize=(8, 5))
+                    fig, ax = plt.subplots(figsize=(10, 6))
                     # Check if the key exists in either case
                     if "referral_source" in conversion_rates:
                         ref_key = "referral_source"
@@ -252,19 +436,191 @@ if st.session_state.processed_df is not None:
                         ref_key = None
                         
                     if ref_key:
-                        conversion_rates[ref_key].plot(kind="bar", x=ref_key, y="Conversion Rate", ax=ax)
-                        ax.set_xlabel("Referral Source")
-                        ax.set_ylabel("Conversion Rate")
-                        ax.set_ylim(0, min(1, conversion_rates[ref_key]["Conversion Rate"].max() * 1.5))
+                        # Sort by conversion rate and get top 5
+                        df_plot = conversion_rates[ref_key].sort_values("Conversion Rate", ascending=False)
+                        
+                        # Limit to top 5 and group others if more than 5
+                        if len(df_plot) > 5:
+                            top5 = df_plot.iloc[:5]
+                            others = df_plot.iloc[5:].copy()
+                            if len(others) > 0:
+                                # Create an "Other" category with average conversion rate
+                                other_row = pd.DataFrame({
+                                    ref_key: ["Other"],
+                                    "Conversion Rate": [others["Conversion Rate"].mean()]
+                                })
+                                df_plot = pd.concat([top5, other_row])
+                        
+                        # Plot with sample size annotations
+                        bars = df_plot.plot(kind="barh", x=ref_key, y="Conversion Rate", 
+                                           color='lightgreen', legend=False, ax=ax)
+                        
+                        # Add count annotations if available
+                        if "total" in df_plot.columns:
+                            for i, (idx, row) in enumerate(df_plot.iterrows()):
+                                ax.text(
+                                    row["Conversion Rate"] + 0.01, 
+                                    i, 
+                                    f"n={int(row['total'])}", 
+                                    va='center'
+                                )
+                        
+                        # Format the plot
+                        ax.set_xlabel("Conversion Rate")
+                        ax.set_xlim(0, min(1, df_plot["Conversion Rate"].max() * 1.2))
+                        
+                        # Format y-axis to show percentage
+                        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
+                        
+                        plt.tight_layout()
                         st.pyplot(fig)
+                        
+                        # Highlight best and worst if we have at least 2 categories
+                        if len(df_plot) >= 2:
+                            best = df_plot.iloc[0]
+                            worst = df_plot.iloc[-1]
+                            st.info(f"**{best[ref_key]}** converts {(best['Conversion Rate'] - worst['Conversion Rate']):.1%} better than **{worst[ref_key]}**.")
+                            
                 except Exception as e:
                     st.error(f"Error displaying referral source data: {str(e)}")
             
-            with col3:
-                # Plot conversion by days until event
+            # Second row of drill-downs
+            drill_row2_col1, drill_row2_col2 = st.columns(2)
+            
+            with drill_row2_col1:
+                # Plot conversion by event type
+                st.write("#### Conversion by Event Type")
+                try:
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    # Check if the key exists in either case
+                    if "Event Type" in conversion_rates:
+                        event_key = "Event Type"
+                    elif "event_type" in conversion_rates:
+                        event_key = "event_type"
+                    else:
+                        st.error("No event type data available")
+                        event_key = None
+                        
+                    if event_key:
+                        # Sort by conversion rate and get top 5
+                        df_plot = conversion_rates[event_key].sort_values("Conversion Rate", ascending=False)
+                        
+                        # Limit to top 5 and group others if more than 5
+                        if len(df_plot) > 5:
+                            top5 = df_plot.iloc[:5]
+                            others = df_plot.iloc[5:].copy()
+                            if len(others) > 0:
+                                # Create an "Other" category with average conversion rate
+                                other_row = pd.DataFrame({
+                                    event_key: ["Other"],
+                                    "Conversion Rate": [others["Conversion Rate"].mean()]
+                                })
+                                df_plot = pd.concat([top5, other_row])
+                        
+                        # Plot with sample size annotations
+                        bars = df_plot.plot(kind="barh", x=event_key, y="Conversion Rate", 
+                                           color='coral', legend=False, ax=ax)
+                        
+                        # Add count annotations if available
+                        if "total" in df_plot.columns:
+                            for i, (idx, row) in enumerate(df_plot.iterrows()):
+                                ax.text(
+                                    row["Conversion Rate"] + 0.01, 
+                                    i, 
+                                    f"n={int(row['total'])}", 
+                                    va='center'
+                                )
+                        
+                        # Format the plot
+                        ax.set_xlabel("Conversion Rate")
+                        ax.set_xlim(0, min(1, df_plot["Conversion Rate"].max() * 1.2))
+                        
+                        # Format y-axis to show percentage
+                        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
+                        
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        
+                        # Highlight best and worst if we have at least 2 categories
+                        if len(df_plot) >= 2:
+                            best = df_plot.iloc[0]
+                            worst = df_plot.iloc[-1]
+                            st.info(f"**{best[event_key]}** converts {(best['Conversion Rate'] - worst['Conversion Rate']):.1%} better than **{worst[event_key]}**.")
+                except Exception as e:
+                    st.error(f"Error displaying event type data: {str(e)}")
+            
+            with drill_row2_col2:
+                # Plot conversion by marketing source
+                st.write("#### Conversion by Marketing Source")
+                try:
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    # Check if the key exists in either case
+                    if "marketing_source" in conversion_rates:
+                        mkt_key = "marketing_source"
+                    elif "Marketing Source" in conversion_rates:
+                        mkt_key = "Marketing Source"
+                    else:
+                        st.error("No marketing source data available")
+                        mkt_key = None
+                        
+                    if mkt_key:
+                        # Sort by conversion rate and get top 5
+                        df_plot = conversion_rates[mkt_key].sort_values("Conversion Rate", ascending=False)
+                        
+                        # Limit to top 5 and group others if more than 5
+                        if len(df_plot) > 5:
+                            top5 = df_plot.iloc[:5]
+                            others = df_plot.iloc[5:].copy()
+                            if len(others) > 0:
+                                # Create an "Other" category with average conversion rate
+                                other_row = pd.DataFrame({
+                                    mkt_key: ["Other"],
+                                    "Conversion Rate": [others["Conversion Rate"].mean()]
+                                })
+                                df_plot = pd.concat([top5, other_row])
+                        
+                        # Plot with sample size annotations
+                        bars = df_plot.plot(kind="barh", x=mkt_key, y="Conversion Rate", 
+                                           color='mediumpurple', legend=False, ax=ax)
+                        
+                        # Add count annotations if available
+                        if "total" in df_plot.columns:
+                            for i, (idx, row) in enumerate(df_plot.iterrows()):
+                                ax.text(
+                                    row["Conversion Rate"] + 0.01, 
+                                    i, 
+                                    f"n={int(row['total'])}", 
+                                    va='center'
+                                )
+                        
+                        # Format the plot
+                        ax.set_xlabel("Conversion Rate")
+                        ax.set_xlim(0, min(1, df_plot["Conversion Rate"].max() * 1.2))
+                        
+                        # Format y-axis to show percentage
+                        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
+                        
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        
+                        # Highlight best and worst if we have at least 2 categories
+                        if len(df_plot) >= 2:
+                            best = df_plot.iloc[0]
+                            worst = df_plot.iloc[-1]
+                            st.info(f"**{best[mkt_key]}** converts {(best['Conversion Rate'] - worst['Conversion Rate']):.1%} better than **{worst[mkt_key]}**.")
+                except Exception as e:
+                    st.error(f"Error displaying marketing source data: {str(e)}")
+                            
+            # 5. Timing-Based Breakouts
+            st.subheader("Timing Factors")
+            
+            timing_col1, timing_col2 = st.columns(2)
+            
+            with timing_col1:
+                # Days Until Event
                 st.write("#### Conversion by Days Until Event")
                 try:
-                    fig, ax = plt.subplots(figsize=(8, 5))
+                    fig, ax = plt.subplots(figsize=(10, 6))
                     # Check if the key exists in either case
                     if "DaysUntilBin" in conversion_rates:
                         days_key = "DaysUntilBin"
@@ -275,13 +631,661 @@ if st.session_state.processed_df is not None:
                         days_key = None
                         
                     if days_key:
-                        conversion_rates[days_key].plot(kind="bar", x=days_key, y="Conversion Rate", ax=ax)
-                        ax.set_xlabel("Days Until Event")
-                        ax.set_ylabel("Conversion Rate")
-                        ax.set_ylim(0, min(1, conversion_rates[days_key]["Conversion Rate"].max() * 1.5))
+                        # Sort by bin order rather than conversion rate for time bins
+                        df_plot = conversion_rates[days_key].copy()
+                        
+                        # Plot with sample size annotations
+                        bars = df_plot.plot(kind="barh", x=days_key, y="Conversion Rate", 
+                                           color='yellowgreen', legend=False, ax=ax)
+                        
+                        # Add count annotations if available
+                        if "total" in df_plot.columns:
+                            for i, (idx, row) in enumerate(df_plot.iterrows()):
+                                ax.text(
+                                    row["Conversion Rate"] + 0.01, 
+                                    i, 
+                                    f"n={int(row['total'])}", 
+                                    va='center'
+                                )
+                        
+                        # Format the plot
+                        ax.set_xlabel("Conversion Rate")
+                        ax.set_xlim(0, min(1, df_plot["Conversion Rate"].max() * 1.2))
+                        
+                        # Format y-axis to show percentage
+                        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
+                        
+                        plt.tight_layout()
                         st.pyplot(fig)
+                        
+                        # Find max and min bins
+                        max_bin = df_plot.loc[df_plot["Conversion Rate"].idxmax()]
+                        min_bin = df_plot.loc[df_plot["Conversion Rate"].idxmin()]
+                        
+                        # Calculate difference
+                        difference = max_bin["Conversion Rate"] - min_bin["Conversion Rate"]
+                        
+                        # Display insight
+                        st.info(f"**{max_bin[days_key]}** leads convert {difference:.1%} better than **{min_bin[days_key]}** leads.")
                 except Exception as e:
                     st.error(f"Error displaying days until event data: {str(e)}")
+            
+            with timing_col2:
+                # Days Since Inquiry
+                st.write("#### Conversion by Days Since Inquiry")
+                if 'days_since_inquiry' in filtered_df.columns or 'Days Since Inquiry' in filtered_df.columns:
+                    try:
+                        # Group by days since inquiry ranges
+                        days_col = 'days_since_inquiry' if 'days_since_inquiry' in filtered_df.columns else 'Days Since Inquiry'
+                        
+                        # Create bins
+                        bins = [0, 1, 3, 7, 30, float('inf')]
+                        labels = ['Same Day', '1-3 Days', '4-7 Days', '8-30 Days', '30+ Days']
+                        
+                        # Add a binned column
+                        df_days = filtered_df.copy()
+                        df_days['dsi_bin'] = pd.cut(df_days[days_col], bins=bins, labels=labels)
+                        
+                        # Calculate conversion rates
+                        days_conv = df_days.groupby('dsi_bin').agg(
+                            won=('Won', 'sum'),
+                            total=('Won', 'count')
+                        ).assign(rate=lambda d: d['won']/d['total']).reset_index()
+                        
+                        # Plot
+                        fig, ax = plt.subplots(figsize=(10, 6))
+                        bars = days_conv.plot(kind="barh", x='dsi_bin', y='rate', 
+                                           color='lightblue', legend=False, ax=ax)
+                        
+                        # Add count annotations
+                        for i, (idx, row) in enumerate(days_conv.iterrows()):
+                            ax.text(
+                                row["rate"] + 0.01, 
+                                i, 
+                                f"n={int(row['total'])}", 
+                                va='center'
+                            )
+                        
+                        # Format the plot
+                        ax.set_xlabel("Conversion Rate")
+                        ax.set_ylabel("Days Since Inquiry")
+                        ax.set_xlim(0, min(1, days_conv["rate"].max() * 1.2))
+                        
+                        # Format y-axis to show percentage
+                        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
+                        
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        
+                        # Find max and min bins
+                        max_bin = days_conv.loc[days_conv["rate"].idxmax()]
+                        min_bin = days_conv.loc[days_conv["rate"].idxmin()]
+                        
+                        # Calculate difference
+                        difference = max_bin["rate"] - min_bin["rate"]
+                        
+                        # Display insight
+                        st.info(f"**{max_bin['dsi_bin']}** inquiry age converts {difference:.1%} better than **{min_bin['dsi_bin']}** inquiry age.")
+                    except Exception as e:
+                        st.error(f"Error analyzing days since inquiry: {str(e)}")
+                else:
+                    st.info("Days since inquiry data not available")
+                    
+            # Second row of timing factors
+            timing_row2_col1, timing_row2_col2 = st.columns(2)
+            
+            with timing_row2_col1:
+                # Submission Weekday
+                st.write("#### Conversion by Weekday")
+                if 'inquiry_date' in filtered_df.columns or 'Inquiry Date' in filtered_df.columns:
+                    try:
+                        # Get weekday from inquiry date
+                        date_col = 'inquiry_date' if 'inquiry_date' in filtered_df.columns else 'Inquiry Date'
+                        
+                        # Create weekday column
+                        df_weekday = filtered_df.copy()
+                        df_weekday[date_col] = pd.to_datetime(df_weekday[date_col])
+                        df_weekday['weekday'] = df_weekday[date_col].dt.day_name()
+                        
+                        # Order of days
+                        day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                        
+                        # Calculate conversion rates
+                        weekday_conv = df_weekday.groupby('weekday').agg(
+                            won=('Won', 'sum'),
+                            total=('Won', 'count')
+                        ).assign(rate=lambda d: d['won']/d['total']).reset_index()
+                        
+                        # Reorder days
+                        weekday_conv['weekday'] = pd.Categorical(weekday_conv['weekday'], categories=day_order, ordered=True)
+                        weekday_conv = weekday_conv.sort_values('weekday')
+                        
+                        # Plot
+                        fig, ax = plt.subplots(figsize=(10, 6))
+                        bars = weekday_conv.plot(kind="bar", x='weekday', y='rate', 
+                                           color='lightpink', legend=False, ax=ax)
+                        
+                        # Add count annotations
+                        for i, (idx, row) in enumerate(weekday_conv.iterrows()):
+                            ax.text(
+                                i, 
+                                row["rate"] + 0.01, 
+                                f"n={int(row['total'])}", 
+                                ha='center'
+                            )
+                        
+                        # Format the plot
+                        ax.set_xlabel("Inquiry Weekday")
+                        ax.set_ylabel("Conversion Rate")
+                        ax.set_ylim(0, min(1, weekday_conv["rate"].max() * 1.2))
+                        
+                        # Format y-axis to show percentage
+                        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
+                        
+                        plt.xticks(rotation=45)
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        
+                        # Find best day
+                        best_day = weekday_conv.loc[weekday_conv["rate"].idxmax()]
+                        st.info(f"**{best_day['weekday']}** is your highest-converting inquiry day at {best_day['rate']:.1%}.")
+                    except Exception as e:
+                        st.error(f"Error analyzing weekdays: {str(e)}")
+                else:
+                    st.info("Inquiry date data not available")
+            
+            with timing_row2_col2:
+                # Event Month (Seasonality)
+                st.write("#### Conversion by Event Month")
+                if 'event_date' in filtered_df.columns or 'Event Date' in filtered_df.columns:
+                    try:
+                        # Get month from event date
+                        date_col = 'event_date' if 'event_date' in filtered_df.columns else 'Event Date'
+                        
+                        # Create month column
+                        df_month = filtered_df.copy()
+                        df_month[date_col] = pd.to_datetime(df_month[date_col])
+                        df_month['month'] = df_month[date_col].dt.month_name()
+                        
+                        # Order of months
+                        month_order = ['January', 'February', 'March', 'April', 'May', 'June', 
+                                       'July', 'August', 'September', 'October', 'November', 'December']
+                        
+                        # Calculate conversion rates
+                        month_conv = df_month.groupby('month').agg(
+                            won=('Won', 'sum'),
+                            total=('Won', 'count')
+                        ).assign(rate=lambda d: d['won']/d['total']).reset_index()
+                        
+                        # Reorder months
+                        month_conv['month'] = pd.Categorical(month_conv['month'], categories=month_order, ordered=True)
+                        month_conv = month_conv.sort_values('month')
+                        
+                        # Plot
+                        fig, ax = plt.subplots(figsize=(10, 6))
+                        bars = month_conv.plot(kind="bar", x='month', y='rate', 
+                                           color='orange', legend=False, ax=ax)
+                        
+                        # Add count annotations
+                        for i, (idx, row) in enumerate(month_conv.iterrows()):
+                            ax.text(
+                                i, 
+                                row["rate"] + 0.01, 
+                                f"n={int(row['total'])}", 
+                                ha='center'
+                            )
+                        
+                        # Format the plot
+                        ax.set_xlabel("Event Month")
+                        ax.set_ylabel("Conversion Rate")
+                        ax.set_ylim(0, min(1, month_conv["rate"].max() * 1.2))
+                        
+                        # Format y-axis to show percentage
+                        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
+                        
+                        plt.xticks(rotation=45)
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        
+                        # Compare summer vs winter
+                        summer_months = ['June', 'July', 'August', 'September']
+                        winter_months = ['December', 'January', 'February', 'March']
+                        
+                        summer_rate = month_conv[month_conv['month'].isin(summer_months)]['rate'].mean()
+                        winter_rate = month_conv[month_conv['month'].isin(winter_months)]['rate'].mean()
+                        
+                        if not pd.isna(summer_rate) and not pd.isna(winter_rate):
+                            diff = summer_rate - winter_rate
+                            if abs(diff) > 0.05:  # Only show if difference is notable
+                                if diff > 0:
+                                    st.info(f"Summer months convert {diff:.1%} better than winter months.")
+                                else:
+                                    st.info(f"Winter months convert {abs(diff):.1%} better than summer months.")
+                    except Exception as e:
+                        st.error(f"Error analyzing event months: {str(e)}")
+                else:
+                    st.info("Event date data not available")
+                    
+            # 6. Price & Size Effects
+            st.subheader("Price & Size Factors")
+            
+            price_col1, price_col2 = st.columns(2)
+            
+            with price_col1:
+                # Number of Guests analysis
+                st.write("#### Conversion by Number of Guests")
+                if 'number_of_guests' in filtered_df.columns or 'Number of Guests' in filtered_df.columns:
+                    try:
+                        # Get guests column
+                        guests_col = 'number_of_guests' if 'number_of_guests' in filtered_df.columns else 'Number of Guests'
+                        
+                        # Create bins for guest count
+                        bins = [0, 50, 100, 200, 500, float('inf')]
+                        labels = ['1-50', '51-100', '101-200', '201-500', '500+']
+                        
+                        # Bin the data
+                        df_guests = filtered_df.copy()
+                        df_guests['guest_bin'] = pd.cut(df_guests[guests_col], bins=bins, labels=labels)
+                        
+                        # Calculate conversion rates
+                        guest_conv = df_guests.groupby('guest_bin').agg(
+                            won=('Won', 'sum'),
+                            total=('Won', 'count')
+                        ).assign(rate=lambda d: d['won']/d['total']).reset_index()
+                        
+                        # Plot
+                        fig, ax = plt.subplots(figsize=(10, 6))
+                        bars = guest_conv.plot(kind="barh", x='guest_bin', y='rate', 
+                                          color='steelblue', legend=False, ax=ax)
+                        
+                        # Add count annotations
+                        for i, (idx, row) in enumerate(guest_conv.iterrows()):
+                            ax.text(
+                                row["rate"] + 0.01, 
+                                i, 
+                                f"n={int(row['total'])}", 
+                                va='center'
+                            )
+                        
+                        # Format the plot
+                        ax.set_xlabel("Conversion Rate")
+                        ax.set_ylabel("Number of Guests")
+                        ax.set_xlim(0, min(1, guest_conv["rate"].max() * 1.2))
+                        
+                        # Format axes to show percentage
+                        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
+                        
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        
+                        # Find best and worst size
+                        best_size = guest_conv.loc[guest_conv["rate"].idxmax()]
+                        worst_size = guest_conv.loc[guest_conv["rate"].idxmin()]
+                        
+                        # Calculate difference
+                        diff = best_size["rate"] - worst_size["rate"]
+                        
+                        # Display insight
+                        if diff > 0.05:  # Only show if difference is notable
+                            st.info(f"**{best_size['guest_bin']}** guests convert {diff:.1%} better than **{worst_size['guest_bin']}** guests.")
+                    except Exception as e:
+                        st.error(f"Error analyzing guest count: {str(e)}")
+                else:
+                    st.info("Guest count data not available")
+                
+            with price_col2:
+                # Staff-to-Guest Ratio
+                st.write("#### Conversion by Staff-to-Guest Ratio")
+                if all(col in filtered_df.columns for col in ['bartenders_needed', 'number_of_guests']) or \
+                   all(col in filtered_df.columns for col in ['Bartenders Needed', 'Number of Guests']):
+                    try:
+                        # Get columns
+                        bartenders_col = 'bartenders_needed' if 'bartenders_needed' in filtered_df.columns else 'Bartenders Needed'
+                        guests_col = 'number_of_guests' if 'number_of_guests' in filtered_df.columns else 'Number of Guests'
+                        
+                        # Calculate staff ratio
+                        df_ratio = filtered_df.copy()
+                        df_ratio['staff_ratio'] = df_ratio[bartenders_col] / df_ratio[guests_col]
+                        
+                        # Create bins for staff-to-guest ratio
+                        bins = [0, 0.01, 0.02, 0.05, float('inf')]
+                        labels = ['< 1%', '1-2%', '2-5%', '> 5%']
+                        
+                        # Bin the data
+                        df_ratio['ratio_bin'] = pd.cut(df_ratio['staff_ratio'], bins=bins, labels=labels)
+                        
+                        # Calculate conversion rates
+                        ratio_conv = df_ratio.groupby('ratio_bin').agg(
+                            won=('Won', 'sum'),
+                            total=('Won', 'count')
+                        ).assign(rate=lambda d: d['won']/d['total']).reset_index()
+                        
+                        # Plot
+                        fig, ax = plt.subplots(figsize=(10, 6))
+                        bars = ratio_conv.plot(kind="barh", x='ratio_bin', y='rate', 
+                                          color='purple', legend=False, ax=ax)
+                        
+                        # Add count annotations
+                        for i, (idx, row) in enumerate(ratio_conv.iterrows()):
+                            ax.text(
+                                row["rate"] + 0.01, 
+                                i, 
+                                f"n={int(row['total'])}", 
+                                va='center'
+                            )
+                        
+                        # Format the plot
+                        ax.set_xlabel("Conversion Rate")
+                        ax.set_ylabel("Staff-to-Guest Ratio")
+                        ax.set_xlim(0, min(1, ratio_conv["rate"].max() * 1.2))
+                        
+                        # Format axes to show percentage
+                        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
+                        
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        
+                        # Find optimal ratio
+                        best_ratio = ratio_conv.loc[ratio_conv["rate"].idxmax()]
+                        
+                        # Display insight
+                        st.info(f"The optimal staff-to-guest ratio is **{best_ratio['ratio_bin']}** with a {best_ratio['rate']:.1%} conversion rate.")
+                    except Exception as e:
+                        st.error(f"Error analyzing staff ratio: {str(e)}")
+                else:
+                    st.info("Staff and guest count data not available for ratio analysis")
+                    
+            # 7. Geographic Insights
+            st.subheader("Geographic Insights")
+            
+            geo_col1, geo_col2 = st.columns(2)
+            
+            with geo_col1:
+                # Conversion by State/Region
+                st.write("#### Conversion by State/Region")
+                if 'State' in filtered_df.columns or 'state' in filtered_df.columns:
+                    try:
+                        # Get state column
+                        state_col = 'State' if 'State' in filtered_df.columns else 'state'
+                        
+                        # Group by state
+                        state_conv = filtered_df.groupby(state_col).agg(
+                            won=('Won', 'sum'),
+                            total=('Won', 'count')
+                        ).assign(rate=lambda d: d['won']/d['total']).reset_index()
+                        
+                        # Sort by conversion rate and get top states
+                        state_conv = state_conv.sort_values('rate', ascending=False)
+                        
+                        # Limit to top 10 states
+                        if len(state_conv) > 10:
+                            state_conv = state_conv.head(10)
+                        
+                        # Plot
+                        fig, ax = plt.subplots(figsize=(10, 8))
+                        bars = state_conv.plot(kind="barh", x=state_col, y='rate', 
+                                          color='teal', legend=False, ax=ax)
+                        
+                        # Add count annotations
+                        for i, (idx, row) in enumerate(state_conv.iterrows()):
+                            ax.text(
+                                row["rate"] + 0.01, 
+                                i, 
+                                f"n={int(row['total'])}", 
+                                va='center'
+                            )
+                        
+                        # Format the plot
+                        ax.set_xlabel("Conversion Rate")
+                        ax.set_ylabel("State")
+                        ax.set_xlim(0, min(1, state_conv["rate"].max() * 1.2))
+                        
+                        # Format axes to show percentage
+                        ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'{x:.0%}'))
+                        
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        
+                        # Insight on geographic performance
+                        if len(state_conv) >= 2:
+                            best_state = state_conv.iloc[0]
+                            worst_state = state_conv.iloc[-1]
+                            diff = best_state["rate"] - worst_state["rate"]
+                            st.info(f"**{best_state[state_col]}** has a {diff:.1%} higher conversion rate than **{worst_state[state_col]}**.")
+                    except Exception as e:
+                        st.error(f"Error analyzing state data: {str(e)}")
+                else:
+                    st.info("State/region data not available")
+            
+            with geo_col2:
+                # Area-Code Match analysis
+                st.write("#### Conversion by Phone Area Code Match")
+                if 'phone_number' in filtered_df.columns or 'Phone Number' in filtered_df.columns:
+                    try:
+                        # Import the phone analysis function
+                        from conversion import analyze_phone_matches
+                        
+                        # Run the analysis
+                        phone_conv, phone_counts = analyze_phone_matches(filtered_df)
+                        
+                        # Plot
+                        if not phone_conv.empty:
+                            fig, ax = plt.subplots(figsize=(10, 6))
+                            bars = phone_conv.plot(kind="bar", x='Match Status', y='Conversion Rate', 
+                                              color='darkblue', legend=False, ax=ax)
+                            
+                            # Add count annotations
+                            for i, (idx, row) in enumerate(phone_conv.iterrows()):
+                                ax.text(
+                                    i, 
+                                    row["Conversion Rate"] + 0.01, 
+                                    f"n={row['Count']}", 
+                                    ha='center'
+                                )
+                            
+                            # Format the plot
+                            ax.set_xlabel("Phone Area Code Match")
+                            ax.set_ylabel("Conversion Rate")
+                            ax.set_ylim(0, min(1, phone_conv["Conversion Rate"].max() * 1.2))
+                            
+                            # Format axes to show percentage
+                            ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'{x:.0%}'))
+                            
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                            
+                            # Insight on local vs non-local
+                            local_rate = phone_conv[phone_conv['Match Status'] == 'Local']['Conversion Rate'].values[0] if 'Local' in phone_conv['Match Status'].values else 0
+                            nonlocal_rate = phone_conv[phone_conv['Match Status'] == 'Non-Local']['Conversion Rate'].values[0] if 'Non-Local' in phone_conv['Match Status'].values else 0
+                            
+                            if local_rate > 0 and nonlocal_rate > 0:
+                                diff = abs(local_rate - nonlocal_rate)
+                                if local_rate > nonlocal_rate:
+                                    st.info(f"Local leads convert {diff:.1%} better than non-local leads.")
+                                else:
+                                    st.info(f"Non-local leads convert {diff:.1%} better than local leads.")
+                        else:
+                            st.info("No phone match data available")
+                    except Exception as e:
+                        st.error(f"Error analyzing phone match data: {str(e)}")
+                else:
+                    st.info("Phone number data not available")
+            
+            # 8. Data Quality & Anomalies
+            with st.expander("Data Quality & Anomalies"):
+                st.subheader("Data Quality Analysis")
+                
+                # Create columns for data quality metrics
+                quality_col1, quality_col2 = st.columns(2)
+                
+                with quality_col1:
+                    # Missing data summary
+                    st.write("#### Missing Data by Field")
+                    
+                    # Calculate missing data percentages
+                    missing_data = filtered_df.isnull().sum()
+                    missing_pct = (missing_data / len(filtered_df)) * 100
+                    missing_df = pd.DataFrame({
+                        'Missing Values': missing_data,
+                        'Percentage': missing_pct
+                    }).sort_values('Percentage', ascending=False)
+                    
+                    # Filter to only show fields with missing values
+                    missing_df = missing_df[missing_df['Missing Values'] > 0]
+                    
+                    if not missing_df.empty:
+                        # Create a bar chart of missing data
+                        fig, ax = plt.subplots(figsize=(10, 6))
+                        missing_df_plot = missing_df.head(10)  # Top 10 missing fields
+                        missing_df_plot['Percentage'].plot(kind='barh', ax=ax)
+                        plt.title('Missing Data Percentage by Field')
+                        plt.xlabel('Missing Percentage')
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        
+                        # Show table of missing data counts
+                        st.dataframe(missing_df)
+                        
+                        # Option to download rows with missing values
+                        if st.button("Download Rows with Missing Values"):
+                            # Find rows with any missing values
+                            rows_with_missing = filtered_df[filtered_df.isnull().any(axis=1)]
+                            
+                            # Create a CSV download link
+                            csv = rows_with_missing.to_csv(index=False)
+                            b64 = base64.b64encode(csv.encode()).decode()
+                            href = f'<a href="data:file/csv;base64,{b64}" download="missing_data_rows.csv">Download CSV</a>'
+                            st.markdown(href, unsafe_allow_html=True)
+                    else:
+                        st.info("No missing values found in the dataset.")
+                
+                with quality_col2:
+                    # Outliers and anomalies
+                    st.write("#### Data Anomalies")
+                    
+                    anomalies = []
+                    
+                    # Check for negative days until event
+                    if 'days_until_event' in filtered_df.columns:
+                        neg_days = filtered_df[filtered_df['days_until_event'] < 0]
+                        if not neg_days.empty:
+                            anomalies.append(f"Found {len(neg_days)} leads with negative 'days until event' values.")
+                    
+                    # Check for zero guest count
+                    if 'number_of_guests' in filtered_df.columns:
+                        zero_guests = filtered_df[filtered_df['number_of_guests'] == 0]
+                        if not zero_guests.empty:
+                            anomalies.append(f"Found {len(zero_guests)} leads with zero guests.")
+                    
+                    # Check for duplicate emails
+                    if 'email' in filtered_df.columns:
+                        email_counts = filtered_df['email'].value_counts()
+                        duplicates = email_counts[email_counts > 1]
+                        if not duplicates.empty:
+                            anomalies.append(f"Found {len(duplicates)} emails that appear in multiple leads.")
+                    
+                    # Check for extreme values in guest count
+                    if 'number_of_guests' in filtered_df.columns:
+                        # Compute IQR
+                        Q1 = filtered_df['number_of_guests'].quantile(0.25)
+                        Q3 = filtered_df['number_of_guests'].quantile(0.75)
+                        IQR = Q3 - Q1
+                        
+                        # Define outliers as being more than 1.5 IQR from Q1 or Q3
+                        outliers = filtered_df[(filtered_df['number_of_guests'] < (Q1 - 1.5 * IQR)) | 
+                                             (filtered_df['number_of_guests'] > (Q3 + 1.5 * IQR))]
+                        
+                        if not outliers.empty:
+                            anomalies.append(f"Found {len(outliers)} outliers in guest count.")
+                    
+                    # Display anomalies
+                    if anomalies:
+                        for anomaly in anomalies:
+                            st.warning(anomaly)
+                    else:
+                        st.success("No data anomalies detected.")
+            
+            # 9. Quick "What's Next?" Panel - automatic actionable insights
+            st.subheader("Key Actionable Insights")
+            
+            # Gather insights automatically
+            insights = []
+            
+            # Days until event insight (if available)
+            if "DaysUntilBin" in conversion_rates or "days_until_event" in conversion_rates:
+                days_key = "DaysUntilBin" if "DaysUntilBin" in conversion_rates else "days_until_event"
+                df_days = conversion_rates[days_key].copy()
+                if not df_days.empty:
+                    # Find highest converting bin
+                    best_timing = df_days.loc[df_days["Conversion Rate"].idxmax()]
+                    insights.append(f"Prioritize {best_timing[days_key]} inquiries — {best_timing['Conversion Rate']:.1%} close rate.")
+            
+            # Booking type insight (if available)
+            if "booking_type" in conversion_rates or "Booking Type" in conversion_rates:
+                booking_key = "booking_type" if "booking_type" in conversion_rates else "Booking Type"
+                df_booking = conversion_rates[booking_key].copy()
+                if not df_booking.empty and len(df_booking) > 1:
+                    # Sort by conversion and get top
+                    df_booking = df_booking.sort_values("Conversion Rate", ascending=False)
+                    best_booking = df_booking.iloc[0]
+                    insights.append(f"{best_booking[booking_key]} events yield {best_booking['Conversion Rate']:.1%} conversion—consider specializing.")
+            
+            # Marketing source insight (if available)
+            if "marketing_source" in conversion_rates or "Marketing Source" in conversion_rates:
+                mkt_key = "marketing_source" if "marketing_source" in conversion_rates else "Marketing Source"
+                df_mkt = conversion_rates[mkt_key].copy()
+                if not df_mkt.empty and len(df_mkt) > 1:
+                    # Sort by conversion and get top
+                    df_mkt = df_mkt.sort_values("Conversion Rate", ascending=False)
+                    best_mkt = df_mkt.iloc[0]
+                    insights.append(f"Double down on {best_mkt[mkt_key]} with {best_mkt['Conversion Rate']:.1%} conversion rate.")
+            
+            # Phone match insight (if available)
+            try:
+                phone_conv, _ = analyze_phone_matches(filtered_df)
+                if not phone_conv.empty and len(phone_conv) > 1:
+                    # Compare local vs non-local
+                    local_rate = phone_conv[phone_conv['Match Status'] == 'Local']['Conversion Rate'].values[0] if 'Local' in phone_conv['Match Status'].values else 0
+                    nonlocal_rate = phone_conv[phone_conv['Match Status'] == 'Non-Local']['Conversion Rate'].values[0] if 'Non-Local' in phone_conv['Match Status'].values else 0
+                    
+                    if local_rate > 0 and nonlocal_rate > 0:
+                        if local_rate > nonlocal_rate:
+                            insights.append(f"Local leads convert {local_rate:.1%} vs. {nonlocal_rate:.1%} for non-local—consider geo-targeting.")
+                        else:
+                            insights.append(f"Non-local leads convert better—consider expanding your marketing reach.")
+            except:
+                pass
+            
+            # Staff ratio insight (if available)
+            if all(col in filtered_df.columns for col in ['bartenders_needed', 'number_of_guests']):
+                try:
+                    # Calculate staff ratio
+                    df_ratio = filtered_df.copy()
+                    df_ratio['staff_ratio'] = df_ratio['bartenders_needed'] / df_ratio['number_of_guests']
+                    
+                    # Create bins and get conversion rates
+                    bins = [0, 0.01, 0.02, 0.05, float('inf')]
+                    labels = ['< 1%', '1-2%', '2-5%', '> 5%']
+                    df_ratio['ratio_bin'] = pd.cut(df_ratio['staff_ratio'], bins=bins, labels=labels)
+                    
+                    ratio_conv = df_ratio.groupby('ratio_bin').agg(
+                        won=('Won', 'sum'),
+                        total=('Won', 'count')
+                    ).assign(rate=lambda d: d['won']/d['total']).reset_index()
+                    
+                    if not ratio_conv.empty:
+                        # Find optimal ratio
+                        best_ratio = ratio_conv.loc[ratio_conv["rate"].idxmax()]
+                        insights.append(f"Optimal staff-to-guest ratio is {best_ratio['ratio_bin']}—adjust pricing and staffing accordingly.")
+                except:
+                    pass
+            
+            # Display insights in a formatted way
+            if insights:
+                for i, insight in enumerate(insights[:5]):  # Limit to top 5
+                    st.success(f"{i+1}. {insight}")
+            else:
+                st.info("Insufficient data to generate actionable insights. Try importing more lead and conversion data.")
                 
         except Exception as e:
             st.error(f"Error in conversion analysis: {str(e)}")

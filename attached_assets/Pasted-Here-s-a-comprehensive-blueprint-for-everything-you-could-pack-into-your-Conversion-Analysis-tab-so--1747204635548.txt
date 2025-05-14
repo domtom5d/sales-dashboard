@@ -1,0 +1,124 @@
+Here’s a comprehensive blueprint for everything you could pack into your Conversion Analysis tab—so it tells the full story of how leads move (or don’t) through your funnel. Organize it top‐to‐bottom as a logical narrative:
+
+1. KPI Summary Cards
+Display four big, bold numbers up top:
+
+Total Leads (count of resolved + unresolved submissions)
+
+Won Deals (Definite + Tentative)
+
+Lost Deals
+
+Overall Conversion Rate (Won ÷ (Won + Lost))
+
+With a mini sparkline underneath showing the weekly trend of that Conversion Rate.
+
+2. Date & Status Filters
+Allow users to drill the entire tab by:
+
+Date Range (Submission Date or Inquiry Date)
+
+Status (All / Only Won / Only Lost)
+
+State or Region (multi-select)
+
+3. Trend Analysis
+Conversion Rate Over Time
+
+Line chart of daily or weekly conversion rate.
+
+Overlay total lead-count line on a secondary axis for context.
+
+Lead Volume Over Time
+
+Bar or area chart of raw submissions vs. closed deals.
+
+Week-over-week % change indicator.
+
+4. Top-Level Drill-Downs
+For each, show a horizontal bar chart sorted by conversion rate, annotated with “n=” sample size, and only the top 5 (rest grouped into “Other”):
+
+By Booking Type (cleaned & aggregated)
+
+By Event Type (Corporate vs. Wedding vs. Private Party vs. Other)
+
+By Referral Source (Referral vs. Facebook vs. Google vs. Other)
+
+By Marketing Source (Ad campaigns, Organic, etc.)
+
+5. Timing-Based Breakouts
+Days Until Event
+
+Bins: ≤ 7d, 8–30d, 31–90d, > 90d
+
+Bar chart of conversion% by bin.
+
+Days Since Inquiry
+
+Bins: 0 d, 1–3 d, 4–7 d, 8–30 d, > 30 d
+
+Submission Hour
+
+Line or bar chart of conversion% by hour of day (0–23).
+
+Submission Weekday
+
+Bar chart of conversion% Mon–Sun.
+
+6. Price & Size Effects
+Price-Per-Guest
+
+Bins: < $50, $50–99, $100–199, ≥ $200
+
+Number of Guests
+
+Bins: 1–50, 51–100, 101–200, > 200
+
+Staff-to-Guest Ratio
+
+Bins: < 1%, 1–2%, 2–5%, > 5% (bartenders/guests)
+
+7. Geographic Insights
+Conversion by State/Region
+
+Map or bar chart showing geographic hotspots & cold zones.
+
+Area-Code Match
+
+Table: Local vs. Non-Local phone match conversion rates.
+
+8. Data-Quality & Anomalies
+Missing Data Summary
+
+% missing per key field (State, Phone, Event Date)
+
+Link or download all rows with any missing values
+
+Outliers
+
+Count of negative or implausible “Days Until Event”
+
+Any zero-guest submissions flagged
+
+9. Highlight Best & Worst
+Under each chart, automatically call out the highest and lowest performing bucket, e.g.:
+
+“Leads ≤ 7d out convert > 30d out by 35 percentage points.”
+
+10. Quick “What’s Next?” Panel
+At the bottom, summarize 3–5 actionable take-aways from this tab, e.g.:
+
+“Prioritize sub-7-day inquiries—45% close rate vs. 8% for > 30 days.”
+
+“Corporate events (25%) outperform weddings (12%).”
+
+“Price-per-guest > $200 yields 30% conversion—consider upsell focus.”
+
+Optional Extras
+Export CSV of filtered leads.
+
+Embed tooltips on hover to explain each metric.
+
+Collapsible sections (st.expander) to hide deep dives until needed.
+
+With this full suite—KPIs, trends, breakouts, quality checks, and real-time insights—you’ll transform your Conversion Analysis page into a single pane of glass for pinpointing exactly where your funnel wins (and where it leaks).
