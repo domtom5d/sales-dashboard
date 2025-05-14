@@ -227,12 +227,25 @@ if st.session_state.processed_df is not None:
             with col2:
                 # Plot conversion by referral source
                 st.write("#### Conversion by Referral Source")
-                fig, ax = plt.subplots(figsize=(8, 5))
-                conversion_rates["referral_source"].plot(kind="bar", x="Referral Source", y="Conversion Rate", ax=ax)
-                ax.set_xlabel("Referral Source")
-                ax.set_ylabel("Conversion Rate")
-                ax.set_ylim(0, min(1, conversion_rates["referral_source"]["Conversion Rate"].max() * 1.5))
-                st.pyplot(fig)
+                try:
+                    fig, ax = plt.subplots(figsize=(8, 5))
+                    # Check if the key exists in either case
+                    if "referral_source" in conversion_rates:
+                        ref_key = "referral_source"
+                    elif "Referral Source" in conversion_rates:
+                        ref_key = "Referral Source"
+                    else:
+                        st.error("No referral source data available")
+                        ref_key = None
+                        
+                    if ref_key:
+                        conversion_rates[ref_key].plot(kind="bar", x=ref_key, y="Conversion Rate", ax=ax)
+                        ax.set_xlabel("Referral Source")
+                        ax.set_ylabel("Conversion Rate")
+                        ax.set_ylim(0, min(1, conversion_rates[ref_key]["Conversion Rate"].max() * 1.5))
+                        st.pyplot(fig)
+                except Exception as e:
+                    st.error(f"Error displaying referral source data: {str(e)}")
             
             with col3:
                 # Plot conversion by days until event

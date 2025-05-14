@@ -330,7 +330,7 @@ def calculate_conversion_rates(df):
     if 'Referral Source' in df.columns:
         conv_referral = df.groupby('Referral Source')['Outcome'].mean().reset_index(name='Conversion Rate')
         if not conv_referral.empty:
-            conversion_rates['Referral Source'] = conv_referral
+            conversion_rates['referral_source'] = conv_referral
     
     # Marketing Source conversion rates
     if 'Marketing Source' in df.columns:
