@@ -367,8 +367,6 @@ if st.session_state.processed_df is not None:
                 st.metric("Avg. Daily Leads", f"{avg_daily:.1f}")
             with lead_col3:
                 st.metric("Days in Period", f"{len(daily_counts)}")
-            
-            st.pyplot(fig)
     
     # Apply date filter to the dataframe
     if 'inquiry_date' in filtered_df.columns:
