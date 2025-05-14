@@ -191,27 +191,90 @@ def setup_filters(df):
     }
 
 def apply_filters(df, filters):
-    """Apply selected filters to the dataframe"""
+    """
+    Apply selected filters to the dataframe in a centralized way
+    
+    Args:
+        df (DataFrame): DataFrame to filter
+        filters (dict): Dictionary containing filter settings
+            - date_range: Tuple of (start_date, end_date)
+            - status: 'All', 'Won', or 'Lost'
+            - states: List of state values or ['All']
+            - date_col: Column name to use for date filtering
+            
+    Returns:
+        DataFrame: Filtered dataframe
+    """
     filtered_df = df.copy()
     
-    # Date filter
-    if filters['date_range'] and len(filters['date_range']) == 2 and filters['date_col']:
-        start_date, end_date = filters['date_range']
-        mask = (
-            (filtered_df[filters['date_col']].dt.date >= start_date) & 
-            (filtered_df[filters['date_col']].dt.date <= end_date)
-        )
-        filtered_df = filtered_df[mask]
+    # First ensure all date columns are datetime type
+    if isinstance(filtered_df, pd.DataFrame) and len(filtered_df) > 0:
+        date_columns = ['inquiry_date', 'created', 'event_date']
+        for col in date_columns:
+            if col in filtered_df.columns and filtered_df[col].dtype != 'datetime64[ns]':
+                try:
+                    filtered_df[col] = pd.to_datetime(filtered_df[col], errors='coerce')
+                except Exception as e:
+                    st.warning(f"Error converting {col} to datetime: {e}")
     
-    # Status filter
-    if filters['status'] == 'Won':
-        filtered_df = filtered_df[filtered_df['outcome'] == 1]
-    elif filters['status'] == 'Lost':
-        filtered_df = filtered_df[filtered_df['outcome'] == 0]
+    # 1. Date filter
+    if (filters.get('date_range') and 
+        isinstance(filters['date_range'], (list, tuple)) and 
+        len(filters['date_range']) == 2 and 
+        filters.get('date_col') and 
+        filters['date_col'] in filtered_df.columns):
+        
+        try:
+            start_date, end_date = filters['date_range']
+            # Convert start and end dates to datetime for consistent comparison
+            start_date_pd = pd.to_datetime(start_date)
+            end_date_pd = pd.to_datetime(end_date)
+            
+            # Add time to end_date to include the full day
+            end_date_pd = end_date_pd + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+            
+            # Apply filter with safe handling of NaN values
+            if isinstance(filtered_df, pd.DataFrame) and len(filtered_df) > 0:
+                mask = (
+                    (filtered_df[filters['date_col']] >= start_date_pd) & 
+                    (filtered_df[filters['date_col']] <= end_date_pd)
+                )
+                filtered_df = filtered_df[mask.fillna(False)]
+                
+        except Exception as e:
+            st.warning(f"Error applying date filter: {e}")
     
-    # State filter
-    if filters['states'] and 'All' not in filters['states'] and 'state' in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df['state'].isin(filters['states'])]
+    # 2. Status filter - ensure outcome column is properly formatted as numeric
+    if isinstance(filtered_df, pd.DataFrame) and len(filtered_df) > 0:
+        if 'outcome' in filtered_df.columns:
+            try:
+                filtered_df['outcome'] = pd.to_numeric(filtered_df['outcome'], errors='coerce').fillna(0).astype(int)
+                
+                if filters.get('status') == 'Won':
+                    filtered_df = filtered_df[filtered_df['outcome'] == 1]
+                elif filters.get('status') == 'Lost':
+                    filtered_df = filtered_df[filtered_df['outcome'] == 0]
+            except Exception as e:
+                st.warning(f"Error applying status filter: {e}")
+    
+    # 3. State/Region filter - handle case insensitively
+    if (isinstance(filtered_df, pd.DataFrame) and 
+        len(filtered_df) > 0 and 
+        'state' in filtered_df.columns and 
+        filters.get('states') and 
+        isinstance(filters['states'], list) and
+        'All' not in filters['states']):
+        
+        try:
+            # Convert state values to string for consistent comparison
+            filtered_df['state'] = filtered_df['state'].astype(str)
+            
+            # Create mask with case-insensitive matching
+            state_values = [str(s).lower() for s in filters['states']]
+            mask = filtered_df['state'].str.lower().isin(state_values)
+            filtered_df = filtered_df[mask.fillna(False)]
+        except Exception as e:
+            st.warning(f"Error applying state/region filter: {e}")
     
     return filtered_df
 
