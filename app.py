@@ -233,6 +233,123 @@ if st.session_state.processed_df is not None:
     # Get the processed dataframe
     filtered_df = st.session_state.processed_df
     
+    # Add a summary of the data source
+    st.subheader("Data Source Summary")
+    
+    # Determine data source type
+    if data_source == "Sample Data":
+        source_type = "Sample Data"
+    elif data_source == "Database":
+        source_type = "Database"
+    elif data_source == "Upload CSV Files":
+        source_type = "CSV Upload"
+    else:
+        source_type = "Unknown"
+    
+    # Create dataframe with data source summary
+    df = filtered_df
+    won_count = df['outcome'].sum()
+    lost_count = len(df) - won_count
+    conversion_rate = (won_count / len(df)) * 100 if len(df) > 0 else 0
+    
+    summary_data = {
+        'Source': [source_type],
+        'Total Leads': [len(df)],
+        'Won Deals': [won_count],
+        'Lost Deals': [lost_count],
+        'Conversion Rate': [f"{conversion_rate:.1f}%"]
+    }
+    summary_df = pd.DataFrame(summary_data)
+    
+    # Display the summary
+    st.dataframe(summary_df, use_container_width=True)
+    
+    # Create a date range filter
+    st.subheader("Date Range Filter")
+    
+    # Calculate min and max dates from data
+    if 'inquiry_date' in df.columns:
+        df['inquiry_date'] = pd.to_datetime(df['inquiry_date'], errors='coerce')
+        min_date = df['inquiry_date'].min().date() if not pd.isna(df['inquiry_date'].min()) else datetime.date.today() - datetime.timedelta(days=365)
+        max_date = df['inquiry_date'].max().date() if not pd.isna(df['inquiry_date'].max()) else datetime.date.today()
+    else:
+        min_date = datetime.date.today() - datetime.timedelta(days=365)
+        max_date = datetime.date.today()
+    
+    # Create date range filter interface
+    date_col1, date_col2 = st.columns(2)
+    
+    with date_col1:
+        start_date = st.date_input("Start Date", min_date, min_value=min_date, max_value=max_date)
+    
+    with date_col2:
+        end_date = st.date_input("End Date", max_date, min_value=min_date, max_value=max_date)
+    
+    # Add sparkline of daily lead volume
+    if 'inquiry_date' in df.columns:
+        # Create daily lead count
+        df_daily = df.copy()
+        df_daily['inquiry_date'] = pd.to_datetime(df_daily['inquiry_date']).dt.date
+        daily_counts = df_daily.groupby('inquiry_date').size().reset_index(name='count')
+        
+        # Convert to datetime for better plotting
+        daily_counts['inquiry_date'] = pd.to_datetime(daily_counts['inquiry_date'])
+        
+        # Filter for selected date range
+        daily_counts = daily_counts[
+            (daily_counts['inquiry_date'].dt.date >= start_date) & 
+            (daily_counts['inquiry_date'].dt.date <= end_date)
+        ]
+        
+        # Create sparkline if we have data
+        if len(daily_counts) > 0:
+            st.write("**Daily Lead Volume**")
+            
+            fig, ax = plt.subplots(figsize=(10, 2))
+            ax.plot(daily_counts['inquiry_date'], daily_counts['count'], '-o', markersize=3)
+            
+            # Customize the plot for a clean sparkline look
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_visible(False)
+            ax.get_yaxis().set_ticks([])
+            
+            # Format the dates on the x-axis
+            ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%b %d'))
+            plt.xticks(rotation=45)
+            
+            # Add annotations for min and max values
+            min_idx = daily_counts['count'].idxmin()
+            max_idx = daily_counts['count'].idxmax()
+            
+            min_date = daily_counts.iloc[min_idx]['inquiry_date']
+            min_count = daily_counts.iloc[min_idx]['count']
+            
+            max_date = daily_counts.iloc[max_idx]['inquiry_date']
+            max_count = daily_counts.iloc[max_idx]['count']
+            
+            ax.annotate(f'{min_count}', 
+                        (min_date, min_count),
+                        xytext=(0, -15),
+                        textcoords='offset points',
+                        ha='center')
+            
+            ax.annotate(f'{max_count}', 
+                        (max_date, max_count),
+                        xytext=(0, 10),
+                        textcoords='offset points',
+                        ha='center')
+            
+            st.pyplot(fig)
+    
+    # Apply date filter to the dataframe
+    if 'inquiry_date' in filtered_df.columns:
+        filtered_df = filtered_df[
+            (filtered_df['inquiry_date'].dt.date >= start_date) & 
+            (filtered_df['inquiry_date'].dt.date <= end_date)
+        ]
+        st.info(f"Filtered to {len(filtered_df)} leads from {start_date} to {end_date}")
+    
     # Create tabs for different analysis views
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "📊 Conversion Analysis", 
