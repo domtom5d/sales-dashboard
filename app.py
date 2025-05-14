@@ -217,12 +217,25 @@ if st.session_state.processed_df is not None:
             with col1:
                 # Plot conversion by booking type
                 st.write("#### Conversion by Booking Type")
-                fig, ax = plt.subplots(figsize=(8, 5))
-                conversion_rates["booking_type"].plot(kind="bar", x="Booking Type", y="Conversion Rate", ax=ax)
-                ax.set_xlabel("Booking Type")
-                ax.set_ylabel("Conversion Rate")
-                ax.set_ylim(0, min(1, conversion_rates["booking_type"]["Conversion Rate"].max() * 1.5))
-                st.pyplot(fig)
+                try:
+                    fig, ax = plt.subplots(figsize=(8, 5))
+                    # Check if the key exists in either case
+                    if "booking_type" in conversion_rates:
+                        booking_key = "booking_type"
+                    elif "Booking Type" in conversion_rates:
+                        booking_key = "Booking Type"
+                    else:
+                        st.error("No booking type data available")
+                        booking_key = None
+                        
+                    if booking_key:
+                        conversion_rates[booking_key].plot(kind="bar", x=booking_key, y="Conversion Rate", ax=ax)
+                        ax.set_xlabel("Booking Type")
+                        ax.set_ylabel("Conversion Rate")
+                        ax.set_ylim(0, min(1, conversion_rates[booking_key]["Conversion Rate"].max() * 1.5))
+                        st.pyplot(fig)
+                except Exception as e:
+                    st.error(f"Error displaying booking type data: {str(e)}")
             
             with col2:
                 # Plot conversion by referral source
@@ -250,12 +263,25 @@ if st.session_state.processed_df is not None:
             with col3:
                 # Plot conversion by days until event
                 st.write("#### Conversion by Days Until Event")
-                fig, ax = plt.subplots(figsize=(8, 5))
-                conversion_rates["days_until_event"].plot(kind="bar", x="Days Until Event Bin", y="Conversion Rate", ax=ax)
-                ax.set_xlabel("Days Until Event")
-                ax.set_ylabel("Conversion Rate")
-                ax.set_ylim(0, min(1, conversion_rates["days_until_event"]["Conversion Rate"].max() * 1.5))
-                st.pyplot(fig)
+                try:
+                    fig, ax = plt.subplots(figsize=(8, 5))
+                    # Check if the key exists in either case
+                    if "DaysUntilBin" in conversion_rates:
+                        days_key = "DaysUntilBin"
+                    elif "days_until_event" in conversion_rates:
+                        days_key = "days_until_event"
+                    else:
+                        st.error("No days until event data available")
+                        days_key = None
+                        
+                    if days_key:
+                        conversion_rates[days_key].plot(kind="bar", x=days_key, y="Conversion Rate", ax=ax)
+                        ax.set_xlabel("Days Until Event")
+                        ax.set_ylabel("Conversion Rate")
+                        ax.set_ylim(0, min(1, conversion_rates[days_key]["Conversion Rate"].max() * 1.5))
+                        st.pyplot(fig)
+                except Exception as e:
+                    st.error(f"Error displaying days until event data: {str(e)}")
                 
         except Exception as e:
             st.error(f"Error in conversion analysis: {str(e)}")
