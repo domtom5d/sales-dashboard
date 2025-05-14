@@ -1,0 +1,234 @@
+Analysis errored
+python
+Always show details
+
+Copy
+import pandas as pd
+import numpy as np
+from ace_tools import display_dataframe_to_user
+
+# Load and prepare data
+leads_path = '/mnt/data/Streak Export_ Leads (5-12-25, 9_03 PM) - Boxes (Leads).csv'
+ops_path   = '/mnt/data/Streak Export_ Operations (5-12-25, 9_03 PM) - Boxes (Operations).csv'
+
+leads = pd.read_csv(leads_path, low_memory=False)
+ops   = pd.read_csv(ops_path, low_memory=False)
+
+# Prepare Outcome
+leads['Status'] = leads['Status'].astype(str).str.strip().str.lower()
+wins = {'definite','tentative'}
+losses = {'lost'}
+leads['Outcome'] = leads['Status'].map(lambda s: 1 if s in wins else 0 if s in losses else np.nan)
+leads = leads.dropna(subset=['Outcome'])
+leads['Outcome'] = leads['Outcome'].astype(int)
+
+# Merge deal value for price-based metrics
+if 'Box Key' in ops.columns and 'Actual Deal Value' in ops.columns:
+    ops['Actual Deal Value'] = pd.to_numeric(ops['Actual Deal Value'], errors='coerce')
+    df = pd.merge(leads, ops[['Box Key','Actual Deal Value']], on='Box Key', how='left')
+else:
+    df = leads.copy()
+
+# 1) Conversion by Event Month
+if 'Event Date' in df.columns:
+    df['Event Date'] = pd.to_datetime(df['Event Date'], errors='coerce')
+    df['EventMonth'] = df['Event Date'].dt.month_name()
+    month_summary = (
+        df.groupby('EventMonth')['Outcome']
+          .agg(Total='size', Won='sum')
+          .assign(Conversion=lambda x: x['Won']/x['Total'])
+          .reset_index()
+          .sort_values('Conversion', ascending=False)
+    )
+    month_summary['Conversion'] = (month_summary['Conversion']*100).round(1).astype(str)+'%'
+    display_dataframe_to_user('Conversion by Event Month', month_summary)
+
+# 2) Conversion by Day of Week of Inquiry
+if 'Days Since Inquiry' in df.columns and 'Event Date' in df.columns:
+    # assuming Inquiry Date available as 'Inquiry Date'
+    if 'Inquiry Date' in df.columns:
+        df['Inquiry Date'] = pd.to_datetime(df['Inquiry Date'], errors='coerce')
+        df['InquiryWeekday'] = df['Inquiry Date'].dt.day_name()
+        wkday_summary = (
+            df.groupby('InquiryWeekday')['Outcome']
+              .agg(Total='size', Won='sum')
+              .assign(Conversion=lambda x: x['Won']/x['Total'])
+              .reset_index()
+              .sort_values('Conversion', ascending=False)
+        )
+        wkday_summary['Conversion'] = (wkday_summary['Conversion']*100).round(1).astype(str)+'%'
+        display_dataframe_to_user('Conversion by Inquiry Weekday', wkday_summary)
+
+# 3) Conversion by Staff-to-Guest Ratio
+if 'Number Of Guests' in df.columns and 'Bartenders Needed' in df.columns:
+    df['StaffRatio'] = df['Bartenders Needed'] / df['Number Of Guests'].replace(0, np.nan)
+    bins = [0, 0.01, 0.02, 0.05, np.inf]
+    labels = ['<1%', '1-2%', '2-5%', '5%+']
+    df['StaffRatioBin'] = pd.cut(df['StaffRatio'], bins=bins, labels=labels)
+    sr_summary = (
+        df.groupby('StaffRatioBin')['Outcome']
+          .agg(Total='size', Won='sum')
+          .assign(Conversion=lambda x: x['Won']/x['Total'])
+          .reset_index()
+    )
+    sr_summary['Conversion'] = (sr_summary['Conversion']*100).round(1).astype(str)+'%'
+    display_dataframe_to_user('Conversion by Staff-to-Guest Ratio', sr_summary)
+
+# 4) Conversion by Upsell Options
+upsell_cols = [col for col in df.columns if 'Package' in col or 'Options' in col]
+for col in upsell_cols:
+    ups = (
+        df.groupby(df[col].fillna(False).astype(bool))['Outcome']
+          .agg(Total='size', Won='sum')
+          .assign(Conversion=lambda x: x['Won']/x['Total'])
+          .reset_index()
+    )
+    ups['Conversion'] = (ups['Conversion']*100).round(1).astype(str)+'%'
+    ups = ups.rename(columns={col: 'Option'})
+    display_dataframe_to_user(f'Conversion by {col}', ups)
+
+# 5) Conversion by Submission Hour
+if 'Created' in df.columns:
+    df['Created'] = pd.to_datetime(df['Created'], errors='coerce')
+    df['SubmitHour'] = df['Created'].dt.hour
+    hr_summary = (
+        df.groupby('SubmitHour')['Outcome']
+          .agg(Total='size', Won='sum')
+          .assign(Conversion=lambda x: x['Won']/x['Total'])
+          .reset_index()
+    )
+    hr_summary['Conversion'] = (hr_summary['Conversion']*100).round(1).astype(str)+'%'
+    display_dataframe_to_user('Conversion by Submission Hour', hr_summary)
+---------------------------------------------------------------------------
+FileNotFoundError                         Traceback (most recent call last)
+Cell In[1], line 9
+      6 leads_path = '/mnt/data/Streak Export_ Leads (5-12-25, 9_03 PM) - Boxes (Leads).csv'
+      7 ops_path   = '/mnt/data/Streak Export_ Operations (5-12-25, 9_03 PM) - Boxes (Operations).csv'
+----> 9 leads = pd.read_csv(leads_path, low_memory=False)
+     10 ops   = pd.read_csv(ops_path, low_memory=False)
+     12 # Prepare Outcome
+
+File ~/.local/lib/python3.11/site-packages/pandas/util/_decorators.py:211, in deprecate_kwarg.<locals>._deprecate_kwarg.<locals>.wrapper(*args, **kwargs)
+    209     else:
+    210         kwargs[new_arg_name] = new_arg_value
+--> 211 return func(*args, **kwargs)
+
+File ~/.local/lib/python3.11/site-packages/pandas/util/_decorators.py:331, in deprecate_nonkeyword_arguments.<locals>.decorate.<locals>.wrapper(*args, **kwargs)
+    325 if len(args) > num_allow_args:
+    326     warnings.warn(
+    327         msg.format(arguments=_format_argument_list(allow_args)),
+    328         FutureWarning,
+    329         stacklevel=find_stack_level(),
+    330     )
+--> 331 return func(*args, **kwargs)
+
+File ~/.local/lib/python3.11/site-packages/pandas/io/parsers/readers.py:950, in read_csv(filepath_or_buffer, sep, delimiter, header, names, index_col, usecols, squeeze, prefix, mangle_dupe_cols, dtype, engine, converters, true_values, false_values, skipinitialspace, skiprows, skipfooter, nrows, na_values, keep_default_na, na_filter, verbose, skip_blank_lines, parse_dates, infer_datetime_format, keep_date_col, date_parser, dayfirst, cache_dates, iterator, chunksize, compression, thousands, decimal, lineterminator, quotechar, quoting, doublequote, escapechar, comment, encoding, encoding_errors, dialect, error_bad_lines, warn_bad_lines, on_bad_lines, delim_whitespace, low_memory, memory_map, float_precision, storage_options)
+    935 kwds_defaults = _refine_defaults_read(
+    936     dialect,
+    937     delimiter,
+   (...)
+    946     defaults={"delimiter": ","},
+    947 )
+    948 kwds.update(kwds_defaults)
+--> 950 return _read(filepath_or_buffer, kwds)
+
+File ~/.local/lib/python3.11/site-packages/pandas/io/parsers/readers.py:605, in _read(filepath_or_buffer, kwds)
+    602 _validate_names(kwds.get("names", None))
+    604 # Create the parser.
+--> 605 parser = TextFileReader(filepath_or_buffer, **kwds)
+    607 if chunksize or iterator:
+    608     return parser
+
+File ~/.local/lib/python3.11/site-packages/pandas/io/parsers/readers.py:1442, in TextFileReader.__init__(self, f, engine, **kwds)
+   1439     self.options["has_index_names"] = kwds["has_index_names"]
+   1441 self.handles: IOHandles | None = None
+-> 1442 self._engine = self._make_engine(f, self.engine)
+
+File ~/.local/lib/python3.11/site-packages/pandas/io/parsers/readers.py:1735, in TextFileReader._make_engine(self, f, engine)
+   1733     if "b" not in mode:
+   1734         mode += "b"
+-> 1735 self.handles = get_handle(
+   1736     f,
+   1737     mode,
+   1738     encoding=self.options.get("encoding", None),
+   1739     compression=self.options.get("compression", None),
+   1740     memory_map=self.options.get("memory_map", False),
+   1741     is_text=is_text,
+   1742     errors=self.options.get("encoding_errors", "strict"),
+   1743     storage_options=self.options.get("storage_options", None),
+   1744 )
+   1745 assert self.handles is not None
+   1746 f = self.handles.handle
+
+File ~/.local/lib/python3.11/site-packages/pandas/io/common.py:856, in get_handle(path_or_buf, mode, encoding, compression, memory_map, is_text, errors, storage_options)
+    851 elif isinstance(handle, str):
+    852     # Check whether the filename is to be opened in binary mode.
+    853     # Binary mode does not support 'encoding' and 'newline'.
+    854     if ioargs.encoding and "b" not in ioargs.mode:
+    855         # Encoding
+--> 856         handle = open(
+    857             handle,
+    858             ioargs.mode,
+    859             encoding=ioargs.encoding,
+    860             errors=errors,
+    861             newline="",
+    862         )
+    863     else:
+    864         # Binary mode
+    865         handle = open(handle, ioargs.mode)
+
+FileNotFoundError: [Errno 2] No such file or directory: '/mnt/data/Streak Export_ Leads (5-12-25, 9_03 PM) - Boxes (Leads).csv'
+It looks like the CSV paths aren’t matching exactly in this environment. To keep things flexible, let’s modify the snippet to use the uploaded file references that Streamlit provides (e.g. uploaded_leads and uploaded_ops) instead of hardcoded paths.
+
+Place this in your Streamlit app right after you read the uploaded files:
+
+python
+Copy
+Edit
+# Assuming you have:
+# uploaded_leads = st.file_uploader("Upload Leads CSV")
+# uploaded_ops   = st.file_uploader("Upload Operations CSV")
+
+if uploaded_leads and uploaded_ops:
+    import pandas as pd
+    import numpy as np
+    
+    df_leads = pd.read_csv(uploaded_leads)
+    df_ops   = pd.read_csv(uploaded_ops)
+    
+    # (Rest of the code, replacing `leads` with `df_leads` and `ops` with `df_ops`)
+
+    # Now run the expanded findings code:
+    df_leads['Status'] = df_leads['Status'].astype(str).str.strip().str.lower()
+    wins = {'definite','tentative'}
+    losses = {'lost'}
+    df_leads['Outcome'] = df_leads['Status'].map(lambda s: 1 if s in wins else 0 if s in losses else np.nan)
+    df_leads = df_leads.dropna(subset=['Outcome']).astype({'Outcome':'int'})
+
+    # Merge operations
+    df_ops['Actual Deal Value'] = pd.to_numeric(df_ops.get('Actual Deal Value', pd.Series()), errors='coerce')
+    df = pd.merge(df_leads, df_ops[['Box Key','Actual Deal Value']], on='Box Key', how='left')
+    
+    # Then run each summary (e.g. Referral, Marketing, BookingType, etc.)
+    # ...
+    st.dataframe(ref_summary)
+    st.dataframe(mkt_summary)
+    st.dataframe(bt_summary)
+    st.dataframe(ppg_summary)
+    st.dataframe(dsi_summary)
+Use the in-memory uploaded_leads and uploaded_ops variables so your analyses always align with the user’s current upload—and you’ll avoid FileNotFound errors. Let me know once you swap in those references! 
+
+
+
+
+
+
+
+
+
+
+
+Search
+
+Deep research
+

@@ -1,0 +1,134 @@
+Analysis errored
+python
+Always show details
+
+Copy
+import pandas as pd
+import numpy as np
+from ace_tools import display_dataframe_to_user
+
+# 1) Load and merge your historical data
+leads_path = '/mnt/data/Streak Export_ Leads (5-12-25, 9_03 PM) - Boxes (Leads).csv'
+ops_path   = '/mnt/data/Streak Export_ Operations (5-12-25, 9_03 PM) - Boxes (Operations).csv'
+
+leads = pd.read_csv(leads_path, low_memory=False)
+ops   = pd.read_csv(ops_path, low_memory=False)
+
+# 2) Prepare Outcome
+leads['Status'] = leads['Status'].astype(str).str.strip().str.lower()
+wins  = {'definite','tentative'}
+losses = {'lost'}
+leads['Outcome'] = leads['Status'].map(lambda s: 1 if s in wins else 0 if s in losses else np.nan)
+leads = leads.dropna(subset=['Outcome'])
+leads['Outcome'] = leads['Outcome'].astype(int)
+
+# 3) Merge deal value
+if 'Box Key' in ops.columns and 'Actual Deal Value' in ops.columns:
+    ops['Actual Deal Value'] = pd.to_numeric(ops['Actual Deal Value'], errors='coerce')
+    df = pd.merge(leads, ops[['Box Key','Actual Deal Value']], on='Box Key', how='left')
+else:
+    df = leads.copy()
+
+# 4) Feature engineering: Price per Guest
+df['Number Of Guests'] = pd.to_numeric(df['Number Of Guests'], errors='coerce')
+df['PricePerGuest'] = df['Actual Deal Value'] / df['Number Of Guests'].replace(0, np.nan)
+
+# 5) New findings: Top Referral Sources
+if 'Referral Source' in df.columns:
+    ref_summary = (
+        df.groupby('Referral Source')['Outcome']
+          .agg(Total='size', Won='sum')
+          .assign(Conversion=lambda x: x['Won']/x['Total'])
+          .sort_values('Conversion', ascending=False)
+          .head(5)
+          .reset_index()
+    )
+    ref_summary['Conversion'] = (ref_summary['Conversion']*100).round(1).astype(str) + '%'
+    display_dataframe_to_user('Top 5 Referral Sources by Conversion', ref_summary)
+
+# 6) New findings: Top Marketing Sources
+if 'Marketing Source' in df.columns:
+    mkt_summary = (
+        df.groupby('Marketing Source')['Outcome']
+          .agg(Total='size', Won='sum')
+          .assign(Conversion=lambda x: x['Won']/x['Total'])
+          .sort_values('Conversion', ascending=False)
+          .head(5)
+          .reset_index()
+    )
+    mkt_summary['Conversion'] = (mkt_summary['Conversion']*100).round(1).astype(str) + '%'
+    display_dataframe_to_user('Top 5 Marketing Sources by Conversion', mkt_summary)
+
+# 7) New findings: Booking Type performance
+if 'Booking Type' in df.columns:
+    # consolidate low-volume and clean names
+    booking = df.copy()
+    booking['BookingTypeClean'] = (
+        booking['Booking Type']
+          .fillna('Unknown')
+          .astype(str)
+          .str.lower()
+          .str.replace(r'\d{4}$','', regex=True)
+          .str.title()
+    )
+    counts = booking['BookingTypeClean'].value_counts()
+    low_vol = counts[counts < 50].index
+    booking['BookingTypeClean'] = booking['BookingTypeClean'].replace(low_vol, 'Other')
+
+    bt_summary = (
+        booking.groupby('BookingTypeClean')['Outcome']
+               .agg(Total='size', Won='sum')
+               .assign(Conversion=lambda x: x['Won']/x['Total'])
+               .sort_values('Conversion', ascending=False)
+               .head(5)
+               .reset_index()
+    )
+    bt_summary['Conversion'] = (bt_summary['Conversion']*100).round(1).astype(str) + '%'
+    display_dataframe_to_user('Top 5 Booking Types by Conversion', bt_summary)
+
+# 8) New findings: PricePerGuest buckets
+ppg_bins = [0, 50, 100, 200, np.inf]
+ppg_labels = ['<50', '50-99', '100-199', '200+']
+df['PPG_Bin'] = pd.cut(df['PricePerGuest'], bins=ppg_bins, labels=ppg_labels)
+ppg_summary = (
+    df.groupby('PPG_Bin')['Outcome']
+      .agg(Total='size', Won='sum')
+      .assign(Conversion=lambda x: x['Won']/x['Total'])
+      .reset_index()
+)
+ppg_summary['Conversion'] = (ppg_summary['Conversion']*100).round(1).astype(str) + '%'
+display_dataframe_to_user('Conversion by Price per Guest Bin', ppg_summary)
+
+# 9) New findings: Days Since Inquiry bins
+dsi_bins = [0, 1, 3, 7, 30, np.inf]
+dsi_labels = ['0d', '1-3d', '4-7d', '8-30d', '30d+']
+df['DSI_Bin'] = pd.cut(df['Days Since Inquiry'], bins=dsi_bins, labels=dsi_labels)
+dsi_summary = (
+    df.groupby('DSI_Bin')['Outcome']
+      .agg(Total='size', Won='sum')
+      .assign(Conversion=lambda x: x['Won']/x['Total'])
+      .reset_index()
+)
+dsi_summary['Conversion'] = (dsi_summary['Conversion']*100).round(1).astype(str) + '%'
+display_dataframe_to_user('Conversion by Days Since Inquiry Bin', dsi_summary)
+
+It looks like the execution state reset, but you can paste that snippet into your Replit environment. It will generate:
+
+Top 5 Referral Sources by conversion
+
+Top 5 Marketing Sources by conversion
+
+Top 5 Booking Types by conversion (after cleaning/aggregating)
+
+Conversion rates by Price‐Per‐Guest bins
+
+Conversion rates by Days‐Since‐Inquiry bins
+
+Running that will surface five new actionable findings you can incorporate into your scorecard or dashboard. Let me know if you run into any errors or need further breakdowns! 
+
+
+
+
+
+
+

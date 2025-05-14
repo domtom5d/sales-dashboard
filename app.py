@@ -21,6 +21,7 @@ from evaluate import (
 )
 from findings import generate_findings
 from segmentation import segment_leads, plot_clusters, plot_cluster_conversion_rates, plot_feature_importance_by_cluster
+from advanced_analytics import run_all_analytics, plot_conversion_by_category
 
 # Set page config and title
 st.set_page_config(
@@ -233,14 +234,15 @@ if st.session_state.processed_df is not None:
     filtered_df = st.session_state.processed_df
     
     # Create tabs for different analysis views
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "📊 Conversion Analysis", 
         "🔍 Feature Correlation", 
         "🤖 Lead Scoring", 
         "🗃️ Raw Data",
         "📈 Key Findings",
         "🛈 Explanations",
-        "🧩 Lead Personas"
+        "🧩 Lead Personas",
+        "📊 Advanced Analytics"
     ])
     
     with tab1:
@@ -1432,6 +1434,261 @@ return {
                         3. **Customize your follow-up approach** based on persona characteristics
                         4. **Train sales team** on the unique needs of each persona
                         """)
+                        
+    # Advanced Analytics Tab
+    with tab8:
+        st.title("📊 Advanced Analytics")
+        
+        # Information about this tab
+        st.markdown("""
+        This tab provides deeper insights into conversion patterns across various dimensions of your business.
+        
+        ### What's Included
+        - **Referral Source Analysis**: Find your highest-converting referral channels
+        - **Marketing Source Analysis**: Measure which marketing efforts pay off
+        - **Booking Type Performance**: Identify your most profitable service types
+        - **Price Per Guest Analysis**: Determine optimal pricing strategies
+        - **Event Seasonality**: Discover monthly and day-of-week patterns
+        - **Staff Ratio Impact**: Find the optimal staffing level for conversions
+        """)
+        
+        if st.session_state.processed_df is None:
+            st.info("Please select a data source on the sidebar and process the data to use the Advanced Analytics features.")
+        else:
+            # Run analytics
+            with st.spinner("Running advanced analytics..."):
+                analytics_results = run_all_analytics(st.session_state.processed_df)
+            
+            # Create sections for each analytics type
+            st.header("Source & Channel Analysis")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Referral Sources
+                st.subheader("Top Referral Sources")
+                if analytics_results['referral_sources'] is not None:
+                    ref_df = analytics_results['referral_sources']
+                    st.dataframe(ref_df.iloc[:5][['referral_source', 'Total', 'Won', 'Conversion %']], use_container_width=True)
+                    
+                    # Plot
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    plot_conversion_by_category(
+                        st.session_state.processed_df,
+                        'referral_source',
+                        'Conversion Rate by Referral Source',
+                        ax=ax,
+                        top_n=8
+                    )
+                    st.pyplot(fig)
+                else:
+                    st.info("No referral source data available. Make sure your data includes a 'referral_source' column.")
+            
+            with col2:
+                # Marketing Sources
+                st.subheader("Top Marketing Sources")
+                if analytics_results['marketing_sources'] is not None:
+                    mkt_df = analytics_results['marketing_sources']
+                    st.dataframe(mkt_df.iloc[:5][['marketing_source', 'Total', 'Won', 'Conversion %']], use_container_width=True)
+                    
+                    # Plot
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    plot_conversion_by_category(
+                        st.session_state.processed_df,
+                        'marketing_source',
+                        'Conversion Rate by Marketing Source',
+                        ax=ax,
+                        top_n=8
+                    )
+                    st.pyplot(fig)
+                else:
+                    st.info("No marketing source data available. Make sure your data includes a 'marketing_source' column.")
+            
+            # Booking Types
+            st.header("Event & Booking Analysis")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Booking Types
+                st.subheader("Booking Type Performance")
+                if analytics_results['booking_types'] is not None:
+                    bt_df = analytics_results['booking_types']
+                    st.dataframe(bt_df[['booking_type_clean', 'Total', 'Won', 'Conversion %']], use_container_width=True)
+                    
+                    # Plot
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    plot_conversion_by_category(
+                        st.session_state.processed_df,
+                        'booking_type',
+                        'Conversion Rate by Booking Type',
+                        ax=ax,
+                        top_n=8
+                    )
+                    st.pyplot(fig)
+                else:
+                    st.info("No booking type data available. Make sure your data includes a 'booking_type' column.")
+            
+            with col2:
+                # Price Per Guest Analysis
+                st.subheader("Price Per Guest Impact")
+                if analytics_results['price_per_guest'] is not None:
+                    ppg_df = analytics_results['price_per_guest']
+                    st.dataframe(ppg_df[['ppg_bin', 'Total', 'Won', 'Conversion %']], use_container_width=True)
+                    
+                    # Create bar chart
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    bars = ax.bar(ppg_df['ppg_bin'], ppg_df['Conversion'].values, color='skyblue')
+                    
+                    # Add data labels
+                    for i, bar in enumerate(bars):
+                        height = bar.get_height()
+                        ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                                f"{height:.1%}\n(n={ppg_df.iloc[i]['Total']})",
+                                ha='center', va='bottom')
+                    
+                    # Customize plot
+                    ax.set_title('Conversion Rate by Price Per Guest', fontsize=14)
+                    ax.set_ylabel('Conversion Rate', fontsize=12)
+                    ax.set_ylim(0, max(ppg_df['Conversion'].values) * 1.3)
+                    ax.grid(axis='y', linestyle='--', alpha=0.7)
+                    
+                    st.pyplot(fig)
+                else:
+                    st.info("No price per guest data available. Make sure your data includes 'actual_deal_value' and 'number_of_guests' columns.")
+            
+            # Time and Seasonality Section
+            st.header("Time & Seasonality Analysis")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Days Since Inquiry Analysis
+                st.subheader("Days Since Inquiry Impact")
+                if analytics_results['days_since_inquiry'] is not None:
+                    dsi_df = analytics_results['days_since_inquiry']
+                    st.dataframe(dsi_df[['dsi_bin', 'Total', 'Won', 'Conversion %']], use_container_width=True)
+                    
+                    # Create bar chart
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    bars = ax.bar(dsi_df['dsi_bin'], dsi_df['Conversion'].values, color='skyblue')
+                    
+                    # Add data labels
+                    for i, bar in enumerate(bars):
+                        height = bar.get_height()
+                        ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                                f"{height:.1%}\n(n={dsi_df.iloc[i]['Total']})",
+                                ha='center', va='bottom')
+                    
+                    # Customize plot
+                    ax.set_title('Conversion Rate by Days Since Inquiry', fontsize=14)
+                    ax.set_ylabel('Conversion Rate', fontsize=12)
+                    ax.set_ylim(0, max(dsi_df['Conversion'].values) * 1.3)
+                    ax.grid(axis='y', linestyle='--', alpha=0.7)
+                    
+                    st.pyplot(fig)
+                else:
+                    st.info("No days since inquiry data available. Make sure your data includes a 'days_since_inquiry' column.")
+            
+            with col2:
+                # Event Month Analysis
+                st.subheader("Event Month Seasonality")
+                if analytics_results['event_month'] is not None:
+                    month_df = analytics_results['event_month']
+                    st.dataframe(month_df[['event_month', 'Total', 'Won', 'Conversion %']], use_container_width=True)
+                    
+                    # Create bar chart
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    bars = ax.bar(month_df['event_month'], month_df['Conversion'].values, color='skyblue')
+                    
+                    # Add data labels
+                    for i, bar in enumerate(bars):
+                        height = bar.get_height()
+                        ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                                f"{height:.1%}",
+                                ha='center', va='bottom')
+                    
+                    # Customize plot
+                    ax.set_title('Conversion Rate by Event Month', fontsize=14)
+                    ax.set_ylabel('Conversion Rate', fontsize=12)
+                    ax.set_ylim(0, max(month_df['Conversion'].values) * 1.3)
+                    ax.grid(axis='y', linestyle='--', alpha=0.7)
+                    plt.xticks(rotation=45)
+                    
+                    st.pyplot(fig)
+                else:
+                    st.info("No event month data available. Make sure your data includes an 'event_date' column.")
+            
+            # Staff Ratio & Day of Week
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Staff Ratio Analysis
+                st.subheader("Staff-to-Guest Ratio Impact")
+                if analytics_results['staff_ratio'] is not None:
+                    sr_df = analytics_results['staff_ratio']
+                    st.dataframe(sr_df[['staff_ratio_bin', 'Total', 'Won', 'Conversion %']], use_container_width=True)
+                    
+                    # Create bar chart
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    bars = ax.bar(sr_df['staff_ratio_bin'], sr_df['Conversion'].values, color='skyblue')
+                    
+                    # Add data labels
+                    for i, bar in enumerate(bars):
+                        height = bar.get_height()
+                        ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                                f"{height:.1%}\n(n={sr_df.iloc[i]['Total']})",
+                                ha='center', va='bottom')
+                    
+                    # Customize plot
+                    ax.set_title('Conversion Rate by Staff-to-Guest Ratio', fontsize=14)
+                    ax.set_ylabel('Conversion Rate', fontsize=12)
+                    ax.set_ylim(0, max(sr_df['Conversion'].values) * 1.3)
+                    ax.grid(axis='y', linestyle='--', alpha=0.7)
+                    
+                    st.pyplot(fig)
+                else:
+                    st.info("No staff ratio data available. Make sure your data includes 'bartenders_needed' and 'number_of_guests' columns.")
+            
+            with col2:
+                # Inquiry Weekday Analysis
+                st.subheader("Inquiry Day of Week")
+                if analytics_results['inquiry_weekday'] is not None:
+                    wkday_df = analytics_results['inquiry_weekday']
+                    st.dataframe(wkday_df[['inquiry_weekday', 'Total', 'Won', 'Conversion %']], use_container_width=True)
+                    
+                    # Create bar chart
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    bars = ax.bar(wkday_df['inquiry_weekday'], wkday_df['Conversion'].values, color='skyblue')
+                    
+                    # Add data labels
+                    for i, bar in enumerate(bars):
+                        height = bar.get_height()
+                        ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                                f"{height:.1%}\n(n={wkday_df.iloc[i]['Total']})",
+                                ha='center', va='bottom')
+                    
+                    # Customize plot
+                    ax.set_title('Conversion Rate by Inquiry Day of Week', fontsize=14)
+                    ax.set_ylabel('Conversion Rate', fontsize=12)
+                    ax.set_ylim(0, max(wkday_df['Conversion'].values) * 1.3)
+                    ax.grid(axis='y', linestyle='--', alpha=0.7)
+                    
+                    st.pyplot(fig)
+                else:
+                    st.info("No inquiry weekday data available. Make sure your data includes an 'inquiry_date' column.")
+            
+            # Add explanation text
+            st.markdown("""
+            ### How to Use These Insights
+            
+            1. **Focus resources on high-converting channels**: Prioritize your effort on referral and marketing sources with the highest conversion rates.
+            
+            2. **Optimize pricing strategy**: Use the price per guest analysis to determine the most effective pricing tiers.
+            
+            3. **Plan for seasonality**: Adjust staffing and marketing based on month-to-month patterns.
+            
+            4. **Streamline your process**: If same-day inquiries convert significantly better, consider improving your immediate response protocols.
+            
+            5. **Optimize staffing ratio**: Find the sweet spot for staff-to-guest ratio that maximizes both customer satisfaction and conversion rate.
+            """)
 
 else:
     # Display instructions when no data is loaded
