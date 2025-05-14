@@ -204,9 +204,24 @@ if st.session_state.processed_df is not None:
     
     # Apply filters to the dataframe
     filtered_copy = filtered_df.copy()
+    
+    # First ensure all date columns are properly formatted as datetime
+    for col in ['inquiry_date', 'created', 'event_date']:
+        if col in filtered_copy.columns:
+            if filtered_copy[col].dtype != 'datetime64[ns]':
+                try:
+                    filtered_copy[col] = pd.to_datetime(filtered_copy[col], errors='coerce')
+                except Exception as e:
+                    st.warning(f"Error converting {col} to datetime: {str(e)}")
+    
+    # Apply date filter if set
     if 'date_filter' in st.session_state and st.session_state.date_filter and len(st.session_state.date_filter) == 2:
         date_range = st.session_state.date_filter
         start_date, end_date = date_range
+        
+        # Convert start_date and end_date to pandas datetime
+        start_date_pd = pd.to_datetime(start_date)
+        end_date_pd = pd.to_datetime(end_date)
         
         date_col = None
         for col in ['inquiry_date', 'created', 'event_date']:
@@ -215,23 +230,47 @@ if st.session_state.processed_df is not None:
                 break
                 
         if date_col:
+            # Apply filter using more robust method
             mask = (
-                (filtered_copy[date_col].dt.date >= start_date) & 
-                (filtered_copy[date_col].dt.date <= end_date)
+                (filtered_copy[date_col] >= start_date_pd) & 
+                (filtered_copy[date_col] <= end_date_pd + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
             )
-            filtered_copy = filtered_copy[mask]
+            filtered_copy = filtered_copy[mask.fillna(False)]  # Handle NaN values
             st.info(f"Filtered to {len(filtered_copy)} leads from {start_date} to {end_date}")
     
     if 'status_filter' in st.session_state and st.session_state.status_filter != 'All':
-        if st.session_state.status_filter == 'Won':
-            filtered_copy = filtered_copy[filtered_copy['outcome'] == 1]
-        elif st.session_state.status_filter == 'Lost':
-            filtered_copy = filtered_copy[filtered_copy['outcome'] == 0]
+        # First convert outcome to numeric if needed
+        for outcome_col in ['outcome', 'Outcome']:
+            if outcome_col in filtered_copy.columns:
+                try:
+                    filtered_copy[outcome_col] = pd.to_numeric(filtered_copy[outcome_col], errors='coerce').fillna(0)
+                except Exception as e:
+                    st.warning(f"Error converting {outcome_col} to numeric: {str(e)}")
+        
+        # Apply the appropriate filter based on the outcome column name
+        outcome_col = 'outcome' if 'outcome' in filtered_copy.columns else 'Outcome' if 'Outcome' in filtered_copy.columns else None
+        
+        if outcome_col:
+            if st.session_state.status_filter == 'Won':
+                filtered_copy = filtered_copy[filtered_copy[outcome_col] == 1]
+            elif st.session_state.status_filter == 'Lost':
+                filtered_copy = filtered_copy[filtered_copy[outcome_col] == 0]
     
-    if 'region_filter' in st.session_state and 'All' not in st.session_state.region_filter:
-        state_col = 'State' if 'State' in filtered_copy.columns else 'state' 
-        if state_col in filtered_copy.columns:
-            filtered_copy = filtered_copy[filtered_copy[state_col].isin(st.session_state.region_filter)]
+    if 'region_filter' in st.session_state and st.session_state.region_filter and 'All' not in st.session_state.region_filter:
+        # Find the state column with various case patterns
+        state_col = None
+        for col_name in ['State', 'state', 'STATE']:
+            if col_name in filtered_copy.columns:
+                state_col = col_name
+                break
+        
+        if state_col:
+            # Convert to string to ensure matching works correctly
+            filtered_copy[state_col] = filtered_copy[state_col].astype(str)
+            
+            # Create a mask using case-insensitive matching for better results
+            mask = filtered_copy[state_col].str.lower().isin([s.lower() for s in st.session_state.region_filter])
+            filtered_copy = filtered_copy[mask.fillna(False)]
 
     with tab1:
         try:
