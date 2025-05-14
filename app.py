@@ -24,7 +24,7 @@ from evaluate import (
 from findings import generate_findings
 from segmentation import segment_leads, plot_clusters, plot_cluster_conversion_rates, plot_feature_importance_by_cluster
 from advanced_analytics import run_all_analytics, plot_conversion_by_category
-from conversion_analysis import run_conversion_analysis
+from conversion_analysis import run_conversion_analysis, normalize_data, apply_filters
 from mistral_insights import generate_sales_opportunity_analysis, generate_booking_type_recommendations, generate_customer_segment_insights
 
 # Set page config and title

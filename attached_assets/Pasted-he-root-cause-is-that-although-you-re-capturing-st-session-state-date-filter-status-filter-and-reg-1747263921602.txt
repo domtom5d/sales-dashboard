@@ -1,0 +1,93 @@
+he root cause is that, although you’re capturing st.session_state.date_filter, status_filter and region_filter, those aren’t ever being applied to the DataFrame that all your charts and metrics read from. You end up always plotting metrics off the full dataset.
+
+The simplest way to fix this is to:
+
+Load & normalize your raw data into a single raw_df early in app.py.
+
+Collect your three filters (date, status, region) from st.session_state.
+
+Call your existing apply_filters(raw_df, filters) exactly once—before you build any of the tabs—and assign that to a new df variable.
+
+Use df (the filtered version) everywhere in your Conversion Analysis tab (and beyond).
+
+1) At the top of your app.py, right after you read/normalize your uploads, add:
+python
+Copy
+Edit
+from conversion_analysis import normalize_data, apply_filters
+
+# — assume you’ve read your uploads into df_leads, df_ops —
+raw_df = normalize_data(df_leads, df_ops)
+
+# Build the filters dict
+filters = {
+    'date_range': st.session_state.get('date_filter', None),
+    'status':     st.session_state.get('status_filter', 'All'),
+    'states':     st.session_state.get('region_filter', ['All']),
+    # pick the best date column from your data
+    'date_col':   'inquiry_date' if 'inquiry_date' in raw_df.columns else
+                  'created'      if 'created'      in raw_df.columns else
+                  'event_date'   if 'event_date'   in raw_df.columns else
+                  None
+}
+
+# Apply once, up front
+df = apply_filters(raw_df, filters)
+2) Remove any other calls to filters inside your tabs
+Search for any code like:
+
+python
+Copy
+Edit
+filtered_copy = filtered_df.copy()
+...
+# manual re-filtering here
+and delete that block—now that you have a single df already filtered at the top.
+
+3) In your Conversion Analysis tab, switch every reference of filtered_df (or raw_df) to df.
+For example:
+
+diff
+Copy
+Edit
+- total = len(raw_df)
++ total = len(df)
+and in each chart:
+
+diff
+Copy
+Edit
+- conversion_by_category(raw_df, ...)
++ conversion_by_category(df,     ...)
+4) Verify that your date widget is storing into st.session_state.date_filter correctly:
+python
+Copy
+Edit
+# in your sidebar or header, you should have something like:
+if 'date_filter' not in st.session_state:
+    st.session_state.date_filter = [default_start, default_end]
+
+start, end = st.date_input(
+    "Date Range",
+    value=st.session_state.date_filter,
+    key="date_filter"
+)
+# Streamlit will now keep date_filter up‐to‐date in session_state
+Once you’ve:
+
+Centralized your filtering above the tab definitions
+
+Deleted any per‐tab re‐filtering
+
+Switched all your metrics/charts to consume df
+
+then changing the date range, status or region picker will immediately recalculate every KPI, chart and table in your Conversion Analysis tab. Restart, upload your data, pick a narrow date range, and you should see the numbers shrink down accordingly.
+
+
+
+
+
+
+
+
+
