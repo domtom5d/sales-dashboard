@@ -397,7 +397,11 @@ if st.session_state.processed_df is not None:
                         if len(df_plot) >= 2:
                             best = df_plot.iloc[0]
                             worst = df_plot.iloc[-1]
-                            st.info(f"**{best['Booking Type']}** converts {(best['Conversion Rate'] - worst['Conversion Rate']):.1%} better than **{worst['Booking Type']}**.")
+                            # Extract scalar values before formatting
+                            best_name = best['Booking Type']
+                            worst_name = worst['Booking Type']
+                            diff = float(best['Conversion Rate'] - worst['Conversion Rate'])
+                            st.info(f"**{best_name}** converts {diff:.1%} better than **{worst_name}**.")
                             
                 except Exception as e:
                     st.error(f"Error displaying booking type data: {str(e)}")
@@ -460,7 +464,11 @@ if st.session_state.processed_df is not None:
                         if len(df_plot) >= 2:
                             best = df_plot.iloc[0]
                             worst = df_plot.iloc[-1]
-                            st.info(f"**{best[ref_key]}** converts {(best['Conversion Rate'] - worst['Conversion Rate']):.1%} better than **{worst[ref_key]}**.")
+                            # Extract scalar values before formatting
+                            best_name = best[ref_key]
+                            worst_name = worst[ref_key]
+                            diff = float(best['Conversion Rate'] - worst['Conversion Rate'])
+                            st.info(f"**{best_name}** converts {diff:.1%} better than **{worst_name}**.")
                             
                 except Exception as e:
                     st.error(f"Error displaying referral source data: {str(e)}")
@@ -526,7 +534,11 @@ if st.session_state.processed_df is not None:
                         if len(df_plot) >= 2:
                             best = df_plot.iloc[0]
                             worst = df_plot.iloc[-1]
-                            st.info(f"**{best[event_key]}** converts {(best['Conversion Rate'] - worst['Conversion Rate']):.1%} better than **{worst[event_key]}**.")
+                            # Extract scalar values before formatting
+                            best_name = best[event_key]
+                            worst_name = worst[event_key]
+                            diff = float(best['Conversion Rate'] - worst['Conversion Rate'])
+                            st.info(f"**{best_name}** converts {diff:.1%} better than **{worst_name}**.")
                 except Exception as e:
                     st.error(f"Error displaying event type data: {str(e)}")
             
@@ -588,7 +600,11 @@ if st.session_state.processed_df is not None:
                         if len(df_plot) >= 2:
                             best = df_plot.iloc[0]
                             worst = df_plot.iloc[-1]
-                            st.info(f"**{best[mkt_key]}** converts {(best['Conversion Rate'] - worst['Conversion Rate']):.1%} better than **{worst[mkt_key]}**.")
+                            # Extract scalar values before formatting
+                            best_name = best[mkt_key]
+                            worst_name = worst[mkt_key]
+                            diff = float(best['Conversion Rate'] - worst['Conversion Rate'])
+                            st.info(f"**{best_name}** converts {diff:.1%} better than **{worst_name}**.")
                 except Exception as e:
                     st.error(f"Error displaying marketing source data: {str(e)}")
                             
@@ -647,7 +663,11 @@ if st.session_state.processed_df is not None:
                         difference = max_bin["Conversion Rate"] - min_bin["Conversion Rate"]
                         
                         # Display insight
-                        st.info(f"**{max_bin[days_key]}** leads convert {difference:.1%} better than **{min_bin[days_key]}** leads.")
+                        # Extract scalar values before formatting
+                        max_bin_name = max_bin[days_key]
+                        min_bin_name = min_bin[days_key]
+                        diff = float(difference)
+                        st.info(f"**{max_bin_name}** leads convert {diff:.1%} better than **{min_bin_name}** leads.")
                 except Exception as e:
                     st.error(f"Error displaying days until event data: {str(e)}")
             
@@ -706,7 +726,11 @@ if st.session_state.processed_df is not None:
                         difference = max_bin["rate"] - min_bin["rate"]
                         
                         # Display insight
-                        st.info(f"**{max_bin['dsi_bin']}** inquiry age converts {difference:.1%} better than **{min_bin['dsi_bin']}** inquiry age.")
+                        # Extract scalar values before formatting
+                        max_bin_name = max_bin['dsi_bin']
+                        min_bin_name = min_bin['dsi_bin']
+                        diff = float(difference)
+                        st.info(f"**{max_bin_name}** inquiry age converts {diff:.1%} better than **{min_bin_name}** inquiry age.")
                     except Exception as e:
                         st.error(f"Error analyzing days since inquiry: {str(e)}")
                 else:
@@ -769,7 +793,10 @@ if st.session_state.processed_df is not None:
                         
                         # Find best day
                         best_day = weekday_conv.loc[weekday_conv["rate"].idxmax()]
-                        st.info(f"**{best_day['weekday']}** is your highest-converting inquiry day at {best_day['rate']:.1%}.")
+                        # Extract scalar values before formatting
+                        best_day_name = best_day['weekday']
+                        best_day_rate = float(best_day['rate'])
+                        st.info(f"**{best_day_name}** is your highest-converting inquiry day at {best_day_rate:.1%}.")
                     except Exception as e:
                         st.error(f"Error analyzing weekdays: {str(e)}")
                 else:
@@ -839,9 +866,13 @@ if st.session_state.processed_df is not None:
                             diff = summer_rate - winter_rate
                             if abs(diff) > 0.05:  # Only show if difference is notable
                                 if diff > 0:
-                                    st.info(f"Summer months convert {diff:.1%} better than winter months.")
+                                    # Extract scalar value
+                                    diff_val = float(diff)
+                                    st.info(f"Summer months convert {diff_val:.1%} better than winter months.")
                                 else:
-                                    st.info(f"Winter months convert {abs(diff):.1%} better than summer months.")
+                                    # Extract scalar value
+                                    diff_val = float(abs(diff))
+                                    st.info(f"Winter months convert {diff_val:.1%} better than summer months.")
                     except Exception as e:
                         st.error(f"Error analyzing event months: {str(e)}")
                 else:
