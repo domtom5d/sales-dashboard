@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.dates import DateFormatter
 import base64
 import os
 import datetime
@@ -315,7 +316,7 @@ if st.session_state.processed_df is not None:
             ax.get_yaxis().set_ticks([])
             
             # Format the dates on the x-axis
-            ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%b %d'))
+            ax.xaxis.set_major_formatter(DateFormatter('%b %d'))
             plt.xticks(rotation=45)
             
             # Add annotations for min and max values
@@ -371,7 +372,43 @@ if st.session_state.processed_df is not None:
             
             # Summary metrics
             overall_conversion = conversion_rates["overall"]["Conversion Rate"][0]
-            st.metric("Overall Conversion Rate", f"{overall_conversion:.1%}")
+            
+            # Calculate week-over-week change in conversion rate
+            if 'inquiry_date' in filtered_df.columns:
+                # Get current data
+                current_df = filtered_df.copy()
+                
+                # Calculate previous week's date range
+                current_start = pd.to_datetime(start_date)
+                current_end = pd.to_datetime(end_date)
+                date_range = (current_end - current_start).days
+                
+                # Previous period
+                prev_end = current_start - pd.Timedelta(days=1)
+                prev_start = prev_end - pd.Timedelta(days=date_range)
+                
+                # Filter for previous period
+                prev_df = df[(df['inquiry_date'] >= prev_start) & 
+                             (df['inquiry_date'] <= prev_end)]
+                
+                # Calculate previous conversion rate
+                if len(prev_df) > 0:
+                    prev_conversion = prev_df['outcome'].mean()
+                    wow_change = overall_conversion - prev_conversion
+                    
+                    # Create metric with delta
+                    st.metric(
+                        "Overall Conversion Rate", 
+                        f"{overall_conversion:.1%}", 
+                        f"{wow_change:.1%}",
+                        delta_color="normal"
+                    )
+                else:
+                    # Just show current conversion if no previous data
+                    st.metric("Overall Conversion Rate", f"{overall_conversion:.1%}")
+            else:
+                # Fallback if no date data
+                st.metric("Overall Conversion Rate", f"{overall_conversion:.1%}")
             
             # Calculate and display time to conversion analysis
             st.subheader("⏱️ Time to Conversion Analysis")
@@ -381,7 +418,7 @@ if st.session_state.processed_df is not None:
                 st.warning(f"Could not analyze time to conversion: {time_to_conversion.get('error')}")
             else:
                 # Create metrics row
-                metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+                metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
                 
                 with metric_col1:
                     st.metric("Average Days", f"{time_to_conversion.get('average_days', 0):.1f}")
@@ -390,10 +427,25 @@ if st.session_state.processed_df is not None:
                     st.metric("Median Days", f"{time_to_conversion.get('median_days', 0):.1f}")
                 
                 with metric_col3:
-                    st.metric("Minimum Days", f"{time_to_conversion.get('min_days', 0)}")
+                    st.metric("90th Percentile", f"{time_to_conversion.get('percentile_90', 0):.1f}")
                 
                 with metric_col4:
+                    st.metric("Minimum Days", f"{time_to_conversion.get('min_days', 0)}")
+                
+                with metric_col5:
                     st.metric("Maximum Days", f"{time_to_conversion.get('max_days', 0)}")
+                
+                # Check for negative time anomalies
+                if 'negative_time_anomalies' in time_to_conversion and not time_to_conversion['negative_time_anomalies'].empty:
+                    st.warning("⚠️ **Data Quality Issue**: Negative time to conversion values detected")
+                    
+                    anomalies_df = time_to_conversion['negative_time_anomalies'].copy()
+                    anomalies_df.columns = ['Days to Conversion', 'Booking Type']
+                    anomalies_df = anomalies_df.sort_values('Days to Conversion')
+                    
+                    # Display in an expander to avoid cluttering the UI
+                    with st.expander("View Negative Time Anomalies"):
+                        st.dataframe(anomalies_df)
                 
                 # Display histogram of time to conversion
                 time_col1, time_col2 = st.columns(2)

@@ -228,6 +228,14 @@ def analyze_time_to_conversion(df):
                 result['min_days'] = won_leads['days_since_inquiry'].min()
                 result['max_days'] = won_leads['days_since_inquiry'].max()
                 
+                # Add 90th percentile calculation
+                result['percentile_90'] = won_leads['days_since_inquiry'].quantile(0.9)
+                
+                # Flag negative time values as anomalies
+                negative_times = won_leads[won_leads['days_since_inquiry'] < 0]
+                if len(negative_times) > 0:
+                    result['negative_time_anomalies'] = negative_times[['days_since_inquiry', 'booking_type']].sort_values('days_since_inquiry')
+                
                 # Group by booking type if available
                 if 'booking_type' in df.columns:
                     result['by_booking_type'] = won_leads.groupby('booking_type')['days_since_inquiry'].agg(
