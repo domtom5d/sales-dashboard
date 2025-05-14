@@ -1926,16 +1926,16 @@ if st.session_state.processed_df is not None:
                 with st.spinner("Generating insights with Mistral AI... This may take a moment."):
                     try:
                         if analysis_type == "Sales Opportunity Analysis":
-                            insights = generate_sales_opportunity_analysis(filtered_copy)
+                            insights = generate_sales_opportunity_analysis(filtered_df)
                             st.subheader("🔍 Sales Opportunity Analysis")
                         elif analysis_type == "Booking Type Recommendations":
                             # Get booking type conversion rates
-                            conversion_rates = calculate_conversion_rates(filtered_copy)
+                            conversion_rates = calculate_conversion_rates(filtered_df)
                             booking_type_data = conversion_rates.get('booking_type', pd.DataFrame())
-                            insights = generate_booking_type_recommendations(filtered_copy, booking_type_data)
+                            insights = generate_booking_type_recommendations(filtered_df, booking_type_data)
                             st.subheader("📝 Booking Type Recommendations")
                         else:  # Customer Segment Insights
-                            insights = generate_customer_segment_insights(filtered_copy)
+                            insights = generate_customer_segment_insights(filtered_df)
                             st.subheader("👥 Customer Segment Insights")
                             
                         # Display the insights in a nice format
