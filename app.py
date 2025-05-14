@@ -461,16 +461,8 @@ if st.session_state.processed_df is not None:
                     st.metric("Maximum Days", f"{time_to_conversion.get('max_days', 0)}")
                 
                 # Check for negative time anomalies
-                if 'negative_time_anomalies' in time_to_conversion and not time_to_conversion['negative_time_anomalies'].empty:
-                    st.warning("⚠️ **Data Quality Issue**: Negative time to conversion values detected")
-                    
-                    anomalies_df = time_to_conversion['negative_time_anomalies'].copy()
-                    anomalies_df.columns = ['Days to Conversion', 'Booking Type']
-                    anomalies_df = anomalies_df.sort_values('Days to Conversion')
-                    
-                    # Display in an expander to avoid cluttering the UI
-                    with st.expander("View Negative Time Anomalies"):
-                        st.dataframe(anomalies_df)
+                if 'has_negative_days' in time_to_conversion and time_to_conversion['has_negative_days']:
+                    st.warning(f"⚠️ **Data Quality Issue**: {time_to_conversion['negative_days_count']} records ({time_to_conversion['negative_days_percent']:.1f}%) show negative time-to-conversion. This indicates potential date entry errors in the source data.")
                 
                 # Display histogram of time to conversion
                 time_col1, time_col2 = st.columns(2)
@@ -718,7 +710,15 @@ if st.session_state.processed_df is not None:
                             display_df = time_to_conversion['by_event_type_detailed'].copy()
                             display_df['mean'] = display_df['mean'].round(1)
                             display_df['median'] = display_df['median'].round(1)
-                            display_df.columns = ['Event Type', 'Avg Days', 'Median Days', 'Count']
+                            
+                            # Handle column names based on whether std is included
+                            column_names = ['Event Type', 'Avg Days', 'Median Days']
+                            if 'std' in display_df.columns:
+                                display_df['std'] = display_df['std'].round(1)
+                                column_names.append('Std Dev')
+                            column_names.append('Count')
+                            
+                            display_df.columns = column_names
                             
                             # Sort by count descending and only show types with at least 2 occurrences
                             filtered_df = display_df[display_df['Count'] >= 2].sort_values(by='Count', ascending=False)

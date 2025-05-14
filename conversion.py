@@ -288,6 +288,19 @@ def analyze_time_to_conversion(df):
         result['min_days'] = won_leads['days_to_conversion'].min()
         result['max_days'] = won_leads['days_to_conversion'].max()
         
+        # Add 90th percentile for better understanding of distribution tail
+        result['percentile_90'] = won_leads['days_to_conversion'].quantile(0.9)
+        
+        # Detect any negative time-to-conversion values (data quality issue)
+        negative_days = won_leads[won_leads['days_to_conversion'] < 0]
+        result['negative_days_count'] = len(negative_days)
+        if len(negative_days) > 0:
+            result['has_negative_days'] = True
+            result['negative_days_percent'] = (len(negative_days) / len(won_leads)) * 100
+        else:
+            result['has_negative_days'] = False
+            result['negative_days_percent'] = 0
+        
         # By outcome (won vs lost)
         df_with_days = df.copy()
         if 'event_date' in df.columns:
