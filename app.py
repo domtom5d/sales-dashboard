@@ -207,6 +207,9 @@ if st.session_state.processed_df is not None:
             st.header("📊 Conversion Analysis Dashboard")
             st.markdown("Analyze how leads move through your sales funnel")
             
+            # Calculate conversion rates by different categories
+            conversion_rates = calculate_conversion_rates(filtered_df)
+            
             # Use our comprehensive conversion analysis module 
             run_conversion_analysis(filtered_df)
             
