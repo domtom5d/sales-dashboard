@@ -1,0 +1,221 @@
+elow is a comprehensive, self-contained plan (with code patterns) to fully flesh out your Conversion Analysis tab—handling every edge case and filling in every chart so you never see “No data” or Python errors again. Drop these into your Streamlit app (in your app.py or a helper module) after you load your uploaded CSV(s):
+
+0. Normalize & Clean Your Data
+python
+Copy
+Edit
+# After reading uploaded_leads & uploaded_ops into df_leads, df_ops:
+
+import pandas as pd
+import numpy as np
+
+# 1) Standardize column names
+df_leads.columns = (
+    df_leads.columns
+      .astype(str)
+      .str.strip()
+      .str.lower()
+      .str.replace(r'\s+','_', regex=True)
+)
+
+# 2) Parse & merge outcomes
+df_leads['status'] = df_leads['status'].astype(str).str.strip().str.lower()
+wins   = {'definite','tentative'}
+losses = {'lost'}
+df_leads['outcome'] = df_leads['status'].map(lambda s: 1 if s in wins else 0 if s in losses else np.nan)
+df_leads = df_leads.dropna(subset=['outcome'])
+df_leads['outcome'] = df_leads['outcome'].astype(int)
+
+# 3) Merge deal value if available
+if 'box_key' in df_ops.columns and 'actual_deal_value' in df_ops.columns:
+    df_ops['actual_deal_value'] = pd.to_numeric(df_ops['actual_deal_value'], errors='coerce')
+    df = df_leads.merge(df_ops[['box_key','actual_deal_value']], on='box_key', how='left')
+else:
+    df = df_leads.copy()
+1. KPI Summary
+python
+Copy
+Edit
+total_leads = len(df)
+won         = df['outcome'].sum()
+lost        = total_leads - won
+conv_rate   = won/total_leads if total_leads else 0
+
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Total Leads",     f"{total_leads:,}")
+col2.metric("Won Deals",       f"{won:,}")
+col3.metric("Lost Deals",      f"{lost:,}")
+col4.metric("Conversion Rate", f"{conv_rate:.1%}")
+2. Filters
+python
+Copy
+Edit
+with st.sidebar.expander("Filters"):
+    start, end = st.date_input("Date Range",
+        [df['created'].min(), df['created'].max()] if 'created' in df else [])
+    status_sel = st.selectbox("Status", ["All","Won","Lost"])
+    regions    = st.multiselect("State/Region",
+        sorted(df['state'].dropna().unique()), default=["All"])
+# then filter df accordingly...
+3. Trends Over Time
+python
+Copy
+Edit
+# ensure df['created'] is datetime
+df['created'] = pd.to_datetime(df.get('created', None), errors='coerce')
+df_time = df.dropna(subset=['created']).copy()
+df_time['week'] = df_time['created'].dt.to_period('W').dt.start_time
+
+agg = df_time.groupby('week').agg(
+    total=('outcome','size'),
+    won=('outcome','sum')
+).reset_index()
+agg['conv_rate'] = agg['won']/agg['total']
+
+st.line_chart(agg.set_index('week')['conv_rate'])
+st.bar_chart(agg.set_index('week')['total'])
+4. Conversion by Category (Top 5 & “Other”)
+Booking Type
+python
+Copy
+Edit
+if 'booking_type' in df:
+    bt = df['booking_type'].fillna('Unknown').astype(str).str.lower()
+    bt = bt.str.replace(r'\d{4}$','', regex=True).str.title()
+    counts = bt.value_counts()
+    keep   = counts[counts>=50].index
+    bt_clean = bt.where(bt.isin(keep), 'Other')
+    summary = (
+        pd.DataFrame({'booking_type': bt_clean, 'outcome': df['outcome']})
+        .groupby('booking_type')
+        .agg(total=('outcome','size'), won=('outcome','sum'))
+    )
+    summary['conv'] = summary['won']/summary['total']
+    top5 = summary.sort_values('conv', ascending=False).head(5)
+    fig, ax = plt.subplots()
+    ax.barh(top5.index, top5['conv'])
+    for i,(idx, row) in enumerate(top5.iterrows()):
+        ax.text(row['conv']+0.005, i, f"{row['conv']:.0%} (n={row['total']})")
+    st.pyplot(fig)
+else:
+    st.info("No Booking Type data available")
+Referral, Event & Marketing Sources
+python
+Copy
+Edit
+def plot_top_cat(col, title):
+    if col in df:
+        s = df[col].fillna('Unknown')
+        summary = (
+            pd.DataFrame({'cat':s, 'outcome':df['outcome']})
+            .groupby('cat').agg(total=('outcome','size'), won=('outcome','sum'))
+        )
+        summary['conv'] = summary['won']/summary['total']
+        top = summary.sort_values('conv', ascending=False).head(5)
+        st.bar_chart(top['conv'], use_container_width=True, height=200)
+    else:
+        st.info(f"No {title} data available")
+
+plot_top_cat('referral_source', "Referral Source")
+plot_top_cat('event_type',      "Event Type")
+plot_top_cat('marketing_source',"Marketing Source")
+5. Timing Factors
+Days Until Event
+python
+Copy
+Edit
+if 'days_until_event' in df:
+    bins  = [0,7,30,90, np.inf]
+    labs  = ['≤7d','8–30d','31–90d','90+d']
+    df['due_bin'] = pd.cut(pd.to_numeric(df['days_until_event'], errors='coerce'), bins, labels=labs)
+    s = df.groupby('due_bin')['outcome'].mean().fillna(0)
+    st.bar_chart(s)
+else:
+    st.info("No Days Until Event data available")
+Days Since Inquiry
+python
+Copy
+Edit
+if 'days_since_inquiry' in df:
+    bins = [0,1,3,7,30,np.inf]
+    labs = ['0d','1-3d','4-7d','8-30d','30d+']
+    df['dsi_bin'] = pd.cut(pd.to_numeric(df['days_since_inquiry'], errors='coerce'), bins, labels=labs)
+    st.bar_chart(df.groupby('dsi_bin')['outcome'].mean())
+else:
+    st.info("No Days Since Inquiry data available")
+Submission Weekday
+python
+Copy
+Edit
+if 'created' in df:
+    df['weekday'] = df['created'].dt.day_name()
+    rates = df.groupby('weekday')['outcome'].mean().reindex(
+        ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+    ).fillna(0)
+    st.bar_chart(rates)
+else:
+    st.info("No Submission timestamp available")
+6. Price & Size
+Number of Guests
+python
+Copy
+Edit
+if 'number_of_guests' in df:
+    bins = [0,50,100,200,500,np.inf]
+    labs = ['1-50','51-100','101-200','201-500','500+']
+    df['guest_bin'] = pd.cut(pd.to_numeric(df['number_of_guests'],errors='coerce'), bins, labels=labs)
+    summary = df.groupby('guest_bin')['outcome'].mean().fillna(0)
+    st.bar_chart(summary)
+else:
+    st.info("No Number of Guests data available")
+Staff-to-Guest Ratio
+python
+Copy
+Edit
+if {'bartenders_needed','number_of_guests'}.issubset(df):
+    df['ratio'] = df['bartenders_needed']/df['number_of_guests'].replace(0,np.nan)
+    bins = [0,0.01,0.02,0.05, np.inf]
+    labs = ['<1%','1-2%','2-5%','5%+']
+    df['ratio_bin'] = pd.cut(df['ratio'], bins, labels=labs)
+    st.bar_chart(df.groupby('ratio_bin')['outcome'].mean().fillna(0))
+else:
+    st.info("Staffing data unavailable")
+7. Geographic Insights
+python
+Copy
+Edit
+if 'state' in df:
+    rates = df.groupby('state')['outcome'].mean().sort_values(ascending=False)
+    st.bar_chart(rates)
+else:
+    st.info("No State/Region data available")
+8. Data Quality & Anomalies
+python
+Copy
+Edit
+# missing %
+miss = df.isna().mean().mul(100).round(1).reset_index()
+miss.columns = ['Field','% Missing']
+st.table(miss)
+
+# negative days_until_event
+if 'days_until_event' in df:
+    anomalies = df[df['days_until_event']<0].shape[0]
+    if anomalies:
+        st.warning(f"{anomalies} leads have negative Days Until Event (data error).")
+Putting It All Together
+Organize these blocks vertically in your Conversion Analysis tab. Each section gracefully handles missing data, explains itself when empty, and surfaces clean charts and tables when data exists. That way your users never see raw Python errors—only actionable insights.
+
+
+
+
+
+
+
+
+
+
+
+
+Search
+
