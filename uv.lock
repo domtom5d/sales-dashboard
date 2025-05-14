@@ -222,6 +222,15 @@ wheels = [
 ]
 
 [[package]]
+name = "eval-type-backport"
+version = "0.2.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/30/ea/8b0ac4469d4c347c6a385ff09dc3c048c2d021696664e26c7ee6791631b5/eval_type_backport-0.2.2.tar.gz", hash = "sha256:f0576b4cf01ebb5bd358d02314d31846af5e07678387486e2c798af0e7d849c1", size = 9079 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ce/31/55cd413eaccd39125368be33c46de24a1f639f2e12349b0361b4678f3915/eval_type_backport-0.2.2-py3-none-any.whl", hash = "sha256:cb6ad7c393517f476f96d456d0412ea80f0a8cf96f6892834cd9340149111b0a", size = 5830 },
+]
+
+[[package]]
 name = "fonttools"
 version = "4.58.0"
 source = { registry = "https://pypi.org/simple" }
@@ -617,6 +626,22 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ba/c7/473bc559beec08ebee9f86ca77a844b65747e1a6c2691e8c92e40b9f42a8/matplotlib-3.10.3-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f6929fc618cb6db9cb75086f73b3219bbb25920cb24cee2ea7a12b04971a4158", size = 8618082 },
     { url = "https://files.pythonhosted.org/packages/d8/e9/6ce8edd264c8819e37bbed8172e0ccdc7107fe86999b76ab5752276357a4/matplotlib-3.10.3-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:6c7818292a5cc372a2dc4c795e5c356942eb8350b98ef913f7fda51fe175ac5d", size = 9413699 },
     { url = "https://files.pythonhosted.org/packages/1b/92/9a45c91089c3cf690b5badd4be81e392ff086ccca8a1d4e3a08463d8a966/matplotlib-3.10.3-cp313-cp313t-win_amd64.whl", hash = "sha256:4f23ffe95c5667ef8a2b56eea9b53db7f43910fa4a2d5472ae0f72b64deab4d5", size = 8139044 },
+]
+
+[[package]]
+name = "mistralai"
+version = "1.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "eval-type-backport" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "python-dateutil" },
+    { name = "typing-inspection" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/98/d0/11e0116a02aa88701422ccc048185ed8834754f3b94140bfad09620c9d11/mistralai-1.7.0.tar.gz", hash = "sha256:94e3eb23c1d3ed398a95352062fd8c92993cc3754ed18e9a35b60aa3db0bd103", size = 141981 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/77/eb7519ddfccb6428ac430129e7b42cc662e710cb719f82c0ffe79ab50859/mistralai-1.7.0-py3-none-any.whl", hash = "sha256:e0e75ab8508598d69ae19b14d9d7e905db6259a2de3cf9204946a27e9bf81c5d", size = 301483 },
 ]
 
 [[package]]
@@ -1018,6 +1043,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "matplotlib" },
+    { name = "mistralai" },
     { name = "numpy" },
     { name = "openai" },
     { name = "pandas" },
@@ -1032,6 +1058,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.3" },
+    { name = "mistralai", specifier = ">=1.7.0" },
     { name = "numpy", specifier = ">=2.2.5" },
     { name = "openai", specifier = ">=1.78.1" },
     { name = "pandas", specifier = ">=2.2.3" },

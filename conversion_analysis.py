@@ -99,6 +99,10 @@ def normalize_data(df_leads, df_ops=None):
 
 def display_kpi_summary(df):
     """Display key performance indicators in a row of metric cards"""
+    # --- Intro copy for Conversion Analysis tab ---
+    st.markdown("## Conversion Analysis<br>Get a top-level view of overall leads and how many are converting into won deals, all over time.", unsafe_allow_html=True)
+    
+    # --- KPI Summary cards ---
     total_leads = len(df)
     won = df['outcome'].sum()
     lost = total_leads - won
@@ -109,6 +113,29 @@ def display_kpi_summary(df):
     col2.metric("Won Deals", f"{won:,}")
     col3.metric("Lost Deals", f"{lost:,}")
     col4.metric("Conversion Rate", f"{conv_rate:.1%}")
+    
+    # Sparkline under the conversion rate
+    date_col = None
+    for col in ['inquiry_date', 'created', 'event_date']:
+        if col in df.columns:
+            date_col = col
+            break
+    
+    if date_col:
+        # Create weekly conversion rate data for sparkline
+        try:
+            weekly = df.set_index(date_col).resample('W')['outcome'].agg(['size','sum'])
+            weekly['rate'] = weekly['sum'] / weekly['size']
+            weekly['rate'] = weekly['rate'].fillna(0)
+            
+            # Only show sparkline if we have data
+            if not weekly.empty and weekly['size'].sum() > 0:
+                with col4:
+                    st.line_chart(weekly['rate'], height=100, use_container_width=True)
+        except Exception as e:
+            # Handle any errors gracefully
+            with col4:
+                st.info("Weekly trend data not available")
 
 def setup_filters(df):
     """Setup sidebar filters for the dashboard"""

@@ -1,0 +1,55 @@
+Context:
+We have a Streamlit app with multiple tabs. We are focusing only on the 📊 Conversion Analysis tab. Please do not delete or alter any existing code outside of this tab’s section—just append and enhance.
+
+Task:
+
+At the very top of the Conversion Analysis tab, insert a brief introduction (1–2 sentences) explaining the purpose of this tab: to give a high-level view of how leads convert.
+
+Under that intro, implement the KPI Summary section. You should:
+
+Create four metric cards (Total Leads, Won Deals, Lost Deals, Conversion Rate) using st.columns and col.metric().
+
+Show a sparkline of weekly Conversion Rate beneath the Conversion Rate card.
+
+Handle missing or zero-division cases gracefully (e.g. default to 0 or "N/A").
+
+Format numbers with thousands separators (:,) and percentages with one decimal (:.1%).
+
+Give a fully-worked code snippet showing how to pull values from your df DataFrame, compute the metrics, and render the cards.
+
+Example snippet start (you do not have to match indentation exactly, but follow this pattern):
+
+python
+Copy
+Edit
+# --- Intro copy for Conversion Analysis tab ---
+st.markdown("## Conversion Analysis<br>Get a top-level view of overall leads and how many are converting into won deals, all over time.", unsafe_allow_html=True)
+
+# --- KPI Summary cards ---
+total = len(df)
+won   = df['outcome'].sum()
+lost  = total - won
+rate  = won / total if total else 0
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Total Leads", f"{total:,}")
+c2.metric("Won Deals",   f"{won:,}")
+c3.metric("Lost Deals",  f"{lost:,}")
+
+# Sparkline under the conversion rate
+weekly = df.set_index('created').resample('W')['outcome'].agg(['size','sum'])
+weekly['rate'] = weekly['sum'] / weekly['size']
+c4.metric("Conversion Rate", f"{rate:.1%}")
+c4.line_chart(weekly['rate'])
+Once that KPI section code is inserted, stop—we’ll iterate on the next drill-downs in follow-up prompts.
+
+Remember:
+
+Don’t remove or rewrite any code outside of this section.
+
+Be explicit about imports (import pandas as pd, etc.) only if you reference new functions.
+
+Use clear comments to delineate Intro, KPI Summary, and Sparkline.
+
+Show exactly where in the file the snippet goes (e.g. “in the with tabs[0]: block under Conversion Analysis”).
+
