@@ -204,20 +204,11 @@ if st.session_state.processed_df is not None:
     
     with tab1:
         try:
-            # Calculate conversion rates by different categories
-            conversion_rates = calculate_conversion_rates(filtered_df)
-            
             st.header("📊 Conversion Analysis Dashboard")
             st.markdown("Analyze how leads move through your sales funnel")
             
-            # 1. KPI Summary Cards (4 key metrics in a row)
-            st.subheader("Key Performance Indicators")
-            
-            # Count metrics from the data
-            total_leads = len(filtered_df)
-            won_deals = filtered_df['Won'].sum() if 'Won' in filtered_df.columns else 0
-            lost_deals = filtered_df['Lost'].sum() if 'Lost' in filtered_df.columns else 0
-            overall_conversion = conversion_rates["overall"]["Conversion Rate"][0]
+            # Use our comprehensive conversion analysis module 
+            run_conversion_analysis(filtered_df)
             
             # Display metrics in 4 columns
             col1, col2, col3, col4 = st.columns(4)

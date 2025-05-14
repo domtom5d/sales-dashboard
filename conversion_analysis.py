@@ -309,24 +309,24 @@ def plot_top_categories(df, col, title, min_count=10):
                 # Sort and get top categories
                 if isinstance(summary, pd.DataFrame) and 'conv' in summary.columns:
                     top = summary.sort_values('conv', ascending=False).head(5)
+                    
+                    # Create horizontal bar chart with annotations
+                    fig, ax = plt.subplots(figsize=(10, 5))
+                    bars = ax.barh(top.index, top['conv'])
                 
-                # Create horizontal bar chart with annotations
-                fig, ax = plt.subplots(figsize=(10, 5))
-                bars = ax.barh(top.index, top['conv'])
+                    # Add data labels
+                    for i, (idx, row) in enumerate(top.iterrows()):
+                        ax.text(
+                            row['conv'] + 0.01, 
+                            i, 
+                            f"{row['conv']:.1%} (n={row['total']})"
+                        )
                 
-                # Add data labels
-                for i, (idx, row) in enumerate(top.iterrows()):
-                    ax.text(
-                        row['conv'] + 0.01, 
-                        i, 
-                        f"{row['conv']:.1%} (n={row['total']})"
-                    )
-                
-                ax.set_xlim(0, min(1, top['conv'].max() * 1.2))
-                ax.set_title(f"Top {title} Conversion Rates")
-                ax.set_xlabel("Conversion Rate")
-                plt.tight_layout()
-                st.pyplot(fig)
+                    ax.set_xlim(0, min(1, top['conv'].max() * 1.2))
+                    ax.set_title(f"Top {title} Conversion Rates")
+                    ax.set_xlabel("Conversion Rate")
+                    plt.tight_layout()
+                    st.pyplot(fig)
             else:
                 st.info(f"Not enough {title} data to analyze (need at least {min_count} leads per category)")
         except Exception as e:
