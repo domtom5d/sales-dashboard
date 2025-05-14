@@ -227,22 +227,19 @@ if st.session_state.processed_df is not None:
         "🧠 AI Insights"
     ])
     
-    # Create a filtered copy for the tabs
-    filtered_copy = filtered_df.copy()
-    
     # First ensure all date columns are properly formatted as datetime
     for col in ['inquiry_date', 'created', 'event_date']:
-        if col in filtered_copy.columns:
-            if filtered_copy[col].dtype != 'datetime64[ns]':
+        if col in filtered_df.columns:
+            if filtered_df[col].dtype != 'datetime64[ns]':
                 try:
-                    filtered_copy[col] = pd.to_datetime(filtered_copy[col], errors='coerce')
+                    filtered_df[col] = pd.to_datetime(filtered_df[col], errors='coerce')
                 except Exception as e:
                     st.warning(f"Error converting {col} to datetime: {str(e)}")
     
     # Show info about applied filters
     if 'date_filter' in st.session_state and st.session_state.date_filter and len(st.session_state.date_filter) == 2:
         start_date, end_date = st.session_state.date_filter
-        st.info(f"Filtered to {len(filtered_copy)} leads from {start_date} to {end_date}")
+        st.info(f"Filtered to {len(filtered_df)} leads from {start_date} to {end_date}")
     
     # Note: We're not applying the filters here anymore, as it's already done with apply_filters() above
     
@@ -256,11 +253,11 @@ if st.session_state.processed_df is not None:
             st.markdown("## Conversion Analysis<br>Get a top-level view of overall leads and how many are converting into won deals, all over time.", unsafe_allow_html=True)
             
             # Calculate conversion rates by different categories
-            conversion_rates = calculate_conversion_rates(filtered_copy)
+            conversion_rates = calculate_conversion_rates(filtered_df)
             
             # --- KPI Summary cards ---
-            total_leads = len(filtered_copy)
-            won = filtered_copy['outcome'].sum() if 'outcome' in filtered_copy.columns else 0
+            total_leads = len(filtered_df)
+            won = filtered_df['outcome'].sum() if 'outcome' in filtered_df.columns else 0
             lost = total_leads - won
             conv_rate = won / total_leads if total_leads > 0 else 0
 
@@ -273,14 +270,14 @@ if st.session_state.processed_df is not None:
             # Sparkline under the conversion rate
             date_col = None
             for col in ['inquiry_date', 'created', 'event_date']:
-                if col in filtered_copy.columns:
+                if col in filtered_df.columns:
                     date_col = col
                     break
             
             if date_col:
                 try:
                     # Create weekly conversion rate data for sparkline
-                    weekly = filtered_copy.set_index(date_col).resample('W')['outcome'].agg(['size','sum'])
+                    weekly = filtered_df.set_index(date_col).resample('W')['outcome'].agg(['size','sum'])
                     weekly['rate'] = weekly['sum'] / weekly['size']
                     weekly['rate'] = weekly['rate'].fillna(0)
                     
@@ -293,7 +290,7 @@ if st.session_state.processed_df is not None:
                         st.info("Weekly trend data not available")
             
             # Comment out the run_conversion_analysis call for now
-            # run_conversion_analysis(filtered_copy)
+            # run_conversion_analysis(filtered_df)
             
             filter_col1, filter_col2, filter_col3 = st.columns(3)
             
