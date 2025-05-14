@@ -306,6 +306,9 @@ def analyze_time_to_conversion(df):
             result['by_booking_type'] = won_leads.groupby('booking_type')['days_to_conversion'].agg(
                 ['mean', 'median', 'count']).reset_index()
         
+        # Save raw days data for violin plots
+        result['days_data'] = won_leads['days_to_conversion'].dropna().tolist()
+        
         # By event type if available - with grouping of similar event types
         if 'event_type' in won_leads.columns or 'lead_trigger' in won_leads.columns:
             # Create a copy with standardized event type
