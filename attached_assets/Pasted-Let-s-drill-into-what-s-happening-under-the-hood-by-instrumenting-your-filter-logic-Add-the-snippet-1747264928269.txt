@@ -1,0 +1,148 @@
+Let’s drill into what’s happening under the hood by instrumenting your filter logic. Add the snippet below at the top of your Conversion Analysis tab—right after you build your df = apply_filters(...)—so you can see exactly what DataFrame you’re working with and what the filters are doing:
+
+python
+Copy
+Edit
+import pandas as pd
+
+# Debug: show what filters Streamlit thinks you’ve selected
+st.write("🔍 Debug Filters")
+st.write({
+    "date_filter":  st.session_state.get("date_filter"),
+    "status_filter":st.session_state.get("status_filter"),
+    "region_filter":st.session_state.get("region_filter")
+})
+
+# Debug: show your raw vs. filtered DataFrame counts
+# (Assuming raw_df holds the unfiltered data)
+try:
+    st.write("Raw rows:", len(raw_df))
+    st.write("Filtered rows:", len(df))
+    
+    # Inspect the date column dtypes and min/max
+    date_col = filters.get("date_col")
+    if date_col in df:
+        st.write(f"{date_col} dtype:", df[date_col].dtype)
+        st.write(f"{date_col} min/max:", df[date_col].min(), "/", df[date_col].max())
+    else:
+        st.write(f"Date column `{date_col}` not found in filtered df")
+except Exception as e:
+    st.error(f"Debugging error: {e}")
+What this does
+
+Prints the current values of your date, status, and region filters, so you can confirm they’re actually being set in session_state.
+
+Compares the row-count of your raw_df (before filters) vs. your filtered df (after filters). If they’re identical, you know the filter itself isn’t being applied.
+
+Shows the data type and range (min/max) of the date column you’re filtering on—often the culprit if your filter picks a non-existent or mis-typed column.
+
+Next steps
+Paste that debugging block into your Conversion Analysis tab (inside with tabs[0]:).
+
+Restart Streamlit and change your date/status/region pickers.
+
+Observe the debug output:
+
+Do the filters in the dict change when you pick a new date?
+
+Does the “Filtered rows” count go down when you narrow the date range?
+
+Does the date‐column min/max cover your selected window?
+
+Once we see that debug information, we can pinpoint whether:
+
+The widgets aren’t storing into session_state
+
+We’re applying the wrong date column or filter logic
+
+The apply_filters helper has a bug
+
+Let me know exactly what you see in these debug panels, and we’ll zero in on the fix.
+
+
+
+
+
+
+
+
+You said:
+
+
+ChatGPT said:
+
+Thought for 25 seconds
+We’re at the point where nothing we tweak in the UI seems to actually be driving your charts, which almost always means one of two things:
+
+Our filters are never applied (we build the widgets but never slice the DataFrame), or
+
+We’re filtering on the wrong column names or types (the picker is pushing dates into session_state, but apply_filters is looking for inquiry_date when your DataFrame only has event_date, or strings vs. datetimes, etc.)
+
+Next Steps to Pinpoint & Fix
+1. Dump your DataFrame schema
+Right at the top of your Conversion Analysis tab (inside with tabs[0]:), add:
+
+python
+Copy
+Edit
+st.write("### Debug: DataFrame Schema")
+st.write("Columns:", df.columns.tolist())
+st.write(df.dtypes)
+st.write("Sample rows:", df.head(3))
+That will show you exactly what columns you have (names, cases, underscores) and what dtypes they are. Confirm you actually have a datetime column named what you think.
+
+2. Show the raw vs. filtered counts
+Immediately after you call your filter helper (e.g. df = apply_filters(raw_df, filters)), add:
+
+python
+Copy
+Edit
+st.write(f"Raw rows before filtering: {len(raw_df)}")
+st.write(f"Rows after filtering: {len(df)}")
+If these two numbers are identical—even after changing your date picker—your filter function isn’t doing anything. If they differ but the charts still don’t change, you may be accidentally ignoring df later on.
+
+3. Paste in your filter function
+Please copy–paste here the entire apply_filters(...) function (or however you named it) from your utils.py (or wherever you live-load it). We need to see:
+
+What keys it expects (date_filter, start_date, end_date, status, regions, etc.)
+
+Which columns it tries to compare against (do they exist and match exactly?).
+
+4. Verify widget keys match
+Make sure your widgets use the exact same keys as your filter function. For example:
+
+python
+Copy
+Edit
+# In sidebar or top of tab
+start, end = st.date_input("Date Range", key="date_range", ...)
+status_sel = st.selectbox("Status", key="status_filter", ...)
+regions    = st.multiselect("State/Region", key="region_filter", ...)
+
+# In apply_filters
+date_range = session_state["date_filter"]     # ← mismatch here!
+If your date picker writes into session_state["date_range"] but your filter reads "date_filter", you’ll never pass any dates.
+
+Once you post:
+
+The dumped schema (df.columns & df.dtypes)
+
+The raw vs. filtered counts
+
+Your apply_filters() implementation
+
+I can pinpoint exactly where the disconnect is and provide the precise one-line fix to make the date, status and region pickers truly drive your Conversion Analysis tab.
+
+
+
+
+
+
+
+
+
+
+
+Search
+
+Deep research

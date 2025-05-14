@@ -252,6 +252,33 @@ if st.session_state.processed_df is not None:
             # --- Intro copy for Conversion Analysis tab ---
             st.markdown("## Conversion Analysis<br>Get a top-level view of overall leads and how many are converting into won deals, all over time.", unsafe_allow_html=True)
             
+            # Add debug section to help troubleshoot filtering
+            with st.expander("🔍 Debug Filters", expanded=False):
+                st.write("Current Filter Settings:")
+                st.write({
+                    "date_filter": st.session_state.get("date_filter"),
+                    "status_filter": st.session_state.get("status_filter"),
+                    "region_filter": st.session_state.get("region_filter")
+                })
+                
+                # Debug: show raw vs. filtered DataFrame counts
+                st.write("Raw rows before filtering:", len(raw_df))
+                st.write("Filtered rows after filtering:", len(filtered_df))
+                
+                # Inspect the date column dtypes and min/max
+                date_col = filters.get("date_col")
+                if date_col in filtered_df.columns:
+                    st.write(f"{date_col} dtype:", filtered_df[date_col].dtype)
+                    st.write(f"{date_col} min/max:", filtered_df[date_col].min(), "/", filtered_df[date_col].max())
+                else:
+                    st.write(f"Date column `{date_col}` not found in filtered df")
+                    
+                # Show DataFrame schema
+                st.write("### DataFrame Schema")
+                st.write("Columns:", filtered_df.columns.tolist())
+                st.write(filtered_df.dtypes)
+                st.write("Sample rows:", filtered_df.head(3))
+            
             # Calculate conversion rates by different categories
             conversion_rates = calculate_conversion_rates(filtered_df)
             
