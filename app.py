@@ -888,7 +888,7 @@ if st.session_state.processed_df is not None:
                         df_guests['guest_bin'] = pd.cut(df_guests[guests_col], bins=bins, labels=labels)
                         
                         # Calculate conversion rates
-                        guest_conv = df_guests.groupby('guest_bin').agg(
+                        guest_conv = df_guests.groupby('guest_bin', observed=True).agg(
                             won=('Won', 'sum'),
                             total=('Won', 'count')
                         ).assign(rate=lambda d: d['won']/d['total']).reset_index()
@@ -955,7 +955,7 @@ if st.session_state.processed_df is not None:
                         df_ratio['ratio_bin'] = pd.cut(df_ratio['staff_ratio'], bins=bins, labels=labels)
                         
                         # Calculate conversion rates
-                        ratio_conv = df_ratio.groupby('ratio_bin').agg(
+                        ratio_conv = df_ratio.groupby('ratio_bin', observed=True).agg(
                             won=('Won', 'sum'),
                             total=('Won', 'count')
                         ).assign(rate=lambda d: d['won']/d['total']).reset_index()
