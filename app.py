@@ -323,15 +323,25 @@ if st.session_state.processed_df is not None:
             ax.xaxis.set_major_formatter(DateFormatter('%b %d'))
             plt.xticks(rotation=45)
             
-            # Add annotations for min and max values
-            min_idx = daily_counts['count'].idxmin()
-            max_idx = daily_counts['count'].idxmax()
-            
-            if min_idx is not None and max_idx is not None:
-                min_date = daily_counts.iloc[min_idx]['inquiry_date']
-                min_count = daily_counts.iloc[min_idx]['count']
-                max_date = daily_counts.iloc[max_idx]['inquiry_date']
-                max_count = daily_counts.iloc[max_idx]['count']
+            # Add annotations for min and max values safely
+            if not daily_counts.empty:
+                min_idx = daily_counts['count'].idxmin()
+                max_idx = daily_counts['count'].idxmax()
+                
+                if min_idx is not None and max_idx is not None:
+                    try:
+                        min_date = daily_counts.loc[min_idx, 'inquiry_date']
+                        min_count = daily_counts.loc[min_idx, 'count']
+                        max_date = daily_counts.loc[max_idx, 'inquiry_date']
+                        max_count = daily_counts.loc[max_idx, 'count']
+                    except (KeyError, IndexError):
+                        # Fallback if indexing fails
+                        min_row = daily_counts.loc[daily_counts['count'] == daily_counts['count'].min()].iloc[0]
+                        max_row = daily_counts.loc[daily_counts['count'] == daily_counts['count'].max()].iloc[0]
+                        min_date = min_row['inquiry_date']
+                        min_count = min_row['count']
+                        max_date = max_row['inquiry_date']
+                        max_count = max_row['count']
                 
                 # Add min marker
                 ax.scatter(min_date, min_count, color='#FF474C', s=50, zorder=5)
@@ -460,9 +470,18 @@ if st.session_state.processed_df is not None:
                 with metric_col5:
                     st.metric("Maximum Days", f"{time_to_conversion.get('max_days', 0)}")
                 
-                # Check for negative time anomalies
+                # Check for negative time anomalies with a more eye-catching display
                 if 'has_negative_days' in time_to_conversion and time_to_conversion['has_negative_days']:
-                    st.warning(f"⚠️ **Data Quality Issue**: {time_to_conversion['negative_days_count']} records ({time_to_conversion['negative_days_percent']:.1f}%) show negative time-to-conversion. This indicates potential date entry errors in the source data.")
+                    st.markdown("""
+                    <div style="background-color:#ffe6e6; padding:10px; border-radius:5px; border-left:5px solid #ff0000;">
+                        <h4 style="color:#cc0000; margin-top:0;">⚠️ Data Quality Issue: Negative Time Values</h4>
+                        <p style="margin-bottom:0;">
+                            <b>{} records ({:.1f}%)</b> show negative time-to-conversion.
+                            This indicates potential date entry errors in the source data with event dates before inquiry dates.
+                        </p>
+                    </div>
+                    """.format(time_to_conversion['negative_days_count'], time_to_conversion['negative_days_percent']), 
+                    unsafe_allow_html=True)
                 
                 # Display histogram of time to conversion
                 time_col1, time_col2 = st.columns(2)
