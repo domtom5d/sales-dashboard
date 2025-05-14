@@ -103,7 +103,7 @@ def find_optimal_k(data, max_k=10):
     k_values = range(2, min(max_k + 1, len(data) // 5))
     
     for k in k_values:
-        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+        kmeans = KMeans(n_clusters=k, random_state=42, n_init='auto')
         cluster_labels = kmeans.fit_predict(data)
         silhouette_avg = silhouette_score(data, cluster_labels)
         silhouette_scores.append(silhouette_avg)
@@ -136,7 +136,7 @@ def perform_clustering(data, n_clusters=None, algorithm='kmeans'):
         if n_clusters is None:
             n_clusters, _ = find_optimal_k(data)
         
-        model = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+        model = KMeans(n_clusters=n_clusters, random_state=42, n_init='auto')
         clusters = model.fit_predict(data)
         
     elif algorithm == 'dbscan':

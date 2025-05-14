@@ -20,6 +20,7 @@ from evaluate import (
     get_custom_threshold_metrics
 )
 from findings import generate_findings
+from segmentation import segment_leads, plot_clusters, plot_cluster_conversion_rates, plot_feature_importance_by_cluster
 
 # Set page config and title
 st.set_page_config(
@@ -1216,6 +1217,221 @@ return {
 
         _Why it matters:_ Gives your sales team a consistent, transparent way to prioritize follow-ups on new inbound leads.
         """)
+        
+    # Lead Personas Tab (New)
+    with tab7:
+        st.title("🧩 Lead Personas")
+        
+        # Information about what this tab does
+        st.markdown("""
+        This tab uses unsupervised machine learning to discover natural "lead personas" in your data. 
+        These personas can help you understand different types of leads and their conversion patterns.
+        
+        ### What are Lead Personas?
+        Lead personas are distinct groups of leads that share similar characteristics. By identifying these natural
+        groupings, you can:
+        
+        - Discover unique lead segments you might not have been aware of
+        - Apply targeted scoring models to each persona
+        - Tailor your sales approach to each persona type
+        - Identify high-converting personas to prioritize
+        """)
+        
+        if st.session_state.processed_df is None:
+            st.info("Please select a data source on the sidebar and process the data to use the Lead Personas feature.")
+        else:
+            col1, col2 = st.columns([2, 1])
+            
+            with col2:
+                # Clustering parameters
+                st.subheader("Clustering Settings")
+                algorithm = st.selectbox(
+                    "Clustering Algorithm", 
+                    ["kmeans", "dbscan", "gmm"],
+                    help="K-Means is recommended for most cases. DBSCAN is good for finding irregularly shaped clusters. GMM works well for overlapping clusters."
+                )
+                
+                # Only show number of clusters option for k-means and GMM
+                if algorithm in ["kmeans", "gmm"]:
+                    n_clusters = st.slider(
+                        "Number of Clusters", 
+                        min_value=2, 
+                        max_value=10, 
+                        value=4,
+                        help="Set to 0 to automatically determine the optimal number of clusters."
+                    )
+                    if n_clusters == 0:
+                        n_clusters = None
+                else:
+                    n_clusters = None
+                    
+                # Analyze button
+                if st.button("Generate Lead Personas"):
+                    with st.spinner("Analyzing lead data and discovering natural segments..."):
+                        # Run segmentation
+                        segmentation_results = segment_leads(
+                            st.session_state.processed_df, 
+                            n_clusters=n_clusters,
+                            algorithm=algorithm
+                        )
+                        
+                        # Store results in session state
+                        st.session_state.segmentation_results = segmentation_results
+                        
+                        # Show success message
+                        if 'error' in segmentation_results:
+                            st.error(segmentation_results['error'])
+                        else:
+                            st.success(f"Successfully identified {segmentation_results['n_clusters']} lead personas!")
+            
+            with col1:
+                # Main content area - show results if available
+                if 'segmentation_results' in st.session_state and st.session_state.segmentation_results:
+                    results = st.session_state.segmentation_results
+                    
+                    # Check for error
+                    if 'error' in results:
+                        st.error(f"Error: {results['error']}")
+                    else:
+                        # Display results
+                        st.subheader(f"Lead Persona Analysis ({results['n_clusters']} Segments)")
+                        
+                        # Show visualization tabs
+                        vis_tab1, vis_tab2, vis_tab3 = st.tabs([
+                            "Conversion by Persona", 
+                            "Visual Segmentation", 
+                            "Feature Importance"
+                        ])
+                        
+                        with vis_tab1:
+                            # Show conversion rates by cluster
+                            st.write("### Conversion Rates by Lead Persona")
+                            
+                            conversion_fig = plot_cluster_conversion_rates(
+                                results['conversion_by_cluster'],
+                                results['cluster_names']
+                            )
+                            st.pyplot(conversion_fig)
+                            
+                            # Display the dataframe with conversion rates
+                            st.write("#### Detailed Conversion Data")
+                            display_df = results['conversion_by_cluster'].copy()
+                            
+                            # Add cluster names if available
+                            if 'cluster_names' in results:
+                                display_df['Persona'] = display_df['Cluster'].map(results['cluster_names'])
+                                cols = ['Persona', 'Cluster', 'Conversion Rate', 'Count']
+                            else:
+                                cols = ['Cluster', 'Conversion Rate', 'Count']
+                                
+                            # Format conversion rate as percentage
+                            display_df['Conversion Rate'] = display_df['Conversion Rate'].apply(
+                                lambda x: f"{x:.1%}"
+                            )
+                            
+                            st.dataframe(display_df[cols], use_container_width=True)
+                        
+                        with vis_tab2:
+                            # Show 2D visualization of clusters
+                            st.write("### Visual Cluster Segmentation")
+                            st.write("This plot shows how leads are grouped into different personas (using dimensionality reduction to visualize in 2D).")
+                            
+                            cluster_fig = plot_clusters(
+                                results['reduced_data'], 
+                                results['clusters'],
+                                f"Lead Personas ({algorithm.upper()})"
+                            )
+                            st.pyplot(cluster_fig)
+                        
+                        with vis_tab3:
+                            # Show feature importance by cluster
+                            st.write("### Feature Importance by Persona")
+                            st.write("This heatmap shows what features differentiate each persona. Darker colors indicate more distinctive values.")
+                            
+                            feature_fig = plot_feature_importance_by_cluster(
+                                results['cluster_profiles'],
+                                results['feature_names']
+                            )
+                            st.pyplot(feature_fig)
+                            
+                        # Persona characteristics section
+                        st.write("### Lead Persona Characteristics")
+                        
+                        # For each cluster, show key characteristics
+                        for cluster in sorted(results['cluster_profiles'].index):
+                            cluster_name = results['cluster_names'].get(cluster, f"Persona {cluster}")
+                            
+                            # Get the profile for this cluster
+                            profile = results['cluster_profiles'].loc[cluster]
+                            
+                            # Get conversion rate for this cluster
+                            conv_rate = results['conversion_by_cluster'][
+                                results['conversion_by_cluster']['Cluster'] == cluster
+                            ]['Conversion Rate'].values[0]
+                            
+                            # Create expandable section for this persona
+                            with st.expander(f"{cluster_name} (Conv. Rate: {conv_rate:.1%})"):
+                                # Create two columns within the expander
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    st.write("**Key Metrics:**")
+                                    metrics = []
+                                    
+                                    # Add numerical features
+                                    for feature in ['days_until_event', 'number_of_guests', 'bartenders_needed']:
+                                        if feature in profile:
+                                            feature_name = feature.replace('_', ' ').title()
+                                            metrics.append(f"- {feature_name}: {profile[feature]:.1f}")
+                                    
+                                    # Display metrics
+                                    st.markdown("\n".join(metrics))
+                                
+                                with col2:
+                                    st.write("**Common Characteristics:**")
+                                    chars = []
+                                    
+                                    # Look for categorical features (which would be one-hot encoded)
+                                    for col in profile.index:
+                                        if '_' in col and profile[col] > 0.3:  # Only include if >30% of cluster has this value
+                                            feature, value = col.split('_', 1)
+                                            chars.append(f"- {feature.title()}: {value}")
+                                    
+                                    # Display characteristics or a message if none found
+                                    if chars:
+                                        st.markdown("\n".join(chars))
+                                    else:
+                                        st.write("No distinctive categorical characteristics found.")
+                else:
+                    # Show placeholder content
+                    st.info("Click 'Generate Lead Personas' to analyze your data and discover natural lead segments.")
+                    
+                    # Show example content
+                    example_col1, example_col2 = st.columns([1, 1])
+                    with example_col1:
+                        st.markdown("""
+                        #### Example Personas You Might Find:
+                        
+                        **High-Value Urgent Events (26% conversion)**
+                        - Large guest count (150+)
+                        - Short lead time (<30 days)
+                        - Corporate booking type
+                        
+                        **Small Social Gatherings (8% conversion)**
+                        - Small guest count (<50)
+                        - Medium lead time (30-90 days)
+                        - Social event types
+                        """)
+                    
+                    with example_col2:
+                        st.markdown("""
+                        #### How to Use Personas:
+                        
+                        1. **Identify top-converting segments** to prioritize in your sales process
+                        2. **Create persona-specific lead scoring** models for more accurate predictions
+                        3. **Customize your follow-up approach** based on persona characteristics
+                        4. **Train sales team** on the unique needs of each persona
+                        """)
 
 else:
     # Display instructions when no data is loaded
