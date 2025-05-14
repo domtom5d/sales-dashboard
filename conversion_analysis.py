@@ -676,15 +676,52 @@ def run_conversion_analysis(df_original):
     Args:
         df_original (DataFrame): Original dataframe to analyze
     """
+    # Initialize session state for filter values if not present
+    if 'filter_values' not in st.session_state:
+        st.session_state.filter_values = {}
+    
+    # Display active filters if any
+    active_filters = st.session_state.filter_values
+    if active_filters:
+        st.write("#### Active Chart Filters")
+        filter_cols = st.columns(min(len(active_filters), 3))
+        for i, (key, value) in enumerate(active_filters.items()):
+            with filter_cols[i % 3]:
+                st.info(f"**{key}:** {value}")
+        
+        # Add a button to clear all filters
+        if st.button("Clear All Chart Filters"):
+            st.session_state.filter_values = {}
+            st.rerun()
+    
     # Clean and normalize data
     df = normalize_data(df_original)
     
-    # 1. Display KPI Summary
-    display_kpi_summary(df)
-    
-    # 2. Setup and apply filters
+    # 1. Setup and apply UI filters
     filters = setup_filters(df)
     filtered_df = apply_filters(df, filters)
+    
+    # Apply any click-based filters from interactive charts
+    for filter_col, filter_value in st.session_state.filter_values.items():
+        if filter_col in filtered_df.columns:
+            # Add additional filters based on chart interactions
+            mask = filtered_df[filter_col].astype(str) == str(filter_value)
+            filtered_df = filtered_df[mask]
+            
+    # If no data after filtering, show a warning
+    if filtered_df.empty:
+        st.warning("No data matches all active filters. Try removing some filters.")
+        if st.button("Reset All Filters"):
+            st.session_state.filter_values = {}
+            st.rerun()
+        return
+    
+    # 2. Display KPI Summary
+    display_kpi_summary(filtered_df)
+    
+    # Show data quality metrics
+    with st.expander("Data Quality Analysis"):
+        show_data_quality(filtered_df)
     
     # 3. Time trends
     st.subheader("Conversion Trends")
@@ -707,8 +744,5 @@ def run_conversion_analysis(df_original):
     
     # 7. Geographic insights
     plot_geographic_insights(filtered_df)
-    
-    # 8. Data quality
-    show_data_quality(filtered_df)
     
     return filtered_df
