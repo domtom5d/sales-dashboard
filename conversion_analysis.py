@@ -306,27 +306,133 @@ def plot_top_categories(df, col, title, min_count=10):
                 # Calculate conversion rate
                 summary['conv'] = summary['won'] / summary['total']
                 
+                # Calculate confidence intervals using Wilson score interval
+                try:
+                    from statsmodels.stats.proportion import proportion_confint
+                    
+                    # Apply Wilson confidence interval calculation for each row
+                    summary['ci_low'], summary['ci_high'] = zip(*summary.apply(
+                        lambda r: proportion_confint(r['won'], r['total'], method='wilson'),
+                        axis=1
+                    ))
+                except ImportError:
+                    # Fallback to simple standard error if statsmodels is not available
+                    summary['ci_low'] = summary.apply(lambda r: max(0, r['conv'] - 1.96 * ((r['conv'] * (1 - r['conv'])) / r['total'])**0.5), axis=1)
+                    summary['ci_high'] = summary.apply(lambda r: min(1, r['conv'] + 1.96 * ((r['conv'] * (1 - r['conv'])) / r['total'])**0.5), axis=1)
+                
+                # Calculate overall baseline for comparison
+                baseline = df['outcome'].mean()
+                
                 # Sort and get top categories
                 if isinstance(summary, pd.DataFrame) and 'conv' in summary.columns:
                     top = summary.sort_values('conv', ascending=False).head(5)
                     
-                    # Create horizontal bar chart with annotations
-                    fig, ax = plt.subplots(figsize=(10, 5))
-                    bars = ax.barh(top.index, top['conv'])
-                
-                    # Add data labels
-                    for i, (idx, row) in enumerate(top.iterrows()):
-                        ax.text(
-                            row['conv'] + 0.01, 
-                            i, 
-                            f"{row['conv']:.1%} (n={row['total']})"
-                        )
-                
-                    ax.set_xlim(0, min(1, top['conv'].max() * 1.2))
-                    ax.set_title(f"Top {title} Conversion Rates")
-                    ax.set_xlabel("Conversion Rate")
-                    plt.tight_layout()
-                    st.pyplot(fig)
+                    # Prepare data for Plotly
+                    plot_df = top.reset_index()
+                    plot_df = plot_df.rename(columns={'cat': title, 'conv': 'Conversion Rate'})
+                    
+                    # Calculate error bar values (how far from the mean in each direction)
+                    plot_df['error_minus'] = plot_df['Conversion Rate'] - plot_df['ci_low']
+                    plot_df['error_plus'] = plot_df['ci_high'] - plot_df['Conversion Rate']
+                    
+                    # Apply sample size filtering
+                    sample_size_min = 30  # Minimum recommended sample size for statistical analysis
+                    
+                    # Add annotation for low sample sizes
+                    plot_df['sample_note'] = plot_df['total'].apply(
+                        lambda x: f"n={x}" if x >= sample_size_min else f"n={x} (low sample)"
+                    )
+                    
+                    # Create color-coded bar chart with Plotly
+                    import plotly.express as px
+                    fig = px.bar(
+                        plot_df,
+                        y=title,
+                        x='Conversion Rate',
+                        color='Conversion Rate',
+                        color_continuous_scale='RdYlGn',  # Red to Green scale
+                        text='sample_note',  # Include sample size annotation
+                        error_x=dict(
+                            type='data', 
+                            symmetric=False,
+                            array=plot_df['error_plus'],
+                            arrayminus=plot_df['error_minus']
+                        ),
+                        orientation='h',
+                        height=350,
+                        labels={'Conversion Rate': 'Conversion Rate'}
+                    )
+                    
+                    # Format percentages in hover text
+                    fig.update_traces(
+                        hovertemplate=f'<b>%{{y}}</b><br>Conversion Rate: %{{x:.1%}}<br>Sample Size: %{{text}}<extra></extra>'
+                    )
+                    
+                    # Format x-axis as percentage
+                    fig.update_layout(
+                        title=f"Top {title} Conversion Rates",
+                        xaxis_tickformat='.1%',
+                        margin=dict(l=10, r=10, t=40, b=10)
+                    )
+                    
+                    # Add clickable data points for interactive drilldowns
+                    fig.update_traces(
+                        marker_line_width=1,
+                        marker_line_color="white",
+                        opacity=0.9,
+                        hoverinfo="x+y",
+                        textposition="auto",
+                    )
+                    
+                    # Add annotation explaining interaction capability
+                    fig.add_annotation(
+                        text="Click on a bar to filter dashboard by that category",
+                        xref="paper", yref="paper",
+                        x=0, y=-0.1,
+                        showarrow=False,
+                        font=dict(size=10, color="gray"),
+                        align="left"
+                    )
+                    
+                    # Set up container for chart with event handling
+                    chart_container = st.container()
+                    
+                    # Display the chart
+                    with chart_container:
+                        chart = st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Setup session state for filtering if not already present
+                    if 'filter_values' not in st.session_state:
+                        st.session_state.filter_values = {}
+                    
+                    # Create a button to clear filters if any are active
+                    if title in st.session_state.filter_values:
+                        if st.button(f"Clear {title} filter", key=f"clear_{title}"):
+                            del st.session_state.filter_values[title]
+                            st.experimental_rerun()
+                    
+                    # Add best/worst metrics below the chart
+                    best_cat = plot_df.iloc[0]
+                    worst_cat = plot_df.iloc[-1]
+                    
+                    # Get scalar values for formatting
+                    best_name = best_cat[title]
+                    best_val = float(best_cat['Conversion Rate'])
+                    worst_name = worst_cat[title]
+                    worst_val = float(worst_cat['Conversion Rate'])
+                    
+                    # Display metrics with delta comparison to baseline
+                    col1, col2 = st.columns(2)
+                    col1.metric(
+                        "🏆 Best Performer", 
+                        f"{best_name}: {best_val:.1%}",
+                        delta=f"+{best_val - baseline:.1%} vs. average"
+                    )
+                    col2.metric(
+                        "💀 Worst Performer", 
+                        f"{worst_name}: {worst_val:.1%}",
+                        delta=f"{worst_val - baseline:.1%} vs. average"
+                    )
             else:
                 st.info(f"Not enough {title} data to analyze (need at least {min_count} leads per category)")
         except Exception as e:
