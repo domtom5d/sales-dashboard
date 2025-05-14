@@ -1,0 +1,68 @@
+1. Unsupervised Segmentation + Hybrid Scoring
+What: Run clustering (K-Means, DBSCAN, or Gaussian Mixtures) on your feature set (e.g. guests, days-until, budget, event type) to discover natural “lead personas.”
+
+Why: You may find three or four distinct lead archetypes with wildly different close rates—and then apply separate scoring rubrics per cluster.
+
+Next: Prototype in Python (e.g. use scikit-learn), visualize clusters in 2D (PCA/t-SNE), and compare each cluster’s historical conversion.
+
+2. Ensemble ML Models
+What: Combine logistic regression, gradient boosting (XGBoost/LightGBM), and a small neural net in a stacked ensemble.
+
+Why: Boosting often uncovers non-linear interactions that a plain “coat rack” logistic model misses.
+
+Next: Spin up a quick LightGBM run, check feature importances, then stack its predictions with your existing score for extra lift.
+
+3. Natural-Language “Intent” Scoring
+What: Apply an LLM or a simple TF-IDF + sentiment model to any free-text fields (“Tell us about your event”) to extract intent/enthusiasm signals.
+
+Why: A carefully worded inquiry (“We absolutely need you!”) can outperform a bland form fill.
+
+Next: Capture those text answers, vectorize them, and see if NLP-derived sentiment or keyword presence improves AUC.
+
+4. Time-Decay & Dynamic Scoring
+What: Let your score “decay” over time if you haven’t followed up, or increase when the prospect re-engages (email open, site revisit).
+
+Why: A promising lead with no action in 48 hrs is no longer as hot as one you just called.
+
+Next: Integrate your email-open data, website revisit logs, or manual “first contact” timestamps into a decaying booster function in your scoring code.
+
+5. Bayesian Hierarchical Modeling
+What: Build a Bayesian logistic model with region (or event type) as a hierarchical grouping variable—letting low-volume regions borrow “strength” from the global data.
+
+Why: Prevents tiny-sample noise from overweighting obscure territories.
+
+Next: Prototype in PyMC3 or Stan; infer posterior distributions for each region’s baseline conversion rate.
+
+6. Survival / Hazard Analysis
+What: Treat “time to close” as a survival problem—model the hazard rate of conversion over days since inquiry.
+
+Why: Gives you both “will they convert?” and “likely when?”, enabling dynamic follow-up schedulers.
+
+Next: Fit a Cox proportional hazards model; integrate its risk scores as another feature in your lead-score ensemble.
+
+7. Multi-Armed Bandit Lead Allocation
+What: Instead of statically routing “Hot” leads always to the same rep or process, run a small bandit algorithm that tests different outreach cadences or channels.
+
+Why: Continuously arms-length optimizes your approach—e.g. should you text first or call first?
+
+Next: Start with a simple ϵ-greedy or Thompson Sampling implementation in Python tied into your outreach logs.
+
+8. External Enrichment & Signals
+What: Append external data—weather forecasts, local event calendars, macro-economic indicators, even Google search trends for “wedding bartending” in that ZIP.
+
+Why: Leads in your territory might convert differently if there’s a big festival or a heat-wave coming.
+
+Next: Hook a free API (OpenWeather, Eventbrite) to pull a few contextual features at form-submit time.
+
+How to Choose & Iterate
+Rank by expected ROI: Which approach do you think will move the needle most?
+
+Prototype fast: Spin up a quick Python notebook for one new feature or model.
+
+Measure lift: Compare AUC/PR and bucket conversion vs. your baseline model.
+
+Deploy in Zapier/Streak: Add the winning feature into your scoring code step or Streak formula.
+
+Monitor: Track weekly performance; pare back anything that doesn’t help.
+
+Which of these strikes you as the next frontier? Or do you have another wild idea you want to explore?
