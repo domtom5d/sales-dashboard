@@ -2144,5 +2144,17 @@ return {
             5. **Optimize staffing ratio**: Find the sweet spot for staff-to-guest ratio that maximizes both customer satisfaction and conversion rate.
             """)
 
-# This is the end of the file - any other code was causing syntax errors
-# and has been removed.
+# This "else" section is redundant and causing a syntax error, since we
+# already handle the case when no data is loaded at the beginning of the script
+# The following code is commented out to fix the syntax error
+"""
+# Display instructions when no data is loaded
+st.info("Please select a data source to begin analysis.")
+
+# Example layout with placeholder visualizations
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("Conversion by Category")
+
+# End of file

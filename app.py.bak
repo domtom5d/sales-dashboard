@@ -2144,5 +2144,46 @@ return {
             5. **Optimize staffing ratio**: Find the sweet spot for staff-to-guest ratio that maximizes both customer satisfaction and conversion rate.
             """)
 
-# This is the end of the file - any other code was causing syntax errors
-# and has been removed.
+# This "else" section is redundant and causing a syntax error, since we
+# already handle the case when no data is loaded at the beginning of the script
+# The following code is commented out to fix the syntax error
+"""
+# Display instructions when no data is loaded
+st.info("Please select a data source to begin analysis.")
+
+# Example layout with placeholder visualizations
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("Conversion by Category")
+"""
+
+# End of file
+        
+        # Placeholder for empty chart
+        fig2, ax = plt.subplots(figsize=(8, 5))
+        ax.text(0.5, 0.5, "No data available", 
+                horizontalalignment='center',
+                verticalalignment='center',
+                transform=ax.transAxes,
+                fontsize=16)
+        ax.axis('off')
+        st.pyplot(fig2)
+
+# Footer information
+st.sidebar.markdown("---")
+st.sidebar.markdown("### About")
+st.sidebar.info(
+    """
+    This dashboard analyzes sales conversion data from Streak exports, 
+    helping you identify patterns and optimize your lead scoring process.
+    """
+)
+st.sidebar.markdown("### Help")
+st.sidebar.info(
+    """
+    1. Select a data source (upload or database)
+    2. Explore the different analysis tabs
+    3. Generate a lead scoring model to predict conversion likelihood
+    """
+)
