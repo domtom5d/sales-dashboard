@@ -303,13 +303,17 @@ if st.session_state.processed_df is not None:
         ]
         
         # Create sparkline if we have data
-        if len(daily_counts) > 0:
-            st.write("**Daily Lead Volume**")
+        if not daily_counts.empty:
+            st.subheader("Daily Lead Volume")
             
-            fig, ax = plt.subplots(figsize=(10, 2))
-            ax.plot(daily_counts['inquiry_date'], daily_counts['count'], '-o', markersize=3)
+            # Create sparkline chart
+            fig, ax = plt.subplots(figsize=(8, 2))
+            ax.plot(daily_counts['inquiry_date'], daily_counts['count'], color='#0068c9', linewidth=2)
             
-            # Customize the plot for a clean sparkline look
+            # Fill the area under the line
+            ax.fill_between(daily_counts['inquiry_date'], daily_counts['count'], alpha=0.2, color='#0068c9')
+            
+            # Remove spines
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
             ax.spines['left'].set_visible(False)
@@ -323,23 +327,46 @@ if st.session_state.processed_df is not None:
             min_idx = daily_counts['count'].idxmin()
             max_idx = daily_counts['count'].idxmax()
             
-            min_date = daily_counts.iloc[min_idx]['inquiry_date']
-            min_count = daily_counts.iloc[min_idx]['count']
+            if min_idx is not None and max_idx is not None:
+                min_date = daily_counts.iloc[min_idx]['inquiry_date']
+                min_count = daily_counts.iloc[min_idx]['count']
+                max_date = daily_counts.iloc[max_idx]['inquiry_date']
+                max_count = daily_counts.iloc[max_idx]['count']
+                
+                # Add min marker
+                ax.scatter(min_date, min_count, color='#FF474C', s=50, zorder=5)
+                ax.annotate(f"{min_count:,}", 
+                           (min_date, min_count),
+                           xytext=(0, -15),
+                           textcoords='offset points',
+                           ha='center',
+                           fontsize=9,
+                           color='#FF474C')
+                
+                # Add max marker
+                ax.scatter(max_date, max_count, color='#00CC96', s=50, zorder=5)
+                ax.annotate(f"{max_count:,}", 
+                           (max_date, max_count),
+                           xytext=(0, 10),
+                           textcoords='offset points',
+                           ha='center',
+                           fontsize=9,
+                           color='#00CC96')
             
-            max_date = daily_counts.iloc[max_idx]['inquiry_date']
-            max_count = daily_counts.iloc[max_idx]['count']
+            # Add statistics
+            total_leads = daily_counts['count'].sum()
+            avg_daily = daily_counts['count'].mean()
             
-            ax.annotate(f'{min_count}', 
-                        (min_date, min_count),
-                        xytext=(0, -15),
-                        textcoords='offset points',
-                        ha='center')
+            st.pyplot(fig)
             
-            ax.annotate(f'{max_count}', 
-                        (max_date, max_count),
-                        xytext=(0, 10),
-                        textcoords='offset points',
-                        ha='center')
+            # Add metrics in small columns
+            lead_col1, lead_col2, lead_col3 = st.columns(3)
+            with lead_col1:
+                st.metric("Total Leads", f"{total_leads:,}")
+            with lead_col2:
+                st.metric("Avg. Daily Leads", f"{avg_daily:.1f}")
+            with lead_col3:
+                st.metric("Days in Period", f"{len(daily_counts)}")
             
             st.pyplot(fig)
     
