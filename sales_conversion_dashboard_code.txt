@@ -1,0 +1,380 @@
+# Sales Conversion Analytics Dashboard Code Summary
+
+## Main Dashboard Structure (app.py)
+
+```python
+import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import datetime
+import os
+import io
+import plotly.express as px
+import plotly.graph_objects as go
+from conversion_analysis import run_conversion_analysis, plot_booking_types, plot_referral_marketing_sources
+from conversion import analyze_phone_matches, analyze_time_to_conversion
+from utils import load_and_normalize_data
+from database import get_lead_data, get_operation_data, import_leads_data, import_operations_data, process_phone_matching
+from derive_scorecard import generate_lead_scorecard, score_lead
+from mistral_insights import generate_insights
+
+# Set page config
+st.set_page_config(page_title="Sales Conversion Analytics", page_icon="📊", layout="wide")
+
+# Custom CSS for styling
+st.markdown("""
+<style>
+    .main-header {
+        color: #1E88E5;
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 0;
+    }
+    .sub-header {
+        color: #424242;
+        font-size: 1.2rem;
+        margin-top: 0;
+    }
+    .header-container {
+        margin-bottom: 2rem;
+    }
+    .insight-box {
+        background-color: #f0f7ff;
+        border-left: 4px solid #1E88E5;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    .metric-title {
+        font-size: 1rem;
+        color: #424242;
+    }
+    .metric-value {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #1E88E5;
+    }
+    .metric-delta {
+        font-size: 0.8rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Main app header and description
+st.markdown("""
+<div class="header-container">
+    <h1 class="main-header">Sales Conversion Analytics</h1>
+    <p class="sub-header">Interactive dashboard for analyzing lead conversion metrics and optimizing sales processes</p>
+</div>
+""", unsafe_allow_html=True)
+
+# Define tabs
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "Conversion Analysis", 
+    "Lead Scoring", 
+    "Contact Matching", 
+    "Insights", 
+    "Admin"
+])
+
+# Conversion Analysis Tab (First Landing Page)
+with tab1:
+    # Load data
+    filtered_df = load_and_normalize_data()
+    raw_df = filtered_df.copy()
+    
+    # Setup default filters (filters disabled - displaying all data)
+    filters = {
+        'date_range': None,
+        'status': 'All',
+        'states': ['All'],
+        'date_col': 'inquiry_date' if 'inquiry_date' in filtered_df.columns else 'Inquiry Date'
+    }
+    
+    # 1. KPI Summary
+    st.subheader("Key Performance Indicators")
+    try:
+        # Calculate KPIs
+        total_leads = len(filtered_df)
+        won = filtered_df[filtered_df['outcome'] == 1]
+        conversion_rate = len(won) / total_leads if total_leads > 0 else 0
+        
+        # Display KPI metrics
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric("Total Leads", f"{total_leads}")
+        with c2:
+            st.metric("Won Deals", f"{len(won)}")
+        with c3:
+            st.metric("Conversion Rate", f"{conversion_rate:.1%}")
+        
+        # 2. Weekly trend
+        try:
+            col = 'inquiry_date' if 'inquiry_date' in filtered_df.columns else 'Inquiry Date'
+            filtered_df['week'] = filtered_df[col].dt.to_period('W')
+            weekly = filtered_df.groupby('week').agg(
+                leads=('box_key', 'count'),
+                wins=('outcome', 'sum')
+            )
+            weekly['rate'] = weekly['wins'] / weekly['leads']
+            with c4:
+                st.line_chart(weekly['rate'], height=100, use_container_width=True)
+        except Exception as e:
+            with c4:
+                st.info("Weekly trend data not available")
+    except Exception as e:
+        st.error(f"Error calculating KPIs: {e}")
+    
+    # Filter UI replaced with a simple notice
+    st.subheader("Data Overview")
+    st.markdown("Showing all data without filtering. The dashboard displays your complete dataset.")
+    
+    # 3. Trend Analysis
+    st.subheader("Conversion Trends")
+    
+    trend_col1, trend_col2 = st.columns(2)
+    
+    with trend_col1:
+        # Conversion Rate Trend
+        st.write("Monthly Conversion Rate")
+        try:
+            if 'inquiry_date' in filtered_df.columns:
+                # Group by month and calculate conversion rate
+                df_trend = filtered_df.copy()
+                df_trend['month'] = df_trend['inquiry_date'].dt.to_period('M')
+                monthly = df_trend.groupby('month').agg(
+                    volume=('box_key', 'count'),
+                    won=('outcome', 'sum')
+                )
+                monthly['rate'] = monthly['won'] / monthly['volume']
+                
+                # Plot conversion rate trend
+                fig, ax = plt.subplots(figsize=(10, 4))
+                ax.plot(monthly.index.astype(str), monthly['rate'], marker='o', linewidth=2)
+                ax.set_ylabel('Conversion Rate')
+                plt.xticks(rotation=45)
+                plt.tight_layout()
+                st.pyplot(fig)
+        except Exception as e:
+            st.info("Monthly trend data not available")
+    
+    with trend_col2:
+        # Lead Volume Trend
+        st.write("Monthly Lead Volume")
+        try:
+            if 'inquiry_date' in filtered_df.columns:
+                # Group by month and calculate lead volume
+                df_trend = filtered_df.copy()
+                df_trend['month'] = df_trend['inquiry_date'].dt.to_period('M')
+                weekly_vol = df_trend.groupby('month').agg(
+                    volume=('box_key', 'count'),
+                    won=('outcome', 'sum')
+                )
+                
+                # Plot lead volume trend
+                fig, ax = plt.subplots(figsize=(10, 4))
+                ax.bar(weekly_vol.index.astype(str), weekly_vol['volume'])
+                ax.set_ylabel('Lead Volume')
+                plt.xticks(rotation=45)
+                plt.tight_layout()
+                st.pyplot(fig)
+                
+                # Calculate week-over-week change
+                if len(weekly_vol) >= 2:
+                    last_week = weekly_vol['volume'].iloc[-1]
+                    prev_week = weekly_vol['volume'].iloc[-2]
+                    wow_change = (last_week - prev_week) / prev_week if prev_week > 0 else 0
+                    st.metric("Recent Change", f"{wow_change:.1%}")
+        except Exception as e:
+            st.info("Monthly volume data not available")
+    
+    # 4. Category Analysis
+    st.subheader("Category Breakdown")
+    
+    drill_row1_col1, drill_row1_col2 = st.columns(2)
+    
+    with drill_row1_col1:
+        # Booking Type Analysis
+        st.write("Conversion Rate by Booking Type")
+        try:
+            if 'booking_type' in filtered_df.columns:
+                # Calculate conversion rates
+                conversion_rates = filtered_df.groupby('booking_type').agg(
+                    total=('box_key', 'count'),
+                    won=('outcome', 'sum')
+                ).reset_index()
+                
+                conversion_rates['rate'] = conversion_rates['won'] / conversion_rates['total']
+                conversion_rates = conversion_rates[conversion_rates['total'] >= 10]
+                
+                # Format for display
+                booking_key = 'booking_type'
+                conversion_rates = conversion_rates.sort_values('rate', ascending=False)
+                
+                if not conversion_rates.empty:
+                    # Prepare data for plot
+                    df_plot = conversion_rates.copy()
+                    df_plot['rate_pct'] = df_plot['rate'] * 100
+                    
+                    # Keep top 5 and group others
+                    if len(df_plot) > 5:
+                        top5 = df_plot.iloc[:5]
+                        others = df_plot.iloc[5:]
+                        others_total = others['total'].sum()
+                        others_won = others['won'].sum()
+                        others_rate = others_won / others_total if others_total > 0 else 0
+                        
+                        other_row = pd.DataFrame({
+                            booking_key: ['Other Types'],
+                            'total': [others_total],
+                            'won': [others_won],
+                            'rate': [others_rate],
+                            'rate_pct': [others_rate * 100]
+                        })
+                        
+                        df_plot = pd.concat([top5, other_row])
+                    
+                    # Create plot
+                    fig, ax = plt.subplots(figsize=(10, 5))
+                    bars = ax.barh(df_plot[booking_key], df_plot['rate_pct'])
+                    
+                    # Add percentage labels
+                    for i, bar in enumerate(bars):
+                        width = bar.get_width()
+                        ax.text(width + 1, bar.get_y() + bar.get_height()/2, 
+                                f"{width:.1f}%", va='center')
+                    
+                    ax.set_xlabel('Conversion Rate (%)')
+                    ax.set_title('Conversion Rate by Booking Type')
+                    st.pyplot(fig)
+                    
+                    # Show best and worst performers
+                    if len(df_plot) > 1:
+                        df_plot = df_plot.sort_values('rate', ascending=False)
+                        best = df_plot.iloc[0]
+                        worst = df_plot.iloc[-1]
+                        if best['rate'] > worst['rate']:
+                            best_name = best[booking_key]
+                            worst_name = worst[booking_key]
+                            diff = best['rate'] - worst['rate']
+                            st.info(f"💡 **{best_name}** has a {diff:.1%} higher conversion rate than **{worst_name}**")
+        except Exception as e:
+            st.error(f"Error analyzing booking types: {e}")
+```
+
+## Data Loading and Processing (utils.py)
+
+```python
+def load_and_normalize_data(use_database=True):
+    """
+    Load and normalize data from database or sample CSVs
+    
+    Args:
+        use_database (bool): Whether to load from database or sample CSVs
+        
+    Returns:
+        DataFrame: Normalized and processed dataframe
+    """
+    if use_database:
+        # Initialize database if needed
+        initialize_db_if_empty()
+        
+        # Get merged data from database
+        df = get_merged_data()
+    else:
+        # Load sample data
+        data_dir = "data"
+        leads_path = os.path.join(data_dir, "leads_sample.csv")
+        operations_path = os.path.join(data_dir, "operations_sample.csv")
+        
+        df_leads = pd.read_csv(leads_path)
+        df_operations = pd.read_csv(operations_path)
+        
+        # Normalize and merge data
+        df = normalize_data(df_leads, df_operations)
+    
+    # Process and clean the data
+    if df is not None and not df.empty:
+        # Standardize column names
+        df.columns = [col.lower().replace(' ', '_') for col in df.columns]
+        
+        # Convert dates to datetime
+        date_cols = ['inquiry_date', 'event_date']
+        for col in date_cols:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+        
+        # Ensure outcome column exists
+        if 'outcome' not in df.columns:
+            if 'won' in df.columns:
+                df['outcome'] = df['won'].astype(int)
+            else:
+                df['outcome'] = 0
+    
+    return df
+```
+
+## Database Schema (database.py)
+
+```python
+class Lead(Base):
+    __tablename__ = "leads"
+    
+    id = Column(Integer, primary_key=True)
+    box_key = Column(String, unique=True, index=True)
+    inquiry_date = Column(DateTime, nullable=True)
+    lead_trigger = Column(String, nullable=True)
+    event_date = Column(DateTime, nullable=True)
+    name = Column(String, nullable=True)
+    booking_type = Column(String, nullable=True)
+    days_since_inquiry = Column(Integer, nullable=True)
+    days_until_event = Column(Integer, nullable=True)
+    city = Column(String, nullable=True)
+    state = Column(String, nullable=True)
+    bartenders_needed = Column(Integer, nullable=True)
+    number_of_guests = Column(Integer, nullable=True)
+    total_serve_time = Column(Float, nullable=True)
+    total_bartender_time = Column(Float, nullable=True)
+    marketing_source = Column(String, nullable=True)
+    referral_source = Column(String, nullable=True)
+    status = Column(String, nullable=True)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    phone_number = Column(String, nullable=True)
+    won = Column(Boolean, default=False)
+    lost = Column(Boolean, default=False)
+    outcome = Column(Integer, default=0)  # 1 = won, 0 = lost
+    guests_bin = Column(String, nullable=True)
+    days_until_bin = Column(String, nullable=True)
+```
+
+## Conversion Analysis Functions (conversion_analysis.py)
+
+```python
+def plot_time_trends(df):
+    """Create trend charts for conversion rate and lead volume over time"""
+    if 'inquiry_date' in df.columns:
+        try:
+            # Group by month and calculate rates
+            df_trend = df.copy()
+            df_trend['month'] = df_trend['inquiry_date'].dt.to_period('M')
+            monthly = df_trend.groupby('month').agg(
+                volume=('box_key', 'count'),
+                won=('outcome', 'sum')
+            )
+            monthly['rate'] = monthly['won'] / monthly['volume']
+            
+            # Plot conversion rate trend
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.plot(monthly.index.astype(str), monthly['rate'], marker='o', linewidth=2)
+            ax.set_ylabel('Conversion Rate')
+            ax.set_title('Monthly Conversion Rate Trend')
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            st.pyplot(fig)
+            
+        except Exception as e:
+            st.error(f"Error plotting time trends: {e}")
+```

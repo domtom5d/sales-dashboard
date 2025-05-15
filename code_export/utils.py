@@ -1,6 +1,89 @@
 import pandas as pd
 import numpy as np
 import re  # Added for regex pattern matching in clean_booking_type
+import streamlit as st
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def load_and_normalize_data(leads_file=None, operations_file=None):
+    """
+    Load and normalize data from CSV files or database
+    
+    Args:
+        leads_file (str): Path to leads CSV file
+        operations_file (str): Path to operations CSV file
+        
+    Returns:
+        tuple: (leads_df, operations_df)
+    """
+    from database import get_lead_data, get_operation_data
+    
+    leads_df = None
+    operations_df = None
+    
+    # First try to load from provided files if available
+    if leads_file:
+        try:
+            leads_df = pd.read_csv(leads_file)
+            st.session_state.data_loaded = True
+        except Exception as e:
+            st.error(f"Error loading leads file: {e}")
+    
+    if operations_file:
+        try:
+            operations_df = pd.read_csv(operations_file)
+        except Exception as e:
+            st.error(f"Error loading operations file: {e}")
+    
+    # If files weren't provided or failed to load, try database
+    if leads_df is None:
+        try:
+            leads_df = get_lead_data()
+            if not leads_df.empty:
+                st.session_state.data_loaded = True
+        except Exception as e:
+            st.error(f"Error loading leads from database: {e}")
+    
+    if operations_df is None:
+        try:
+            operations_df = get_operation_data()
+        except Exception as e:
+            st.error(f"Error loading operations from database: {e}")
+    
+    # Standardize data types and structure
+    if leads_df is not None and not leads_df.empty:
+        # Convert date columns
+        date_cols = ['inquiry_date', 'event_date', 'created']
+        for col in date_cols:
+            if col in leads_df.columns:
+                leads_df[col] = pd.to_datetime(leads_df[col], errors='coerce')
+        
+        # Ensure lowercase column names
+        leads_df.columns = leads_df.columns.str.lower()
+        
+        # Ensure outcome column exists
+        if 'won' in leads_df.columns:
+            leads_df['outcome'] = leads_df['won'].astype(int)
+        elif 'outcome' not in leads_df.columns and 'status' in leads_df.columns:
+            # Map status to outcome if needed
+            status_map = {
+                'definite': 1, 
+                'tentative': 1, 
+                'won': 1,
+                'lost': 0
+            }
+            leads_df['outcome'] = leads_df['status'].str.lower().map(status_map).fillna(0).astype(int)
+    
+    if operations_df is not None and not operations_df.empty:
+        # Convert date columns
+        date_cols = ['event_date', 'created']
+        for col in date_cols:
+            if col in operations_df.columns:
+                operations_df[col] = pd.to_datetime(operations_df[col], errors='coerce')
+        
+        # Ensure lowercase column names
+        operations_df.columns = operations_df.columns.str.lower()
+    
+    return leads_df, operations_df
 
 def process_data(leads_df, operations_df=None):
     """
