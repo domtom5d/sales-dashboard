@@ -1,0 +1,23 @@
+Raw Data Tab
+Intended Function: This tab simply displays the raw dataset (after processing) in a table format and allows the user to download it. It’s mainly for transparency, so the user can see all the data points and any applied filters. Problems Identified:
+Filtered vs Full Data: Currently, the tab uses filtered_df (which, in the code, is a copy of processed_df before filtering). If filters were active, this might show only the filtered subset. Since the goal is to have filters off and display all data, we need to ensure the DataFrame shown here includes everything. If the default date filter remains in place (90-day window), then filtered_df would initially be a truncated set. In our earlier fix, we set the default to the full range, so in effect filtered_df will be the full data. But we should double-check this logic.
+Loading State: If no data is loaded at all (e.g. neither CSV uploaded nor database populated), filtered_df would be None and this tab would currently error out. There should be a user message in that case instead of an empty dataframe call.
+Recommended Fixes:
+Show All Data: Given that we want all data displayed here, we can bypass filtering entirely for the raw view. For instance, instead of st.dataframe(filtered_df), use the original processed_df. One simple approach: when constructing the tabs, pass the unfiltered DataFrame to this tab. In the current code, since filtered_df is essentially the same as processed_df unless filters are changed, it’s fine. But to be explicit: st.dataframe(st.session_state.processed_df). This ensures the Raw Data tab always shows the complete dataset.
+Enable Scrolling/Better Format: For usability, consider using st.dataframe with height or width parameters if the data is large, or st.dataframe which already is scrollable by default. Also add a download button so the user can download the data as CSV. The code already hints at this (“Add download button for filtered data” in snippet). Implement that using:
+python
+Copy
+Edit
+csv = st.session_state.processed_df.to_csv(index=False)
+st.download_button("Download CSV", csv, "leads_data.csv", "text/csv")
+This will allow easy export of the raw data.
+No Data Handling: If processed_df is None (no data loaded scenario), wrap the dataframe display in a conditional. E.g.:
+python
+Copy
+Edit
+if st.session_state.processed_df is None:
+    st.warning("No data loaded. Please upload CSV files or connect to the database.")
+else:
+    st.dataframe(st.session_state.processed_df)
+This prevents crashes and guides the user on what to do. In practice, the initialize_db_if_empty() call or upload logic should ensure we have data, but this is a safe check.
+The Raw Data tab is straightforward – after these adjustments it will reliably show the entire dataset and provide an export option.
