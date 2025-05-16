@@ -157,9 +157,8 @@ def setup_filters(df):
                 min_date = df[date_col].min().date()
                 max_date = df[date_col].max().date()
                 
-                # Default to last 90 days
-                default_start = max_date - datetime.timedelta(days=90)
-                default_start = max(default_start, min_date)
+                # Default to showing all data
+                default_start = min_date
                 
                 selected_date_range = st.date_input(
                     "Date Range",
