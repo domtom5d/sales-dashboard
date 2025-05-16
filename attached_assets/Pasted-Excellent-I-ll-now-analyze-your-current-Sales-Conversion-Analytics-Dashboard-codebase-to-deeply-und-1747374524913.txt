@@ -1,0 +1,442 @@
+Excellent. I’ll now analyze your current Sales Conversion Analytics Dashboard codebase to deeply understand its structure, identify why key analytics tabs like Conversion Analysis aren’t rendering expected outputs, and produce detailed findings and implementation prompts you can send directly to Replit or your development agent.
+
+This will include:
+✓ A reconstruction of the dashboard's original goals and architecture
+✓ A detailed breakdown of why specific components (e.g. KPIs, conversion breakdowns, lead scoring) are failing or underperforming
+✓ Actionable prompt-style tasks for your dev agent to fix broken logic, improve display, and re-activate insights
+✓ Tab-by-tab checklists of features to repair or implement based on your data schema
+
+I’ll get started and report back shortly.
+
+
+# Sales Conversion Analytics Dashboard – Code Audit and Fixes
+
+## Dashboard Overview Summary
+
+The Sales Conversion Analytics Dashboard is a multi-tab Streamlit app that analyzes historical lead data from Streak to identify traits and behaviors associated with successful conversions. The dashboard loads **leads** and **operations** data (either from CSV uploads or a database) and provides interactive visualizations, lead scoring, and AI-driven insights across several tabs. The overall structure is:
+
+* **Conversion Analysis:** KPI summary and charts breaking down conversion rates by time and category
+* **Feature Correlation:** Correlation of various features with conversion outcome
+* **Lead Scoring:** A logistic model to score leads and identify important features
+* **Raw Data:** A view of the dataset itself for reference
+* **Key Findings:** Automatically generated insights once the model is run
+* **Explanations:** Static documentation explaining each metric/tab
+* **Lead Personas:** Clustering analysis to segment leads into persona groups
+* **Advanced Analytics:** Deeper analyses (e.g. conversion vs. pricing, timing, etc.)
+* **AI Insights:** Integration with an AI (Mistral) to generate recommendations
+
+Currently, many of these tabs are not rendering correctly due to issues in data handling and code logic. In particular, some charts are missing (e.g. **Conversion by Booking Type** and **Conversion by Event Type**), filters are not functioning as intended (effectively disabled), and there are errors caused by mismatched or missing data fields. Below, we audit each tab, identify what it is supposed to do, diagnose the problems preventing it from displaying properly, and recommend specific fixes. Finally, we provide a set of concrete repair instructions (prompts) that can be given to a Replit agent to implement these fixes.
+
+## Conversion Analysis Tab
+
+**Intended Function:** This tab provides a summary of overall conversion KPIs and several charts that break down conversion rates by different categories. It should display total leads, conversion percentage, and other high-level metrics, then show trends over time and conversion breakdowns by **Booking Type**, **Referral Source**, **Marketing Source**, **Event Timing** (lead time, inquiry day), **Event Size** (guest count, staff ratio), and **Geography** (state or region). All data should be included by default (unless the user actively filters by date, status, or state).
+
+**Problems Identified:**
+
+* **Default Date Filter Restricting Data:** The dashboard is automatically filtering to the last 90 days of data by default. In `setup_filters`, the default date range is set to `(max_date - 90 days, max_date)`. This means older leads are excluded on initial load, making many charts appear empty or incomplete. Since filters are effectively “disabled” (not used by the user), the intent is to show **all data**.
+* **Missing “Event Type” in Charts:** The code attempts to plot “Conversion by Booking Type,” using a fallback to an `"Event Type"` column if `booking_type` is not present. However, after data normalization, all columns are lowercase with underscores (so an event type column would be `event_type`). The code is checking for `'Event Type'` with a space and capital letters, which never matches the normalized DataFrame. As a result, if the dataset only has `event_type` (and not `booking_type`), the chart is skipped and a “No Booking Type data available” message is shown. This is why **Conversion by Event Type** is not appearing.
+* **Data Integration for Booking/Event Type:** In the data processing logic, **event type** from the operations dataset is not being merged into the main leads DataFrame. Only `actual_deal_value` was merged from operations. Thus, if the leads data lacks a `booking_type` field (common if “Booking Type” is recorded only in the operations export or not at all), and the operations data contains an `event_type` for bookings, the combined dataset still has no booking or event type column to analyze. This structural omission causes the booking/event type chart to have no data.
+* **Chart Rendering Conditions:** The plotting functions do not always verify that the required columns are present and non-empty before attempting to plot. For **Referral Source** and **Marketing Source**, the code calls `plot_top_categories` on those columns without a guard. If those columns don’t exist or contain all nulls, it could either error out or simply produce an empty chart. (The Streak export likely includes these fields, but if not populated, the chart might silently fail.) The Booking Type plotting function does attempt a check (`if booking_col: ... else: st.info("No Booking Type data")`), but as noted, the logic is flawed for `event_type`. Overall, the tab should be more robust in checking that each category column exists in the DataFrame and has sufficient data before plotting.
+* **NaN and Categorical Handling:** There may be NaN values in certain fields (e.g. `actual_deal_value` for leads that didn’t close, or `state` for some leads). The code should ensure these NaNs are handled (via `fillna` or exclusion) before calculating conversion rates. In many cases, the code uses `errors='coerce'` and drops NaNs for outcome, which is good. Just be mindful that grouping or value counts will naturally ignore NaNs, but explicit handling (like filling `actual_deal_value` NaN with 0 or a label for “Unknown” category if needed) can make charts clearer.
+
+**Recommended Fixes:**
+
+* **Show All Data by Default:** Modify the date filter default to include the entire date range. For example, set `default_start = min_date` instead of `max_date - 90 days`. This way, when no filter is actively chosen, the data isn’t inadvertently truncated. Essentially, the **Date Range** picker should default to **\[min date .. max date]** of the data. If the intention is to disable filters entirely, an even simpler change is to skip applying the date filter when no selection is made (or treat the default as “All Time”).
+* **Integrate Event Type Data:** Include the `event_type` field from the operations dataset when merging into the leads. In the `normalize_data` or `process_data` step, after merging `actual_deal_value`, also merge `event_type` (and `booking_type` if needed). For example:
+
+  ```python
+  if df_ops is not None and 'event_type' in df_ops.columns:
+      df = df.merge(df_ops[['box_key','event_type']], on='box_key', how='left')
+  ```
+
+  Similarly, if `booking_type` is not already in the leads data but present in operations, merge that too. This ensures the final `processed_df` contains a column for event/booking type whenever available.
+* **Fix Booking vs Event Type Logic:** Update the chart function to look for the normalized column names. In `plot_booking_types`, change the check to `if 'booking_type' in df.columns: booking_col = 'booking_type' elif 'event_type' in df.columns: booking_col = 'event_type'`. Also adjust the title/label so that if `event_type` is being used, it doesn’t still label the chart “Booking Type.” One approach is to pass a dynamic title to the plotting function (e.g. if using event\_type data, call `plot_top_categories(..., title="Event Type")`). This way the chart heading will correctly reflect what is being plotted.
+* **Add Column Existence Checks:** Before plotting Referral Source and Marketing Source breakdowns, ensure those columns exist. You can add a simple check like:
+
+  ```python
+  if 'referral_source' in df.columns:
+      plot_top_categories(df, 'referral_source', "Referral Source")
+  else:
+      st.info("No Referral Source data available")
+  ```
+
+  (And similarly for marketing\_source.) This prevents errors if those fields are missing. In general, each visualization should verify that the underlying data is available. The `plot_top_categories` function itself can also handle this internally (it appears it may already handle an empty result by catching exceptions and showing an error message), but a quick existence check keeps the flow clear.
+* **Handle Minimum Counts Gracefully:** The code uses a `min_count` threshold (e.g. 10 leads) to decide if a category is significant enough to display. Keep this logic to avoid cluttering charts with tiny categories, but ensure that when no category meets the threshold, the user sees a message explaining that (e.g. “No Booking Type data with at least 10 leads”). It looks like the code is already attempting to do this inside `plot_top_categories` by checking if the summary DataFrame is empty after filtering. Make sure that message is shown in all relevant cases (for booking type, referral, marketing, etc.) so the user isn’t left with a blank area.
+
+By addressing these issues, the Conversion Analysis tab will display **all relevant charts**. After fixes, on initial load the KPIs and all charts (time trends, booking/event type, referral source, marketing source, timing factors, size factors, geographic insights) should populate using the full dataset.
+
+## Feature Correlation Tab
+
+**Intended Function:** This tab should analyze how each feature correlates with the conversion outcome. The expected content is a list (or bar chart) of features ranked by their correlation with the target (Won/Lost), as well as a correlation matrix across features. This helps identify which factors have the strongest linear relationship with conversion.
+
+**Problems Identified:**
+
+* **Function Not Implemented:** The code calls a function `calculate_correlations(filtered_df)` inside tab 2, but there is no definition for `calculate_correlations` in the provided code. It’s neither in the main app file nor imported, which means this will raise an error. (The try/except around it will catch the error and just display an error message on the app.) Thus, currently no correlation analysis is actually performed or shown.
+* **Including Non-Numeric Columns:** When implementing correlation, we need to consider that the dataset has many categorical columns (state, city, referral source, etc.) which can’t be used directly in a Pearson correlation calculation. If we blindly run `df.corr()`, pandas will automatically exclude non-numeric columns, which is fine. But we should also be deliberate in choosing which fields to correlate. For example, if a field is encoded as numeric ID codes or has missing values, it could mislead the correlation.
+* **Outcome Handling:** The outcome is stored as 0/1 in the `outcome` column (with 1 = won). We want to see correlation of other features with this outcome. Since outcome is binary, Pearson correlation is an acceptable measure of linear association, though not the only one. We should ensure outcome is numeric (it is, by design) and included in the correlation analysis.
+
+**Recommended Fixes:**
+
+* **Implement `calculate_correlations`:** Define this function to compute two things: (1) a DataFrame of correlation coefficients between each feature and the outcome, and (2) a full correlation matrix for the relevant features. For instance:
+
+  ```python
+  def calculate_correlations(df):
+      # Consider only numeric columns for correlation
+      numeric_df = df.select_dtypes(include='number').copy()
+      if 'outcome' in numeric_df.columns:
+          # Drop any constant or all-null columns to avoid NaNs
+          numeric_df = numeric_df.loc[:, numeric_df.nunique() > 1]
+          # Compute correlation matrix
+          corr_matrix = numeric_df.corr(method='pearson')
+          # Correlation of each feature with outcome
+          corr_outcome = corr_matrix[['outcome']].drop(index='outcome', errors='ignore')
+          corr_outcome = corr_outcome.rename(columns={'outcome': 'Correlation with Outcome'})
+          corr_outcome.insert(0, 'Feature', corr_outcome.index)
+          corr_outcome = corr_outcome.reset_index(drop=True)
+          return corr_outcome, corr_matrix
+      else:
+          return pd.DataFrame(), pd.DataFrame()
+  ```
+
+  This is a simplified approach: we take all numeric columns (which includes outcome, and any numeric features like number\_of\_guests, days\_until\_event, etc.), drop columns that are constant (to avoid division-by-zero in correlation), then compute Pearson correlations. We extract the “outcome” column from the matrix to get correlations of outcome with each feature.
+* **Display Correlation Results:** Once `corr_outcome` and `corr_matrix` are available, update the tab content to display them. A good approach is: show a bar chart of the top correlations with outcome, and possibly a heatmap or table for the correlation matrix. For example, you can use matplotlib or seaborn to create a horizontal bar plot of the top N features by absolute correlation with outcome. The code might look like:
+
+  ```python
+  corr_outcome = corr_outcome.sort_values("Correlation with Outcome", ascending=False)
+  top_corr = corr_outcome.head(10)  # top 10 features
+  fig, ax = plt.subplots(figsize=(8, 6))
+  sns.barplot(x="Correlation with Outcome", y="Feature", data=top_corr, ax=ax)
+  ax.set_title("Top Feature Correlations with Conversion")
+  st.pyplot(fig)
+  ```
+
+  And below that, you could present the full correlation matrix as a heatmap or an interactive table. If using seaborn heatmap:
+
+  ```python
+  fig2, ax2 = plt.subplots(figsize=(8,6))
+  sns.heatmap(corr_matrix, ax=ax2, cmap="YlGnBu", annot=False)
+  ax2.set_title("Correlation Matrix of Features")
+  st.pyplot(fig2)
+  ```
+
+  Make sure to catch cases where `corr_matrix` might be empty (e.g. if no numeric features exist, though unlikely here).
+* **Exclude Irrelevant Fields:** Consider dropping the `box_key` (unique ID) or any identifier fields from the correlation, as they don’t carry meaning. Also, if certain features are essentially binary or one-hot encoded from categoricals, Pearson correlation might still handle them, but just interpret results carefully. The main numeric features likely are already things like days until event, number of guests, etc., which is fine.
+* **Verify Data Types:** Ensure that by the time you call `calculate_correlations`, the data is fully numeric for intended fields. The normalization step should have converted things like `days_since_inquiry`, `bartenders_needed`, etc. to numeric. If some slip through as strings (maybe if there’s a column of IDs or phone numbers), they would be dropped by `select_dtypes`. Just double-check that `outcome` is int (it should be, as set in normalization).
+
+After implementing this, the **Feature Correlation tab** will show a clear ranking of features by correlation with outcome, and provide insight into multicollinearity or relationships via the correlation matrix. This addresses the missing charts issue here.
+
+## Lead Scoring Tab
+
+**Intended Function:** This tab is meant to build a predictive model (likely a logistic regression or similar) to score leads on their likelihood to convert. The user can click a button to generate the model. The output should include the model’s **feature importance or coefficients** (so we can see which factors drive conversion) and suggested **score thresholds** for categorizing leads (e.g. what score constitutes a “hot lead”). This tab doesn’t initially show charts, but rather data frames or text with model results.
+
+**Problems Identified:**
+
+* **Model Outputs Not Stored for Other Tabs:** After generating the lead scoring model, the code stores `scorecard_df` (feature weights) in `st.session_state.weights_df` and threshold info in `st.session_state.thresholds`. However, it **does not store the model’s predicted scores or metrics** (e.g. accuracy) anywhere. The Key Findings tab expects `st.session_state.model_metrics` (with something like `y_pred_proba`) to be set, but it never is. This means even after running the model, the Key Findings tab won’t recognize it (and will prompt the user to run the model).
+* **Using `generate_lead_scorecard`:** The model generation is handled by a function `generate_lead_scorecard(use_sample_data=False)`, which isn’t defined in the provided snippet. We presume it trains a model on the current `filtered_df` (or full data) and returns a DataFrame of feature weights and a dict of thresholds. We need to ensure this function is working correctly. Potential issues inside it could include not handling missing values in features, or not splitting data for evaluation (depending on complexity). Given the scope, we can assume it either does an internal train/test split or just fits on all data for demonstration.
+* **Feature Selection for Model:** The data contains many columns, including text or categorical fields that would need encoding to be used in a model. It’s unclear if `generate_lead_scorecard` takes care of encoding or if it expects a prepared set of features. If this function isn’t properly implemented, it might fail or produce a nonsensical model. For example, if it tries to include `state` or `city` without encoding, that would error out. Or if it includes `actual_deal_value` which has NaNs for non-booked leads, that could cause issues.
+* **No user feedback if already generated:** Minor point – if the user clicks the generate button multiple times, it will regenerate each time. There’s no harm, but we might consider disabling the button or indicating when a model has been created. For now, it’s fine to leave as is, just something to note.
+
+**Recommended Fixes:**
+
+* **Persist Model Metrics:** Modify the code to save the model’s metrics and predictions to `st.session_state` so other tabs can use them. For instance, after you call `generate_lead_scorecard()`, suppose it can also return a dict like `model_metrics` (containing keys like `'accuracy'`, `'precision'`, `'y_pred_proba'`, etc.). Capture that and do:
+
+  ```python
+  st.session_state.model_metrics = model_metrics
+  ```
+
+  If `generate_lead_scorecard` doesn’t currently return metrics, you should modify it to do so. At minimum, we want the predicted probabilities or scores for each lead (`y_pred_proba`) since Key Findings uses that. This might entail having the function internally predict on the data (or validation set) and return those probabilities.
+* **Ensure Proper Feature Usage:** Inside `generate_lead_scorecard`, verify that it’s only using appropriate features. A safe approach is to use the same numeric features from the correlation analysis (and possibly one-hot encode a few key categorical features if desired). Likely, the important features are numeric fields like `days_until_event`, `number_of_guests`, etc., and possibly some binary flags (like whether the lead came from a certain source, which could be one-hot encoded by the AI function if implemented). If this function is using an AI or external service (the name “scorecard” hints it might be using a service or a special algorithm), ensure it’s fed cleaned data. In practice, check that things like `city`, `state` aren’t fed in as raw strings. If they are, either drop them or encode them. If using scikit-learn, one could do something like:
+
+  ```python
+  features = ['days_until_event','number_of_guests','bartenders_needed', ...]  # list numeric and important categorical encoded fields
+  X = df[features].fillna(0)
+  y = df['outcome']
+  model = LogisticRegression(...)
+  model.fit(X, y)
+  weights = pd.DataFrame({
+      'Feature': features,
+      'Coefficient': model.coef_[0]
+  })
+  ```
+
+  This is a simplified example. The key is to fill or drop NaNs (`fillna(0)` for something like `actual_deal_value` might be reasonable since no deal = \$0). For categorical like `booking_type` if you want to include them, you’d need to convert to dummy variables. Given the complexity, it might be that `generate_lead_scorecard` focuses only on numeric fields or uses an automated approach to include categoricals (maybe via one-hot internally or an AI model). Just be aware of potential data type issues.
+* **Update UI Feedback:** After generating the model, the tab currently displays the `scorecard_df` (feature weights) and recommended `thresholds`. This is good. We might also display model performance (if available). For example, if `model_metrics` has an accuracy or AUC, show those:
+
+  ```python
+  st.write(f"Model Accuracy: {model_metrics['accuracy']*100:.1f}%")
+  ```
+
+  And if the list of thresholds is provided (say a dictionary with keys like `high`, `medium`, `low` score thresholds), list those as well with an explanation (e.g. “Leads with a score above X are considered High Priority.”). This will make the output more actionable.
+* **Prevent Multiple Loads (Optional):** If desired, disable the “Generate Lead Scoring Model” button after one use, or only allow re-running if data changes. This can be done by checking if `st.session_state.weights_df` already exists and then either hiding or changing the button. Not critical, but it improves UX. For example:
+
+  ```python
+  if 'weights_df' in st.session_state:
+      st.success("Lead scoring model is ready. You can re-run it to update.")
+  ```
+
+  This way the user knows it’s been done.
+
+By implementing these fixes, the **Lead Scoring tab** will produce a model and properly propagate its results to subsequent tabs. The user will see a table of feature importance (which features contribute most to conversion) and get threshold recommendations, and the backend will store the necessary info for Key Findings to use.
+
+## Raw Data Tab
+
+**Intended Function:** This tab simply displays the raw dataset (after processing) in a table format and allows the user to download it. It’s mainly for transparency, so the user can see all the data points and any applied filters.
+
+**Problems Identified:**
+
+* **Filtered vs Full Data:** Currently, the tab uses `filtered_df` (which, in the code, is a copy of `processed_df` before filtering). If filters were active, this might show only the filtered subset. Since the goal is to have filters off and display all data, we need to ensure the DataFrame shown here includes everything. If the default date filter remains in place (90-day window), then `filtered_df` would initially be a truncated set. In our earlier fix, we set the default to the full range, so in effect `filtered_df` will be the full data. But we should double-check this logic.
+* **Loading State:** If no data is loaded at all (e.g. neither CSV uploaded nor database populated), `filtered_df` would be None and this tab would currently error out. There should be a user message in that case instead of an empty dataframe call.
+
+**Recommended Fixes:**
+
+* **Show All Data:** Given that we want all data displayed here, we can bypass filtering entirely for the raw view. For instance, instead of `st.dataframe(filtered_df)`, use the original `processed_df`. One simple approach: when constructing the tabs, pass the *unfiltered* DataFrame to this tab. In the current code, since `filtered_df` is essentially the same as `processed_df` unless filters are changed, it’s fine. But to be explicit: `st.dataframe(st.session_state.processed_df)`. This ensures the Raw Data tab always shows the complete dataset.
+* **Enable Scrolling/Better Format:** For usability, consider using `st.dataframe` with `height` or `width` parameters if the data is large, or `st.dataframe` which already is scrollable by default. Also add a download button so the user can download the data as CSV. The code already hints at this (“Add download button for filtered data” in snippet). Implement that using:
+
+  ```python
+  csv = st.session_state.processed_df.to_csv(index=False)
+  st.download_button("Download CSV", csv, "leads_data.csv", "text/csv")
+  ```
+
+  This will allow easy export of the raw data.
+* **No Data Handling:** If `processed_df` is None (no data loaded scenario), wrap the dataframe display in a conditional. E.g.:
+
+  ```python
+  if st.session_state.processed_df is None:
+      st.warning("No data loaded. Please upload CSV files or connect to the database.")
+  else:
+      st.dataframe(st.session_state.processed_df)
+  ```
+
+  This prevents crashes and guides the user on what to do. In practice, the `initialize_db_if_empty()` call or upload logic should ensure we have data, but this is a safe check.
+
+The Raw Data tab is straightforward – after these adjustments it will reliably show the entire dataset and provide an export option.
+
+## Key Findings Tab
+
+**Intended Function:** This tab synthesizes the most important insights from the data and model in a human-readable list. After the lead scoring model is run, this tab should list bullet-point findings such as **key drivers of conversion, segments with high/low performance, and any notable patterns**. It draws on the model’s results (feature weights and lead scores) as well as overall data analysis.
+
+**Problems Identified:**
+
+* **Dependency on Model Run:** Key Findings will only show content if a model has been generated (it checks for `model_metrics` and `weights_df` in session state). Currently, due to the bug mentioned in the Lead Scoring tab, `model_metrics` is never set, so this condition fails even after running the model. Thus, the tab likely only ever shows the info message “Run the lead scoring model in the previous tab to see key findings.” In other words, no findings are actually displayed.
+* **Missing `generate_findings` Implementation:** The code calls `generate_findings(df, y_scores, thresholds)`, but this function is not defined or imported anywhere in the snippet we have. It appears intended to produce the list of insight strings. Without it, even if we had `y_scores` and `thresholds`, nothing will happen (except a caught exception resulting in an error message on the app).
+* **Potential Content of Findings:** We need to decide what the findings should be. They likely should answer questions like: *Which factors are most positively correlated with winning?* (e.g. “Short lead times increase conversion rate”), *What segments of leads convert the best?* (e.g. “Corporate events have a higher close rate than private events”), *Quality of leads by score* (e.g. “Leads with score > X convert at Y%”). The model’s `weights_df` gives us some of this (sign and magnitude of feature coefficients), and `y_scores` with `thresholds` can give us breakpoints for high/medium/low quality leads. The aim is to turn those into plain English statements.
+
+**Recommended Fixes:**
+
+* **Connect Model Results to Findings:** Ensure that after running the model, we have `y_scores` available (predicted probabilities or scores for each lead). If you stored `st.session_state.model_metrics['y_pred_proba']` as suggested, you can use that. Then, implement `generate_findings` to analyze these scores in combination with the feature importances. For example, one approach:
+
+  * Calculate the overall conversion rate (outcome mean) for context.
+  * Identify the top 2–3 features by weight (from `weights_df`) and note whether they positively or negatively impact conversion. For instance, if “days\_until\_event” has a negative coefficient, a finding could be: “**Leads with shorter time until the event are more likely to convert** (model indicates conversion probability drops as days-until-event increases).”
+  * Use the `thresholds` to quantify lead quality segments. If `thresholds` contains something like `{'high': 0.8, 'medium': 0.5}`, determine how many leads fall into each category and what their conversion rates are. A finding might be: “**High-scoring leads (model score ≥ 0.8) converted at 65%, compared to 10% for low-scoring leads**. Focus sales efforts accordingly.”
+  * If available, find any notable segment from raw data. For example, you might notice from weights that `is_corporate_event` (if such a flag exists or could be derived from event type) is important. Then a finding could be: “**Corporate events have a higher close rate than personal events**, suggesting different sales approaches for each segment.” This requires either a feature or external knowledge to identify; only do this if the data supports it (e.g. perhaps `lead_trigger` or some category implies corporate vs private).
+
+  The `generate_findings` function can compile these points into a list of strings. Pseudocode for it:
+
+  ```python
+  def generate_findings(df, y_scores, thresholds):
+      findings = []
+      # 1. Overall conversion
+      overall_rate = df['outcome'].mean()
+      findings.append(f"Overall conversion rate is **{overall_rate*100:.1f}%** of all leads.")
+      # 2. Feature insights (using weights_df from session state)
+      weights = st.session_state.get('weights_df')
+      if weights is not None:
+          top_features = weights.sort_values('Weight', ascending=False)
+          # Take top positive and top negative
+          top_pos = top_features.iloc[0]
+          top_neg = top_features.iloc[-1]
+          findings.append(f"**{top_pos['Feature']}** is the strongest positive predictor of conversion (model weight {top_pos['Weight']:.2f}).")
+          findings.append(f"**{top_neg['Feature']}** is associated with lower conversion (model weight {top_neg['Weight']:.2f}).")
+      # 3. Lead score segments
+      if y_scores is not None and thresholds:
+          high_cut = thresholds.get('high')
+          med_cut = thresholds.get('medium')
+          if high_cut:
+              high_conv = df[y_scores >= high_cut]['outcome'].mean() if sum(y_scores >= high_cut) > 0 else 0
+              findings.append(f"High-scoring leads (score ≥ {high_cut:.2f}) converted at ~{high_conv*100:.1f}%.")
+          if med_cut:
+              med_conv = df[y_scores.between(med_cut, high_cut)]['outcome'].mean() if high_cut else 0
+              findings.append(f"Medium-scoring leads (score ~{med_cut:.2f}-{high_cut:.2f}) converted at ~{med_conv*100:.1f}%.")
+      return findings
+  ```
+
+  This is an illustrative example – you’d tailor the text and logic to the actual thresholds definition. The key is to turn data into clear statements.
+* **Import or Define the Function:** Add the `generate_findings` function to the code (in the same file or imported from a util module) so that the call in tab 5 works. If the project intended to have this in an external `mistral_insights` or similar, but it’s not there, implementing a simple version as above will suffice. It doesn’t need to be extremely advanced; even a handful of bullet points covering overall conversion rate, one positive driver, one negative driver, and the difference between high and low scored leads would deliver value.
+* **Protect Against Missing Data:** Wrap the generation in a try/except (which it already is in tab code) and ensure that if for some reason `y_scores` or `thresholds` aren’t available, it doesn’t crash. If model isn’t run, we keep the info message. If the model is run but something fails, catch it and use `st.error` to alert that finding generation failed (as the code already does).
+
+Once fixed, the **Key Findings tab** will automatically list the most salient insights after the lead scoring model is executed. This provides the “so what” analysis for the sales team – highlighting which factors matter and where to focus efforts.
+
+## Explanations Tab
+
+**Intended Function:** This tab contains static documentation, explaining each part of the dashboard and the metrics shown. It’s essentially a user guide within the app.
+
+**Problems Identified:** (This tab mostly involves content, not dynamic data, so issues are minimal.)
+
+* The content might not be fully written or might be outdated if changes were made to the dashboard. For example, if we added “Event Type” analysis, the explanation should mention it. If the filters have been adjusted, the text should reflect that “by default, all data is shown, but you can filter by date, status, or state using the controls...”.
+* Formatting: Ensure the markdown uses proper formatting (bullet lists, bold terms, etc.) to make it easily readable. The code already uses headings and bullet points in the markdown string for this tab.
+
+**Recommended Fixes:**
+
+* **Revise Content for Accuracy:** Read through the explanations and update any parts necessary to match the current functionality. For instance, if the explanation still mentions a 90-day default filter, remove that or change it to note all-time data. If new insights or tabs were added, describe them. The user should be able to understand what each tab shows and how to interpret the charts.
+* **Improve Clarity:** Use bullet points for listing definitions (the code already shows numbering like “1. Conversion Summary – ...”). Make sure each metric (Total Leads, Conversion Rate, etc.) is explained in plain language. If any abbreviations or terms are used (like KPI, AI, etc.), ensure they’re explained for completeness.
+* **No Technical Jargon:** The explanations are for end users, so any references to “Logistic regression” or “Pearson correlation” should be minimized or explained non-technically. It’s fine to say “a statistical model” or “a correlation (which measures linear relationship from -1 to 1)” depending on audience. Since this is a sales dashboard, likely the readers are non-technical sales managers, so keep it high-level.
+
+This tab doesn’t require code changes beyond editing the markdown text. Once updated, the **Explanations tab** will serve as a helpful reference, ensuring users get the most out of the dashboard’s features.
+
+## Lead Personas Tab
+
+**Intended Function:** This tab aims to use unsupervised machine learning to segment the leads into distinct “personas” or clusters with similar characteristics. The idea is to discover natural groupings in the data (for example, one persona might be “Large event planners with long lead times” and another “Small last-minute inquiries”) and highlight how each persona behaves in terms of conversion. It’s a more advanced analysis to help tailor different sales approaches to different lead types.
+
+**Problems Identified:**
+
+* **Not Implemented:** Aside from a title and description, there’s no actual computation or visualization in this tab. The code doesn’t call any function (like `generate_lead_personas`) or perform clustering. Therefore, it currently shows just static text explaining what *would* happen, but no results.
+* **No Trigger or Control:** Ideally, for such analysis, you might have a button like “Identify Personas” since clustering can be intensive. Or it could run automatically on data load if it’s efficient. The code has neither, meaning nothing happens.
+* **Clustering Approach Undefined:** We need to decide on a method to cluster leads. Common choices are K-Means clustering on selected numeric features, hierarchical clustering, or even using PCA for dimensionality reduction then clustering. We also need to decide how many clusters (personas) to form – perhaps 3 to 5 clusters is a reasonable starting point unless we determine an optimal number via an algorithm.
+* **Data Preparation for Clustering:** The lead data has both numeric and categorical features. We should choose features that make sense for clustering. Likely candidates: `days_until_event`, `number_of_guests`, `region/state` (which can be one-hot or perhaps cluster by geography separately), `lead_source` (referral, marketing – could one-hot), etc. Too many features can dilute the clustering, so we should select a handful that capture the lead “profile.” Also, scaling features to a similar range is important for algorithms like K-Means (for example, days\_until\_event could range into the hundreds, whereas outcome is 0/1). The outcome shouldn’t be used in clustering since we want personas independent of conversion (though we will later evaluate each persona’s conversion rate).
+
+**Recommended Fixes:**
+
+* **Implement Clustering (K-Means):** Introduce a function to perform clustering on the lead data. For example, use K-Means with a chosen number of clusters (say 4). Steps:
+
+  * Select features for clustering. For instance: `X = df[['days_until_event','number_of_guests','event_month','weekday','state']]`. We might need to encode month and weekday (e.g. convert to numeric or one-hot). Or we could use only numeric features for simplicity: perhaps `days_until_event`, `number_of_guests`, and maybe `actual_deal_value` or `total_serve_time` if relevant. You can also include `marketing_source` vs `referral_source` as a binary (like one feature indicating if it was referral).
+  * Preprocess: fill NaNs (e.g. guests NaN -> 0, days\_until\_event NaN -> some average or 0 if missing means event date not set), then standardize the numeric features (scaling each to mean 0, std 1) so that no one feature dominates due to scale. The Python `sklearn.preprocessing.StandardScaler` can be used.
+  * Run KMeans: `kmeans = KMeans(n_clusters=4, random_state=42).fit(X_scaled)`. This will assign each lead a cluster label.
+  * Attach cluster labels to the DataFrame: `df['persona'] = kmeans.labels_`.
+  * Summarize each cluster: For each cluster, compute things like count of leads, average conversion rate (`outcome` mean), and profile stats (average guests, average days\_until\_event, most common marketing\_source, etc.). This can form the persona description. For example, cluster 0 might have: 50 leads, 10% conversion, avg guests 20, avg lead time 3 days, mostly referral sources from social media – that might be “Small last-minute leads, low conversion”. We can derive these insights programmatically.
+* **Display Persona Summaries:** Present the findings in a clear format. For instance, use `st.markdown` to list each persona with a name and stats. You could auto-generate a simple name or description from the data (or even use the AI to label them, but that might be overkill). Even numbering them is fine: “**Persona 1:** description...”. Include details like “Avg guests: X, Avg lead time: Y days, Conversion rate: Z%”. Optionally, use a bar chart or pie chart to show the percentage of leads in each persona and their win rates side by side. For example, a bar chart of conversion rate by persona could be useful, or a horizontal bar of number of leads in each persona.
+* **User Control:** Add a button “Generate Lead Personas” that triggers the clustering, since it might take a moment. Under the hood, when clicked, run the clustering analysis and store results (like the persona summary DataFrame or the cluster labels). Alternatively, as the dataset isn’t huge, it could run automatically, but a button gives the user a sense of action. Use `st.button` and wrap the clustering in an `if` block so it doesn’t rerun on every app refresh unnecessarily.
+* **Verify Cluster Meaningfulness:** After implementing, check that the clusters formed do make sense. If not, you might tweak the features or number of clusters. This may be iterative. But a basic implementation with a few key features should yield some separation (for example, one cluster might group all leads with very high guest counts, another with very low days\_until\_event, etc.). Even if not perfect, any noticeable differences can be reported.
+
+By adding this functionality, the **Lead Personas tab** will become interactive and insightful. Sales teams could use these personas to tailor communication (for example, quick-turnaround leads vs long-term planners might need different sales tactics). The cluster stats will also reveal which persona converts best, which could inform marketing focus.
+
+## Advanced Analytics Tab
+
+**Intended Function:** This tab digs into various specialized analyses of the data, beyond the basics in the Conversion Analysis tab. Based on the code, it covers multiple sub-analyses:
+
+* **Referral Source vs Conversion** – likely conversion rates by referral source type (e.g. how leads from different marketing channels perform).
+* **Marketing Source vs Conversion** – similar for marketing campaigns.
+* **Booking Type vs Conversion** – conversion by booking type (or event type).
+* **Price per Guest Analysis** – possibly examining how the ratio of deal value to guest count correlates with conversion or optimal pricing.
+* **Event Month Analysis** – how conversion varies by event month (seasonality).
+* **Inquiry Weekday Analysis** – conversion based on the day of week the inquiry came in (e.g. leads that come in on Mondays vs Fridays).
+* **Staff Ratio Analysis** – conversion vs the bartender-to-guest ratio (maybe identifying if certain staffing requests correlate to closing).
+
+This tab likely runs a comprehensive analysis function (`run_all_analytics` or separate `generate_*_analysis` calls) to produce data frames for each of these, and then visualizes each with either charts or tables.
+
+**Problems Identified:**
+
+* **Event Type vs Booking Type Overlap:** Similar to earlier issues, if the data only has `event_type` instead of `booking_type`, the **booking\_type\_analysis** might come out empty or not at all. The advanced analysis code references `analytics_results["booking_type_analysis"]`. If `booking_type` was not in the DataFrame, the function that calculates this might either create an empty result or skip it. Given the fixes we applied, `booking_type` may now be present (either from leads or merged from ops). If not, and only `event_type` exists, we should account for that.
+* **Chart Formatting Issues:** In the partial code glimpses, there are bits where the code sorts categorical axes (month names, weekdays) to ensure charts appear in logical order. We need to ensure those parts run without error. For instance, they convert month names to a categorical with a specified order (`month_order = ['January', ..., 'December']` presumably) before plotting. If not done carefully, it could throw a warning or mix up order. Similarly for weekdays. From the snippet, it looks like they do:
+
+  ```python
+  analytics_results["event_month_analysis"]["month"] = pd.Categorical(analytics_results["event_month_analysis"].index, categories=month_order, ordered=True)
+  analytics_results["event_month_analysis"] = analytics_results["event_month_analysis"].sort_values("month")
+  ```
+
+  This should work as long as the index of that DF is month names. Just verify that logic when running.
+* **Empty Data Scenarios:** It’s possible some sub-analyses yield no data. For example, if no leads have a referral source (maybe all leads came from marketing campaigns), the referral\_source\_analysis might be an empty DataFrame. The code checks for `.empty` and then either plots or shows a dataframe accordingly. Ensure that in empty cases, a message is shown (like “No data for referral source analysis”) instead of leaving a blank space. The code structure shows `else: st.info(...)` in some cases, just confirm each analysis has that pattern.
+* **Use of Actual Deal Value:** The price-per-guest analysis likely divides `actual_deal_value` by `number_of_guests` to see how per-person pricing might affect conversion or revenue. For leads that never converted (lost), `actual_deal_value` might be NaN or 0. The analysis might separate won vs lost to see average price per guest or something. We should ensure that `actual_deal_value` is merged and numeric (which we did) and that NaNs are handled (could be dropped or considered 0 for lost deals). If currently a lost lead has NaN deal value, the division will result in NaN, and that lead might be excluded from analysis inadvertently. Possibly, the analysis function already filters to only won deals for price per guest (since lost deals have no price). If that’s the case, it might be showing distribution of deal sizes per guest for won deals, identifying any trend (like maybe mid-range per-person prices sell best).
+* **Performance considerations:** Running all these analytics can be done quickly since the dataset isn’t huge. Just ensure it’s only done once per run (likely they store `analytics_results` in session to avoid redoing on every interaction). The code does `st.session_state.analytics_results = analytics_results` and then on subsequent runs uses that if available.
+
+**Recommended Fixes:**
+
+* **Include Event Type in “Booking Type” Analysis:** Update the advanced analytics computation to handle the case where `booking_type` is not present. For example, in the function that computes booking\_type\_analysis, add:
+
+  ```python
+  if 'booking_type' in df.columns:
+      result['booking_type_analysis'] = compute_conversion_by_category(df, 'booking_type')
+  elif 'event_type' in df.columns:
+      result['booking_type_analysis'] = compute_conversion_by_category(df, 'event_type')
+      result['booking_type_analysis'].index.name = 'Event Type'
+  ```
+
+  And later, when displaying, if you know it’s actually event type data, adjust the chart title or label. Since the display code currently always labels it “Conversion by Booking Type”, you could conditionally change:
+
+  ```python
+  title = "Conversion by Booking Type"
+  if 'event_type' in df.columns and 'booking_type' not in df.columns:
+      title = "Conversion by Event Type"
+  # then use title in st.subheader or chart titles
+  ```
+
+  This way the user isn’t confused.
+* **Verify and Guard Each Analysis:** For each analysis in `analytics_results`, make sure the code checks for emptiness or existence. The pattern in code is already doing `if analytics_results and not analytics_results["XYZ"].empty:` before plotting. Continue this pattern consistently. If an analysis key might not exist at all (for instance, if code skips creating one due to missing column), then `analytics_results.get("key")` should be used to avoid KeyError. E.g.
+
+  ```python
+  if analytics_results.get("booking_type_analysis") is not None and not analytics_results["booking_type_analysis"].empty:
+      ... plot ...
+  elif analytics_results.get("booking_type_analysis") is not None:
+      st.info("No data available for Booking/Event Type analysis.")
+  ```
+
+  This covers both an empty DF or a missing key.
+* **Improve Visualizations:** Ensure each subplot has a clear title and axis labels. For example, in referral\_source\_analysis, label the axes (“Referral Source” vs “Conversion Rate (%)” perhaps). Use percentage format for conversion rate if appropriate. Some of this is nicety, but it makes the advanced insights easier to interpret.
+* **Cross-check Calculations:** It’s worth verifying what each analysis is actually calculating:
+
+  * **Referral/Marketing Source Analysis:** likely grouping by `referral_source` and `marketing_source` and computing conversion rate per group. Ensure that these include an “All other” or something if too many categories, or perhaps limit to top 5 sources for clarity. If the function already picks top categories (as hint from `plot_top_categories` usage, but that was in conversion tab), perhaps advanced analysis shows all. It’s fine either way; just ensure that if dozens of distinct sources exist, the chart is still readable (maybe use a horizontal bar chart or allow scrolling in a table instead).
+  * **Price per Guest Analysis:** likely bins leads by price-per-guest ranges. Check that it’s computing that only on relevant leads. If lost leads have no price, they might be excluded, which is fine. The result might show something like conversion rate by price-per-guest bucket, or maybe just distribution of deal sizes. Once it runs, verify the interpretation and consider adding an annotation/explanation like “Price per Guest (for won deals) distribution.”
+  * **Staff Ratio Analysis:** uses `ratio_bin` or similar. We created `ratio = bartenders_needed / number_of_guests` and binned it as `ratio_bin` in normalization. So likely this analysis looks at conversion by staffing ratio categories. It could reveal if events with higher staff-to-guest ratio (maybe indicating VIP service) close more often, or vice versa (just speculation). Make sure the ratio was computed (our normalize did that if both fields present). If many leads lack one of these fields, the ratio might be NaN for them and those leads might be left out of this analysis. That’s fine, but if too much data is missing, it could be meaningless. However, typically staffing needs might be known only for certain leads. Anyway, ensure the code handles missing by ignoring those leads.
+* **Streamline Execution:** Possibly add a “Run Advanced Analytics” button if you want to avoid computing everything on every page load. The code seems to assume either a button or at least caching via session state. Given that after first run it stores results, it should be okay. You could explicitly put:
+
+  ```python
+  if st.button("Run Advanced Analytics"):
+      analytics_results = run_all_analytics(filtered_df)
+      st.session_state.analytics_results = analytics_results
+  ```
+
+  and then display. If you do that, also handle if `analytics_results` already in session (to show a “Showing previously computed results” message as the code snippet suggests with `st.success("Showing previously...")`). This prevents confusion if the user toggles away and back; they won’t have to press the button again unless data changed.
+
+The **Advanced Analytics tab** after these fixes will present several insightful charts. Sales and marketing teams can learn, for example, which marketing channels yield the best conversion, how seasonal timing affects bookings, and if certain deal sizes or staffing expectations correlate with success. All the analyses will handle missing data gracefully and label the charts correctly (Booking vs Event type, etc.), resolving the previously broken or hidden visualizations.
+
+## AI Insights Tab
+
+**Intended Function:** This tab leverages an AI (labeled “Mistral AI” in the code) to generate higher-level insights and recommendations. The user can select different types of AI analysis such as **Sales Opportunity Analysis** (possibly looking at where the sales process can improve), **Booking Type Recommendations** (maybe suggestions on which booking types to target or how to improve them), and **Customer Segment Insights**. When the user selects an analysis type and provides an API key for the AI service, the system should send the relevant data and prompt to the AI and display the returned insights.
+
+**Problems Identified:**
+
+* **API Key Requirement:** The tab requires a `MISTRAL_API_KEY` (likely for an external API) to run. If the key is not set, the UI stays in a state asking for the key. That’s fine, but just ensure the user understands they need to input it. The code provides a text input and “Set API Key” button. Once set, it suggests refreshing the page to load AI insights. This could be smoother (maybe immediately enable analysis options without a refresh by using `st.experimental_rerun()` after setting the env var).
+* **Integration with Data:** The AI functions `generate_sales_opportunity_analysis(filtered_df)`, `generate_booking_type_recommendations(filtered_df)`, etc., likely package up the data or some summary of it and call the AI. It’s crucial these functions handle the data volume properly (maybe summarizing it rather than sending every row) and have well-crafted prompts so the AI returns useful info. We don’t see their implementation here, but assuming they exist and work with the API. If they are not implemented, then this tab won’t function beyond the UI. That would be a major missing piece, but presumably the focus is on earlier tabs.
+* **Error Handling:** The AI calls should be wrapped in try/except to catch API errors or timeouts, and display a friendly error (`st.error("Failed to retrieve AI insights. Please try again.")`). The code likely does something like that, but double-check.
+* **Output Formatting:** The AI’s response might be text (which could include line breaks, lists, etc.). The code should display it nicely. Using `st.markdown(analysis_result)` or similar can format any markdown the AI returns. If the AI returns a structured object, then it needs formatting. Given these functions names, probably the AI returns a string of insights.
+
+**Recommended Fixes:**
+
+* **Automatic Refresh After Key Set:** To improve UX, when the user enters the API key and clicks the set button, you can programmatically trigger a rerun so that the key is now present in `os.environ` and the select box + generate button appear immediately. This can be done with `st.experimental_rerun()`. For example:
+
+  ```python
+  if st.button("Set API Key") and api_key_input:
+      os.environ["MISTRAL_API_KEY"] = api_key_input
+      st.success("API key set successfully!")
+      st.experimental_rerun()
+  ```
+
+  This will reload the app and, because the env var is now set, show the AI analysis options.
+* **Verify AI Functions Availability:** Make sure `generate_sales_opportunity_analysis`, `generate_booking_type_recommendations`, and `generate_customer_segment_insights` are imported or defined. The code snippet showed them being imported at the top of app.py. If the actual implementations are in a module, ensure that module is included and the functions work. If they are not implemented yet, you may need to implement at least dummy versions to avoid runtime errors. For instance, as a placeholder, they could return a string like `"Recommendation: Focus on X..."` based on a quick look at data. However, presumably the AI integration is a whole separate system that might be configured outside of our current scope.
+* **Data Privacy Consideration:** If you send raw data to an AI API, consider if that’s acceptable or if summarization is needed for privacy. It may be okay since this is internal analysis, but it’s something to keep in mind (perhaps not a code fix, but a note to use aggregated stats in prompts rather than full PII).
+* **Contextual Prompts:** Ensure each analysis type provides enough context to the AI. For example, `generate_booking_type_recommendations(df)` might do: “Summarize how different booking types perform and suggest which to focus on.” The quality of output depends on prompt engineering. If the output is not useful, refine the prompt or the data passed. This is more of a content tweak than a code bug, but it affects whether the tab feels “broken” or not.
+* **Output Display:** After receiving `analysis_result` from the AI, format it. If it’s a string containing multiple lines or bullet points, use `st.markdown(analysis_result)` to preserve formatting. If it’s long, consider putting it in an expandable container (`st.expander`) or just let the user scroll. Also, possibly split the response into multiple `st.write` calls if needed for separation of points.
+
+If everything is set up correctly, the **AI Insights tab** will allow the user to leverage AI for narrative analysis and recommendations. For example, the AI could say things like “**Opportunity:** Many leads from referrals are not converting – consider providing referral incentives.” or “**Recommendation:** Increase focus on corporate event leads in Q4 as they show higher conversion.” These qualitative insights complement the quantitative charts from earlier tabs.
+
+---
+
+With all of the above fixes, the Sales Conversion Analytics Dashboard will be fully functional and robust. All charts and data will render properly across tabs, and the insights drawn will be accurate and actionable. Below is a summary of the specific repair steps for implementation.
+
+## Agent-Ready Prompts for Replit Repairs
+
+1. **Default Filter to All Data:** *In `setup_filters`, change the default date range to use the earliest date as the start.* For example, set `default_start = min_date` instead of `max_date - timedelta(days=90)`. This ensures the entire dataset is shown by default.
+2. **Merge Event Type Field:** *Modify the data processing to include event type.* After merging `actual_deal_value` from operations, also merge `event_type` (and `booking_type` if missing). e.g., `df = df.merge(df_ops[['box_key','event_type']], on='box_key', how='left')`. This adds an `event_type` column to the main DataFrame.
+3. **Fix Booking Type Chart Logic:** *Update the `plot_booking_types` function to recognize `event_type`.* Check for `'event_type'` in columns (lowercase) instead of `'Event Type'`. If present (and no `booking_type`), use `booking_col = 'event_type'` and adjust the chart title to "Event Type". This will enable the **Conversion by Event Type** chart when applicable.
+4. **Add Column Checks for Categories:** *Before plotting category charts, verify the column exists and has data.* For **Referral Source** and **Marketing Source** charts, wrap the calls in `if 'referral_source' in df.columns:` (and similarly for marketing\_source). If not present or if all values are NaN, use `st.info` to notify “No data available for X”. This prevents missing-chart errors.
+5. **Implement `calculate_correlations`:** *Create the `calculate_correlations` function to compute feature correlations.* Only use numeric columns. Return a DataFrame of correlations with outcome (sorted) and a full correlation matrix. Use Pearson correlation via pandas `.corr()`. This will supply data for the Feature Correlation tab.
+6. **Plot Correlation Results:** *In the Feature Correlation tab, after calculation, plot the top correlations.* Use a bar chart (e.g. seaborn barplot) for the top features’ correlation with outcome, and display the correlation matrix (heatmap or table). Ensure to handle cases with no numeric features gracefully by showing a message if empty.
+7. **Store Model Metrics in Session:** *After generating the lead scoring model, save its metrics and predictions.* Capture the output of `generate_lead_scorecard`. For instance, if it returns `scorecard_df, thresholds, model_metrics`, then do: `st.session_state.model_metrics = model_metrics`. Make sure `model_metrics` contains `y_pred_proba` (predicted probabilities or scores for leads) and any performance stats. This makes the model info accessible to Key Findings.
+8. **Implement/Import `generate_findings`:** *Provide a function to compile key insights from the model results.* This function should create bullet-point findings (as a list of strings) using `st.session_state.weights_df` (feature importance), `st.session_state.model_metrics['y_pred_proba']` (lead scores), and `st.session_state.thresholds`. If not pre-existing, implement it as described (cover overall conversion rate, top positive/negative features, high vs low score conversion). Ensure the Key Findings tab calls this function and displays each finding with `st.markdown("• " + finding)`.
+9. **Ensure Raw Data Shows All Leads:** *Use the full processed dataframe in Raw Data tab.* Replace `st.dataframe(filtered_df)` with `st.dataframe(st.session_state.processed_df)`. This guarantees all data is visible regardless of filters. Add a download button to export this dataset as CSV for convenience.
+10. **No Data Safeguard:** *Add a check for empty dataset.* If `st.session_state.processed_df` is None or empty, use `st.warning("No data loaded...")` instead of attempting to display an empty frame. This guides the user to load data.
+11. **Lead Personas Clustering:** *Implement K-Means clustering for lead personas.* On clicking a “Generate Personas” button, select key features (e.g. guests, days\_until\_event, maybe source categories), scale them, and run `KMeans(n_clusters=4)`. Assign cluster labels to leads. Compute summary stats per cluster (count, conversion rate, avg values). Store results (e.g. in `st.session_state.personas_df`). Display each persona’s profile in a markdown list or table. For example, “**Persona 1:** 50 leads, 8% conversion, avg 200 guests, typically long lead times (\~90 days).” Do this for each cluster. This will activate the Lead Personas tab.
+12. **Advanced Analytics – Integrate Event Type:** *Include `event_type` in advanced analysis if `booking_type` is absent.* Modify the analytics function to treat `event_type` as equivalent to booking type when needed. Also adjust the tab display: if using event type data, change the subheader to “Conversion by Event Type” for accuracy.
+13. **Advanced Analytics – Clean Chart Outputs:** *Double-check each sub-analysis for proper output.* Add `st.info` messages when an analysis yields no data (e.g. no referral source info). Ensure category ordering is applied (e.g. months in calendar order, weekdays Mon–Sun) before plotting so charts make sense. Label chart axes (for readability) and use `st.pyplot` for matplotlib figures after creation. Keep using the session cache (`st.session_state.analytics_results`) so that after initial run, charts don’t recompute unless needed.
+14. **AI Insights Activation:** *Streamline the AI insights tab.* After setting the API key, call `st.experimental_rerun()` to refresh and load the analysis options immediately. Ensure the selectbox for analysis type (Sales Opportunity, Booking Recommendations, Segment Insights) appears only when API key is present. Wrap the AI generation call in a spinner and try/except to handle delays or failures gracefully. Finally, display the AI’s response with `st.markdown` so that any formatting or lists in the AI output render correctly. If the AI functions are not yet implemented, create placeholder returns to avoid runtime errors (so the tab doesn’t break the whole app).
+
+Each of these steps addresses a specific structural or logic problem that is preventing the dashboard from functioning as intended. Applying these fixes will restore full functionality: all charts (Booking Type, Event Type, etc.) will display with correct data, filters will default to showing all data, and advanced features like lead scoring, personas, and AI insights will operate smoothly.
