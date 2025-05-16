@@ -1,0 +1,122 @@
+Your debug output shows two clear issues:
+
+Your widgets never set session_state.date_filter, status_filter, or region_filter—they remain None.
+
+Your code is still looking for columns named state, but your DataFrame has a capital-“S” State.
+
+Let’s fix both at once.
+
+1) Normalize your columns up front
+Put this right after you load/merge your CSVs into raw_df:
+
+python
+Copy
+Edit
+# Standardize all column names
+raw_df.columns = (
+    raw_df.columns
+         .astype(str)
+         .str.strip()
+         .str.lower()              # everything lowercase
+         .str.replace(r'\W+', '_', regex=True)
+)
+Now you can reliably refer to raw_df['inquiry_date'], raw_df['state'], etc.
+
+2) Create your filters with matching key= names
+In your sidebar (or at the top of your Conversion Analysis tab), replace whatever you have with this:
+
+python
+Copy
+Edit
+# --- Sidebar filters ---
+import datetime
+
+min_date = raw_df['inquiry_date'].min().date()
+max_date = raw_df['inquiry_date'].max().date()
+
+st.sidebar.header("Filter Your Data")
+
+# Date range picker with key matching our filter name
+date_filter = st.sidebar.date_input(
+    "Date Range",
+    value=(min_date, max_date),
+    min_value=min_date,
+    max_value=max_date,
+    key="date_filter"
+)
+
+# Status filter
+status_filter = st.sidebar.selectbox(
+    "Status",
+    options=["All", "Won", "Lost"],
+    index=0,
+    key="status_filter"
+)
+
+# Region filter, using normalized 'state' column
+regions = ["All"] + sorted(raw_df['state'].dropna().unique().tolist())
+region_filter = st.sidebar.multiselect(
+    "State/Region",
+    options=regions,
+    default=["All"],
+    key="region_filter"
+)
+Keys: Notice we use key="date_filter" exactly—the same string your debug was showing.
+
+Lowercased column: We normalized to state, so region_filter matches.
+
+3) Apply those filters once, up front
+Right after you build your filters and before you define your tabs:
+
+python
+Copy
+Edit
+# Build a copy and apply filters
+df = raw_df.copy()
+
+# 3a) Date filtering
+start, end = st.session_state["date_filter"]
+df = df[(df['inquiry_date'] >= pd.to_datetime(start)) & (df['inquiry_date'] <= pd.to_datetime(end))]
+
+# 3b) Status filtering
+if st.session_state["status_filter"] == "Won":
+    df = df[df['outcome'] == 1]
+elif st.session_state["status_filter"] == "Lost":
+    df = df[df['outcome'] == 0]
+
+# 3c) Region filtering
+chosen = st.session_state["region_filter"]
+if "All" not in chosen:
+    df = df[df['state'].isin(chosen)]
+Now every chart and metric in df will respect the date, status, and region picks.
+
+4) Verify with debug
+You can temporarily sprinkle in:
+
+python
+Copy
+Edit
+st.write("Rows before:", len(raw_df), "Rows after:", len(df))
+st.write("Filter state:", st.session_state["date_filter"],
+         st.session_state["status_filter"],
+         st.session_state["region_filter"])
+Those should now change as you pick new values and cause the “after” row‐count to adjust.
+
+Wrap-up
+Normalize columns to lowercase snake_case.
+
+Define your widgets with key= set to exactly "date_filter", "status_filter", "region_filter".
+
+Apply those three filters immediately—before any tabs or plots—so df always reflects the UI state.
+
+Use the filtered df everywhere in Conversion Analysis.
+
+Once you’ve done that, changing the date range, status dropdown, or region multiselect will dynamically shrink or grow your metrics and charts. Give it a shot and let me know how the debug counts update!
+
+
+
+
+
+
+
+
