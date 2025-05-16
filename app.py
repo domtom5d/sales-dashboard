@@ -277,6 +277,56 @@ if st.session_state.processed_df is not None:
             import traceback
             st.text(traceback.format_exc())
 
+# Tab 10: Debug
+    with tab10:
+        try:
+            st.markdown("## 🔧 Dashboard Diagnostics")
+            
+            # Import debug helpers
+            from debug_helpers import create_health_check_table, get_data_summary, safe_display_df_preview
+            
+            st.markdown("### Data Summary")
+            st.markdown(get_data_summary(filtered_df))
+            
+            st.markdown("### Tab Health Check")
+            health_df = create_health_check_table(filtered_df)
+            st.table(health_df)
+            
+            st.markdown("### DataFrame Preview")
+            safe_display_df_preview(filtered_df)
+            
+            # Show session state variables
+            st.markdown("### Session State Variables")
+            session_state_vars = {k: str(v) for k, v in st.session_state.items()}
+            st.json(session_state_vars)
+            
+            # Show filtered dataframe columns and counts
+            st.markdown("### Column Statistics")
+            
+            # Display categorical columns distribution
+            cat_cols = filtered_df.select_dtypes(include=['object', 'category']).columns.tolist()
+            if cat_cols:
+                selected_cat_col = st.selectbox("Select categorical column to analyze:", cat_cols)
+                if selected_cat_col:
+                    st.markdown(f"#### Distribution of {selected_cat_col}")
+                    value_counts = filtered_df[selected_cat_col].value_counts().reset_index()
+                    value_counts.columns = [selected_cat_col, 'Count']
+                    st.table(value_counts.head(10))
+            
+            # Display numeric columns statistics
+            num_cols = filtered_df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+            if num_cols:
+                selected_num_col = st.selectbox("Select numeric column to analyze:", num_cols)
+                if selected_num_col:
+                    st.markdown(f"#### Statistics for {selected_num_col}")
+                    stats = filtered_df[selected_num_col].describe()
+                    st.dataframe(stats)
+        
+        except Exception as e:
+            st.error(f"Error in Debug tab: {str(e)}")
+            import traceback
+            st.text(traceback.format_exc())
+            
 else:
     st.warning("No data loaded. Please select a data source and load data to begin.")
 
