@@ -1,0 +1,31 @@
+~/workspace$ git init && git add . && git commit -m "Initial commit: Sales Conversion Analytics Dashboard" && git remote add origin https://github.com/domtom5d/sales-dashboard.git && git branch -M main && git push -u origin main
+error: could not lock config file /home/runner/workspace/.git/config: File exists
+fatal: could not set 'core.repositoryformatversion' to '0'
+~/workspace$ git init && git add . && git commit -m "Initial commit: Sales Conversion Analytics Dashboard" && git branch -M main && git remote add origin https://github.com/domtom5d/sales-dashboard.git && git push -u origin main
+error: could not lock config file /home/runner/workspace/.git/config: File exists
+fatal: could not set 'core.repositoryformatversion' to '0'
+~/workspace$ ls -la .git
+total 48
+drwxr-xr-x 1 runner runner   186 May 16 04:38 .
+drwxr-xr-x 1 runner runner  1484 May 16 04:28 ..
+drwxr-xr-x 1 runner runner     0 May 13 02:20 branches
+-rw-r--r-- 1 runner runner   429 May 16 04:29 COMMIT_EDITMSG
+-rw-r--r-- 1 runner runner   210 May 16 04:26 config
+-rw-r--r-- 1 runner runner   210 May 16 04:29 config.lock
+-rw-r--r-- 1 runner runner    73 May 13 02:20 description
+-rw-r--r-- 1 runner runner     0 May 16 04:32 FETCH_HEAD
+-rw-r--r-- 1 runner runner    21 May 13 02:20 HEAD
+drwxr-xr-x 1 runner runner   556 May 13 02:20 hooks
+-rw-r--r-- 1 runner runner 16479 May 16 04:29 index
+drwxr-xr-x 1 runner runner    14 May 13 02:20 info
+drwxr-xr-x 1 runner runner    16 May 13 02:20 logs
+drwxr-xr-x 1 runner runner   932 May 16 04:32 objects
+drwxr-xr-x 1 runner runner    30 May 13 02:20 refs
+~/workspace$ git remote remove origin && git remote add origin https://github.com/domtom5d/sales-dashboard.git && git add . && git commit -m "Initial commit: Sales Conversion Analytics Dashboard" && git branch -M main && git push -u origin main
+error: could not lock config file .git/config
+error: Could not remove config section 'remote.origin'
+~/workspace$ rm -f .git/config.lock && git remote add origin https://github.com/domtom5d/sales-dashboard.git || git remote set-url origin https://github.com/domtom5d/sales-dashboard.git && git add . && git commit -m "Initial commit: Sales Conversion Analytics Dashboard" && git branch -M main && git push -u origin main
+error: remote origin already exists.
+On branch main
+nothing to commit, working tree clean
+~/workspace$ 
