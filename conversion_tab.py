@@ -133,13 +133,13 @@ def display_kpi_summary(df):
 
 def plot_booking_types(df, min_count=5):
     """Plot conversion rates by booking type"""
-    if 'clean_booking_type' not in df.columns or 'outcome' in df.columns:
+    if 'clean_booking_type' not in df.columns or 'outcome' not in df.columns:
         st.info("Booking type data not available")
         return
     
     # Group by booking type and calculate conversion rates
     booking_type_data = df.groupby('clean_booking_type').agg(
-        won=('won', 'sum'),
+        won=('outcome', 'sum'),
         total=('outcome', 'count'),
     ).reset_index()
     
@@ -203,7 +203,7 @@ def plot_referral_sources(df, min_count=5):
     
     # Group by referral source and calculate conversion rates
     referral_data = df.groupby('referral_source').agg(
-        won=('won', 'sum'),
+        won=('outcome', 'sum'),
         total=('outcome', 'count'),
     ).reset_index()
     
@@ -276,15 +276,30 @@ def plot_timing_factors(df):
     # Days until event analysis
     if has_days_until:
         st.markdown("#### Conversion by Days Until Event")
-        if 'days_until_bin' in df.columns:
-            # Use the pre-binned column
-            plot_conversion_by_category(df, 'days_until_bin', 'Days Until Event', sort_by='natural')
-        else:
-            # Create bins manually
-            bins = [0, 30, 90, 180, 365, float('inf')]
-            labels = ['< 30 days', '30-90 days', '90-180 days', '180-365 days', '365+ days']
-            df['days_until_bin'] = pd.cut(df['days_until_event'], bins=bins, labels=labels)
-            plot_conversion_by_category(df, 'days_until_bin', 'Days Until Event', sort_by='natural')
+        try:
+            # Make a copy and filter out NaN/Inf values
+            valid_df = df[df['days_until_event'].notna() & np.isfinite(df['days_until_event'])].copy()
+            
+            if len(valid_df) > 0:
+                if 'days_until_bin' in df.columns:
+                    # Use the pre-binned column
+                    plot_conversion_by_category(valid_df, 'days_until_bin', 'Days Until Event', sort_by='natural')
+                else:
+                    # Create bins manually
+                    bins = [0, 30, 90, 180, 365, float('inf')]
+                    labels = ['< 30 days', '30-90 days', '90-180 days', '180-365 days', '365+ days']
+                    valid_df['days_until_bin'] = pd.cut(valid_df['days_until_event'], bins=bins, labels=labels)
+                    
+                    # Additional check to ensure no NaN values in the binned column
+                    valid_df = valid_df.dropna(subset=['days_until_bin'])
+                    if len(valid_df) > 0:
+                        plot_conversion_by_category(valid_df, 'days_until_bin', 'Days Until Event', sort_by='natural')
+                    else:
+                        st.info("Not enough valid data for days until event analysis")
+            else:
+                st.info("Not enough valid data for days until event analysis")
+        except Exception as e:
+            st.error(f"Error in days until event analysis: {str(e)}")
     
     # Days since inquiry analysis
     if has_days_since:
