@@ -18,26 +18,18 @@ def get_agent_client():
     Returns:
         MistralClient: Authenticated Mistral client
     """
-    # Securely load the agent secret
-    agent_secret = os.getenv("AG_SECRET")
+    # Get the Mistral API key from environment variables
+    api_key = os.getenv("MISTRAL_API_KEY")
     
-    if not agent_secret:
+    if not api_key:
         return None
     
     try:
-        # Parse the secret format (2db7b0b8:20250516:sales:7dbfb252)
-        parts = agent_secret.split(':')
-        if len(parts) != 4:
-            st.error("Invalid agent secret format")
-            return None
-            
-        api_key = parts[0]  # Using the first part as API key
-        
         # Initialize the Mistral client
         client = MistralClient(api_key=api_key)
         return client
     except Exception as e:
-        st.error(f"Error initializing agent client: {str(e)}")
+        st.error(f"Error initializing Mistral client: {str(e)}")
         return None
 
 def generate_agent_insight(data_summary, question, model="mistral-medium"):
