@@ -846,4 +846,80 @@ def run_conversion_analysis(df_original):
     # 7. Geographic insights
     plot_geographic_insights(filtered_df)
     
+    # 8. Deal Value Insights
+    if 'actual_deal_value' in filtered_df.columns:
+        try:
+            # Import the deal value insights module
+            from deal_value_insights import display_deal_value_insights
+            
+            # Add a section divider
+            st.markdown("---")
+            
+            # Display the deal value analysis
+            display_deal_value_insights(filtered_df)
+        except Exception as e:
+            st.error(f"Error displaying deal value insights: {str(e)}")
+    
+    # 9. AI-Powered Insights with Agent
+    st.markdown("---")
+    st.subheader("AI-Powered Insights")
+    
+    # Check if AG_SECRET is set in environment
+    import os
+    has_agent_secret = bool(os.getenv("AG_SECRET"))
+    
+    if not has_agent_secret:
+        st.warning("Agent integration requires the AG_SECRET environment variable. Please add it to your Replit Secrets to enable enhanced AI insights.")
+        if st.button("I've Added the Secret"):
+            st.rerun()
+    else:
+        try:
+            # Import agent functions
+            from agent_mistral import analyze_conversion_opportunities, recommend_pricing_strategy
+            
+            # Create tabs for different insight types
+            insight_tabs = st.tabs(["Conversion Opportunities", "Pricing Strategy", "Lead Targeting"])
+            
+            with insight_tabs[0]:
+                st.write("#### Conversion Improvement Opportunities")
+                
+                if st.button("Generate Conversion Insights", key="gen_conv"):
+                    with st.spinner("Analyzing your data for conversion insights..."):
+                        insights = analyze_conversion_opportunities(filtered_df)
+                        st.session_state.conversion_insights = insights
+                
+                if "conversion_insights" in st.session_state:
+                    st.markdown(st.session_state.conversion_insights)
+            
+            with insight_tabs[1]:
+                st.write("#### Pricing Strategy Recommendations")
+                
+                if 'actual_deal_value' in filtered_df.columns:
+                    if st.button("Generate Pricing Insights", key="gen_price"):
+                        with st.spinner("Analyzing your data for pricing insights..."):
+                            insights = recommend_pricing_strategy(filtered_df)
+                            st.session_state.pricing_insights = insights
+                    
+                    if "pricing_insights" in st.session_state:
+                        st.markdown(st.session_state.pricing_insights)
+                else:
+                    st.info("Pricing analysis requires deal value data. Please ensure your dataset includes the 'actual_deal_value' column.")
+            
+            with insight_tabs[2]:
+                st.write("#### Lead Targeting Recommendations")
+                
+                if st.button("Generate Lead Targeting Insights", key="gen_lead"):
+                    with st.spinner("Analyzing your data for lead targeting insights..."):
+                        # Import the function 
+                        from agent_mistral import suggest_lead_targeting
+                        insights = suggest_lead_targeting(filtered_df)
+                        st.session_state.lead_insights = insights
+                
+                if "lead_insights" in st.session_state:
+                    st.markdown(st.session_state.lead_insights)
+                    
+        except Exception as e:
+            st.error(f"Error generating AI insights: {str(e)}")
+            st.info("Please ensure the AG_SECRET environment variable is correctly set and the MistralAI API is accessible.")
+    
     return filtered_df
