@@ -132,16 +132,31 @@ def display_kpi_summary(df):
 
 
 def plot_booking_types(df, min_count=5):
-    """Plot conversion rates by booking type"""
-    if 'clean_booking_type' not in df.columns or 'outcome' not in df.columns:
-        st.info("Booking type data not available")
+    """Plot conversion rates by booking type or event type"""
+    # First check for clean_booking_type (preferred)
+    if 'clean_booking_type' in df.columns and 'outcome' in df.columns:
+        type_column = 'clean_booking_type'
+        title = 'Booking Type'
+    # Then check for event_type 
+    elif 'event_type' in df.columns and 'outcome' in df.columns:
+        type_column = 'event_type'
+        title = 'Event Type'
+    # Then check for booking_type
+    elif 'booking_type' in df.columns and 'outcome' in df.columns:
+        type_column = 'booking_type'
+        title = 'Booking Type'
+    else:
+        st.info("No booking type or event type data available")
         return
     
-    # Group by booking type and calculate conversion rates
-    booking_type_data = df.groupby('clean_booking_type').agg(
+    # Group by booking/event type and calculate conversion rates
+    booking_type_data = df.groupby(type_column).agg(
         won=('outcome', 'sum'),
         total=('outcome', 'count'),
     ).reset_index()
+    
+    # Rename the column for consistent display
+    booking_type_data = booking_type_data.rename(columns={type_column: 'type'})
     
     # Calculate conversion rate
     booking_type_data['conversion_rate'] = booking_type_data['won'] / booking_type_data['total']
@@ -159,15 +174,15 @@ def plot_booking_types(df, min_count=5):
         # Plot the data
         sns.barplot(
             x='conversion_rate', 
-            y='clean_booking_type', 
+            y='type', 
             data=top_booking_types,
             ax=ax
         )
         
         # Customize the plot
         ax.set_xlabel('Conversion Rate')
-        ax.set_ylabel('Booking Type')
-        ax.set_title('Conversion Rate by Booking Type')
+        ax.set_ylabel(title)
+        ax.set_title(f'Conversion Rate by {title}')
         
         # Format x-axis as percentage
         ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
@@ -189,8 +204,8 @@ def plot_booking_types(df, min_count=5):
         worst_type = top_booking_types.iloc[-1]
         
         st.markdown("**Insights:**")
-        st.markdown(f"- **{best_type['clean_booking_type']}** has the highest conversion rate at {best_type['conversion_rate']:.1%}")
-        st.markdown(f"- **{worst_type['clean_booking_type']}** has the lowest conversion rate at {worst_type['conversion_rate']:.1%}")
+        st.markdown(f"- **{best_type['type']}** has the highest conversion rate at {best_type['conversion_rate']:.1%}")
+        st.markdown(f"- **{worst_type['type']}** has the lowest conversion rate at {worst_type['conversion_rate']:.1%}")
     else:
         st.info("Not enough booking type data available")
 
