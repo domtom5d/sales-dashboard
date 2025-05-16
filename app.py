@@ -277,6 +277,20 @@ if st.session_state.processed_df is not None:
             import traceback
             st.text(traceback.format_exc())
 
+    # Tab 5: Key Findings
+    with tab5:
+        try:
+            # Import and use the dedicated key findings tab module
+            from key_findings_tab import render_key_findings_tab
+            
+            # Call the modular implementation
+            render_key_findings_tab(filtered_df)
+            
+        except Exception as e:
+            st.error(f"Error in Key Findings tab: {str(e)}")
+            import traceback
+            st.text(traceback.format_exc())
+
 # Tab 9: AI Insights
     with tab9:
         try:
