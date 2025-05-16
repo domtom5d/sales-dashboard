@@ -304,17 +304,50 @@ def plot_timing_factors(df):
     # Days since inquiry analysis
     if has_days_since:
         st.markdown("#### Conversion by Days Since Inquiry")
-        bins = [0, 7, 14, 30, 60, float('inf')]
-        labels = ['< 7 days', '7-14 days', '14-30 days', '30-60 days', '60+ days']
-        df['days_since_bin'] = pd.cut(df['days_since_inquiry'], bins=bins, labels=labels)
-        plot_conversion_by_category(df, 'days_since_bin', 'Days Since Inquiry', sort_by='natural')
+        try:
+            # Filter out any NaN or infinite values
+            valid_df = df[df['days_since_inquiry'].notna() & np.isfinite(df['days_since_inquiry'])].copy()
+            
+            if len(valid_df) > 0:
+                bins = [0, 7, 14, 30, 60, float('inf')]
+                labels = ['< 7 days', '7-14 days', '14-30 days', '30-60 days', '60+ days']
+                valid_df['days_since_bin'] = pd.cut(valid_df['days_since_inquiry'], bins=bins, labels=labels)
+                
+                # Additional check to ensure no NaN values in the binned column
+                valid_df = valid_df.dropna(subset=['days_since_bin'])
+                if len(valid_df) > 0:
+                    plot_conversion_by_category(valid_df, 'days_since_bin', 'Days Since Inquiry', sort_by='natural')
+                else:
+                    st.info("Not enough valid data for days since inquiry analysis")
+            else:
+                st.info("Not enough valid data for days since inquiry analysis")
+        except Exception as e:
+            st.error(f"Error in days since inquiry analysis: {str(e)}")
+            import traceback
+            st.text(traceback.format_exc())
     
     # Weekday analysis
     if has_weekday:
         st.markdown("#### Conversion by Day of Week")
-        df['weekday'] = df['inquiry_date'].dt.day_name()
-        weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        plot_conversion_by_category(df, 'weekday', 'Day of Week', sort_by='custom', custom_order=weekday_order)
+        try:
+            # Filter out any NaN values in inquiry_date
+            valid_df = df.dropna(subset=['inquiry_date']).copy()
+            
+            if len(valid_df) > 0:
+                valid_df['weekday'] = valid_df['inquiry_date'].dt.day_name()
+                weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                
+                # Check if any weekday values were created
+                if valid_df['weekday'].notna().any():
+                    plot_conversion_by_category(valid_df, 'weekday', 'Day of Week', sort_by='custom', custom_order=weekday_order)
+                else:
+                    st.info("Could not determine weekdays from inquiry dates")
+            else:
+                st.info("Not enough valid inquiry dates for weekday analysis")
+        except Exception as e:
+            st.error(f"Error in weekday analysis: {str(e)}")
+            import traceback
+            st.text(traceback.format_exc())
 
 
 def plot_size_factors(df):
