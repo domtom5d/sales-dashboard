@@ -1,0 +1,44 @@
+Key Findings Tab
+Intended Function: This tab synthesizes the most important insights from the data and model in a human-readable list. After the lead scoring model is run, this tab should list bullet-point findings such as key drivers of conversion, segments with high/low performance, and any notable patterns. It draws on the model’s results (feature weights and lead scores) as well as overall data analysis. Problems Identified:
+Dependency on Model Run: Key Findings will only show content if a model has been generated (it checks for model_metrics and weights_df in session state). Currently, due to the bug mentioned in the Lead Scoring tab, model_metrics is never set, so this condition fails even after running the model. Thus, the tab likely only ever shows the info message “Run the lead scoring model in the previous tab to see key findings.” In other words, no findings are actually displayed.
+Missing generate_findings Implementation: The code calls generate_findings(df, y_scores, thresholds), but this function is not defined or imported anywhere in the snippet we have. It appears intended to produce the list of insight strings. Without it, even if we had y_scores and thresholds, nothing will happen (except a caught exception resulting in an error message on the app).
+Potential Content of Findings: We need to decide what the findings should be. They likely should answer questions like: Which factors are most positively correlated with winning? (e.g. “Short lead times increase conversion rate”), What segments of leads convert the best? (e.g. “Corporate events have a higher close rate than private events”), Quality of leads by score (e.g. “Leads with score > X convert at Y%”). The model’s weights_df gives us some of this (sign and magnitude of feature coefficients), and y_scores with thresholds can give us breakpoints for high/medium/low quality leads. The aim is to turn those into plain English statements.
+Recommended Fixes:
+Connect Model Results to Findings: Ensure that after running the model, we have y_scores available (predicted probabilities or scores for each lead). If you stored st.session_state.model_metrics['y_pred_proba'] as suggested, you can use that. Then, implement generate_findings to analyze these scores in combination with the feature importances. For example, one approach:
+Calculate the overall conversion rate (outcome mean) for context.
+Identify the top 2–3 features by weight (from weights_df) and note whether they positively or negatively impact conversion. For instance, if “days_until_event” has a negative coefficient, a finding could be: “Leads with shorter time until the event are more likely to convert (model indicates conversion probability drops as days-until-event increases).”
+Use the thresholds to quantify lead quality segments. If thresholds contains something like {'high': 0.8, 'medium': 0.5}, determine how many leads fall into each category and what their conversion rates are. A finding might be: “High-scoring leads (model score ≥ 0.8) converted at 65%, compared to 10% for low-scoring leads. Focus sales efforts accordingly.”
+If available, find any notable segment from raw data. For example, you might notice from weights that is_corporate_event (if such a flag exists or could be derived from event type) is important. Then a finding could be: “Corporate events have a higher close rate than personal events, suggesting different sales approaches for each segment.” This requires either a feature or external knowledge to identify; only do this if the data supports it (e.g. perhaps lead_trigger or some category implies corporate vs private).
+The generate_findings function can compile these points into a list of strings. Pseudocode for it:
+python
+Copy
+Edit
+def generate_findings(df, y_scores, thresholds):
+    findings = []
+    # 1. Overall conversion
+    overall_rate = df['outcome'].mean()
+    findings.append(f"Overall conversion rate is **{overall_rate*100:.1f}%** of all leads.")
+    # 2. Feature insights (using weights_df from session state)
+    weights = st.session_state.get('weights_df')
+    if weights is not None:
+        top_features = weights.sort_values('Weight', ascending=False)
+        # Take top positive and top negative
+        top_pos = top_features.iloc[0]
+        top_neg = top_features.iloc[-1]
+        findings.append(f"**{top_pos['Feature']}** is the strongest positive predictor of conversion (model weight {top_pos['Weight']:.2f}).")
+        findings.append(f"**{top_neg['Feature']}** is associated with lower conversion (model weight {top_neg['Weight']:.2f}).")
+    # 3. Lead score segments
+    if y_scores is not None and thresholds:
+        high_cut = thresholds.get('high')
+        med_cut = thresholds.get('medium')
+        if high_cut:
+            high_conv = df[y_scores >= high_cut]['outcome'].mean() if sum(y_scores >= high_cut) > 0 else 0
+            findings.append(f"High-scoring leads (score ≥ {high_cut:.2f}) converted at ~{high_conv*100:.1f}%.")
+        if med_cut:
+            med_conv = df[y_scores.between(med_cut, high_cut)]['outcome'].mean() if high_cut else 0
+            findings.append(f"Medium-scoring leads (score ~{med_cut:.2f}-{high_cut:.2f}) converted at ~{med_conv*100:.1f}%.")
+    return findings
+This is an illustrative example – you’d tailor the text and logic to the actual thresholds definition. The key is to turn data into clear statements.
+Import or Define the Function: Add the generate_findings function to the code (in the same file or imported from a util module) so that the call in tab 5 works. If the project intended to have this in an external mistral_insights or similar, but it’s not there, implementing a simple version as above will suffice. It doesn’t need to be extremely advanced; even a handful of bullet points covering overall conversion rate, one positive driver, one negative driver, and the difference between high and low scored leads would deliver value.
+Protect Against Missing Data: Wrap the generation in a try/except (which it already is in tab code) and ensure that if for some reason y_scores or thresholds aren’t available, it doesn’t crash. If model isn’t run, we keep the info message. If the model is run but something fails, catch it and use st.error to alert that finding generation failed (as the code already does).
+Once fixed, the Key Findings tab will automatically list the most salient insights after the lead scoring model is executed. This provides the “so what” analysis for the sales team – highlighting which factors matter and where to focus efforts.
