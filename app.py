@@ -213,75 +213,14 @@ if st.session_state.processed_df is not None:
 
     with tab1:
         try:
-            # --- Intro copy for Conversion Analysis tab ---
-            st.markdown("## Conversion Analysis<br>Get a top-level view of overall leads and how many are converting into won deals, all over time.", unsafe_allow_html=True)
+            # Import and use the dedicated conversion tab module
+            from conversion_tab import render_conversion_tab
             
-            # Add debug section to help troubleshoot filtering
-            with st.expander("🔍 Debug Filters", expanded=False):
-                st.write("Current Filter Settings:")
-                st.write({
-                    "date_filter": st.session_state.get("date_filter"),
-                    "status_filter": st.session_state.get("status_filter"),
-                    "region_filter": st.session_state.get("region_filter")
-                })
-                
-                # Debug: show raw vs. filtered DataFrame counts
-                st.write("Raw rows before filtering:", len(raw_df))
-                st.write("Filtered rows after filtering:", len(filtered_df))
-                
-                # Inspect the date column dtypes and min/max
-                date_col = filters.get("date_col")
-                if date_col in filtered_df.columns:
-                    st.write(f"{date_col} dtype:", filtered_df[date_col].dtype)
-                    st.write(f"{date_col} min/max:", filtered_df[date_col].min(), "/", filtered_df[date_col].max())
-                else:
-                    st.write(f"Date column `{date_col}` not found in filtered df")
-                    
-                # Show DataFrame schema
-                st.write("### DataFrame Schema")
-                st.write("Columns:", filtered_df.columns.tolist())
-                st.write(filtered_df.dtypes)
-                st.write("Sample rows:", filtered_df.head(3))
+            # Call the modular implementation
+            render_conversion_tab(filtered_df)
             
-            # Calculate conversion rates by different categories
-            conversion_rates = calculate_conversion_rates(filtered_df)
-            
-            # --- KPI Summary cards ---
-            total_leads = len(filtered_df)
-            won = filtered_df['outcome'].sum() if 'outcome' in filtered_df.columns else 0
-            lost = total_leads - won
-            conv_rate = won / total_leads if total_leads > 0 else 0
-
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Total Leads", f"{total_leads:,}")
-            c2.metric("Won Deals", f"{won:,}")
-            c3.metric("Lost Deals", f"{lost:,}")
-            c4.metric("Conversion Rate", f"{conv_rate:.1%}")
-            
-            # Sparkline under the conversion rate
-            date_col = None
-            for col in ['inquiry_date', 'created', 'event_date']:
-                if col in filtered_df.columns:
-                    date_col = col
-                    break
-            
-            if date_col:
-                try:
-                    # Create weekly conversion rate data for sparkline
-                    weekly = filtered_df.set_index(date_col).resample('W')['outcome'].agg(['size','sum'])
-                    weekly['rate'] = weekly['sum'] / weekly['size']
-                    weekly['rate'] = weekly['rate'].fillna(0)
-                    
-                    # Only show sparkline if we have data
-                    if not weekly.empty and weekly['size'].sum() > 0:
-                        with c4:
-                            st.line_chart(weekly['rate'], height=100, use_container_width=True)
-                except Exception as e:
-                    with c4:
-                        st.info("Weekly trend data not available")
-            
-            # Comment out the run_conversion_analysis call for now
-            # run_conversion_analysis(filtered_df)
+        except Exception as e:
+            st.error(f"Error in Conversion Analysis tab: {str(e)}")
             
             # Filter UI replaced with a simple notice
             st.subheader("Data Overview")
