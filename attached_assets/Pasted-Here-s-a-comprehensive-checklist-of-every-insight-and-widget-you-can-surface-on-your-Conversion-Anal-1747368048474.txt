@@ -1,0 +1,89 @@
+Here’s a comprehensive checklist of every insight and widget you can surface on your Conversion Analysis tab—organized top-to-bottom so nothing gets missed. Think of it as the “complete analytics playbook” for your funnel:
+
+1. KPI Overview
+Total Leads (count)
+
+Won Deals (count)
+
+Lost Deals (count)
+
+Overall Conversion Rate (won ÷ (won+lost))
+
+Sparkline of weekly conversion rate under the Conversion Rate metric
+
+2. Trend Analysis
+Conversion Rate Over Time (line chart, daily or weekly)
+
+Lead Volume Over Time (bar/area chart)
+
+Week-over-Week % Change callout
+
+3. Category Breakouts (Top 5 + “Other”)
+Booking Type conversion rates
+
+Event Type (Corporate / Wedding / Social)
+
+Referral Source
+
+Marketing Source
+
+Each as a horizontal bar chart annotated with % (n=…).
+
+4. Timing Factors
+Days Until Event (bins: ≤7d, 8–30d, 31–90d, 90+d)
+
+Days Since Inquiry (0d, 1–3d, 4–7d, 8–30d, 30+d)
+
+Submission Weekday (Mon–Sun bar chart)
+
+Submission Hour (0–23 line or heatmap)
+
+5. Price & Size Effects
+Number of Guests (1–50, 51–100, 101–200, 201–500, 500+)
+
+Price-Per-Guest bins (<$50, $50–99, $100–199, $200+)
+
+Staff-to-Guest Ratio (<1%, 1–2%, 2–5%, >5%)
+
+6. Deal Value Insights
+Average Deal Value by category (Booking Type, Region)
+
+Total Revenue over time (monthly bar chart)
+
+Average Price-Per-Guest trend
+
+7. Geographic Analysis
+Conversion by State/Region (map or bar chart)
+
+Top 5 “Hot” ZIP codes or Cities
+
+Phone-Area-Code Match uplift table
+
+8. Funnel Stage Conversion
+If you have multi-stage data (New → Contacted → Proposal Sent → Won/Lost), show stage-to-stage drop-off rates as a funnel chart.
+
+9. Data Quality & Anomalies
+% Missing per key field (State, Event Date, Phone)
+
+Negative or zero Days-Until-Event count
+
+Outlier detection on “Days Until” (>365 days) or “Guests” (>1,000)
+
+10. Executive Call-outs
+Underneath each chart, auto-extract and display:
+
+• Best Performing Bucket: e.g. “≤7d out leads close at 45%”
+• Worst Performing Bucket: e.g. “30+d out leads close at 8%”
+
+as simple st.metric() calls with green/red arrows.
+
+Bonus Deep-Dives (if you want to stretch)
+Cohort Analysis: conversion by inquiry month cohort over time
+
+Retention / Repeat Business: % of clients who book again
+
+Correlation Sparkline: tiny in-line sparkline next to each feature in a table
+
+Drill-through Links: clicking a bar filters the whole page to that bucket
+
+Next steps: Pick which of these you’d most like to prioritize (e.g. Deal Value Insights or Funnel Stages) and I can give you the exact Streamlit code snippet to slot in. Let me know where you want to start!
