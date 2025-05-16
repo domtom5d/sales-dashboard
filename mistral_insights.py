@@ -8,7 +8,7 @@ and generate insights from data.
 import os
 import pandas as pd
 import streamlit as st
-from mistralai.sdk import Mistral
+from mistralai.client import MistralClient
 
 def initialize_mistral_client():
     """
@@ -23,7 +23,7 @@ def initialize_mistral_client():
         return None
     
     try:
-        client = Mistral(api_key=api_key)
+        client = MistralClient(api_key=api_key)
         return client
     except Exception as e:
         st.error(f"Error initializing Mistral client: {str(e)}")
