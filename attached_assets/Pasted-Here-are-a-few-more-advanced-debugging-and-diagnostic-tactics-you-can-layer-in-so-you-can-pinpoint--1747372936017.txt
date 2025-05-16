@@ -1,0 +1,106 @@
+Here are a few more advanced debugging and diagnostic tactics you can layer in, so you can pinpoint exactly why each analysis tab isn’t firing:
+
+1. Add a “Health-Check” Table of Required Columns
+Before your tabs render, run a quick sanity check against each tab’s required columns. It will tell you immediately which tabs are missing the fields they need:
+
+python
+Copy
+Edit
+# At the very top of app.py, after df is defined:
+import pandas as pd
+
+# Define which columns each tab needs
+tab_requirements = {
+    "Conversion Analysis": ['outcome','created','booking_type','days_until_event'],
+    "Feature Correlation":  ['outcome'] + [c for c in df.select_dtypes('number').columns],
+    "Lead Scoring":         ['outcome','days_until_event','number_of_guests','referral_source'],
+    # …and so on for each tab…
+}
+
+st.markdown("### 🔍 Tab Health Check")
+health = []
+for tab, cols in tab_requirements.items():
+    missing = [c for c in cols if c not in df.columns]
+    health.append({
+        "Tab": tab,
+        "Status": "❌ Missing: " + ", ".join(missing) if missing else "✅ OK"
+    })
+st.table(pd.DataFrame(health))
+If a tab says “Missing: foo, bar”, you know exactly what column to add or rename.
+
+2. Wrap Entire Tab in a Try/Except with Full Traceback
+Even after wiring in the right code, silent exceptions can kill a tab. Surround each render_xxx(df) with:
+
+python
+Copy
+Edit
+with tabs[i]:
+    st.subheader("…Tab Name…")
+    try:
+        render_that_tab(df)
+    except Exception:
+        import traceback
+        st.error("Something went wrong in this tab—see full traceback below:")
+        st.text(traceback.format_exc())
+That’ll surface any unexpected errors right in the UI.
+
+3. Use Logging to a File
+Configure Python’s logging to write to a file (e.g. logs/app.log) so you can inspect issues after the fact:
+
+python
+Copy
+Edit
+import logging
+logging.basicConfig(
+    filename='app.log',
+    level=logging.DEBUG,
+    format='%(asctime)s %(levelname)s %(message)s'
+)
+logging.debug(f"Rendering Conversion Analysis with df shape {df.shape}")
+Check logs/app.log for any “ERROR” entries.
+
+4. Deploy a Minimal Repro Case
+Create a tiny fixture DataFrame in a separate script that has only the columns a given tab needs. Load that into your render function in isolation:
+
+python
+Copy
+Edit
+# test_render_conversion.py
+import pandas as pd
+from new_conversion_tab import render_conversion_tab
+
+df = pd.DataFrame({
+    'outcome': [1,0,1],
+    'created': pd.to_datetime(['2025-01-01','2025-01-08','2025-01-15']),
+    'booking_type':['A','B','A'],
+    'days_until_event':[5,40,10]
+})
+render_conversion_tab(df)
+Run this with streamlit run test_render_conversion.py and see if the tab shows up. If it does, the problem is upstream in your real data pipeline—not the tab logic itself.
+
+5. Verify Your Imports & File Names
+Make sure you don’t have two modules named similarly (e.g. conversion_analysis.py and new_conversion_analysis.py) and that app.py imports the one you actually want. One way to confirm is to insert at the top of each module:
+
+python
+Copy
+Edit
+print("Imported:", __file__)
+When you restart the app, you’ll see in the terminal which files actually loaded.
+
+6. Confirm You’re Using the Right df
+Search for any local assignments like:
+
+python
+Copy
+Edit
+df = pd.DataFrame()  # oops!
+or a function parameter shadowing your global df. Grep for def render_.*(df) and ensure you’re passing the same DataFrame everywhere.
+
+Pick the tactic that speaks to you—my vote is to start with the Health-Check Table (step 1). It’s a one-liner that immediately shows missing columns per tab. Let me know which you’d like to try, or if you want the exact snippet for deploying any of these!
+
+
+
+
+
+
+
