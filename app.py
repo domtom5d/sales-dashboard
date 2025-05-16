@@ -304,6 +304,20 @@ if st.session_state.processed_df is not None:
             st.error(f"Error in Explanations tab: {str(e)}")
             import traceback
             st.text(traceback.format_exc())
+            
+    # Tab 8: Advanced Analytics
+    with tab8:
+        try:
+            # Import and use the dedicated advanced analytics tab module
+            from advanced_analytics_tab import render_advanced_analytics_tab
+            
+            # Call the modular implementation
+            render_advanced_analytics_tab(filtered_df)
+            
+        except Exception as e:
+            st.error(f"Error in Advanced Analytics tab: {str(e)}")
+            import traceback
+            st.text(traceback.format_exc())
 
 # Tab 9: AI Insights
     with tab9:

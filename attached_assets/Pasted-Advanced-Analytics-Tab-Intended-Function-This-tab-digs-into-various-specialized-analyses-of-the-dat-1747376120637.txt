@@ -1,0 +1,85 @@
+Advanced Analytics Tab
+Intended Function: This tab digs into various specialized analyses of the data, beyond the basics in the Conversion Analysis tab. Based on the code, it covers multiple sub-analyses:
+Referral Source vs Conversion – likely conversion rates by referral source type (e.g. how leads from different marketing channels perform).
+Marketing Source vs Conversion – similar for marketing campaigns.
+Booking Type vs Conversion – conversion by booking type (or event type).
+Price per Guest Analysis – possibly examining how the ratio of deal value to guest count correlates with conversion or optimal pricing.
+Event Month Analysis – how conversion varies by event month (seasonality).
+Inquiry Weekday Analysis – conversion based on the day of week the inquiry came in (e.g. leads that come in on Mondays vs Fridays).
+Staff Ratio Analysis – conversion vs the bartender-to-guest ratio (maybe identifying if certain staffing requests correlate to closing).
+This tab likely runs a comprehensive analysis function (run_all_analytics or separate generate_*_analysis calls) to produce data frames for each of these, and then visualizes each with either charts or tables. Problems Identified:
+Event Type vs Booking Type Overlap: Similar to earlier issues, if the data only has event_type instead of booking_type, the booking_type_analysis might come out empty or not at all. The advanced analysis code references analytics_results["booking_type_analysis"]. If booking_type was not in the DataFrame, the function that calculates this might either create an empty result or skip it. Given the fixes we applied, booking_type may now be present (either from leads or merged from ops). If not, and only event_type exists, we should account for that.
+Chart Formatting Issues: In the partial code glimpses, there are bits where the code sorts categorical axes (month names, weekdays) to ensure charts appear in logical order. We need to ensure those parts run without error. For instance, they convert month names to a categorical with a specified order (month_order = ['January', ..., 'December'] presumably) before plotting. If not done carefully, it could throw a warning or mix up order. Similarly for weekdays. From the snippet, it looks like they do:
+python
+Copy
+Edit
+analytics_results["event_month_analysis"]["month"] = pd.Categorical(analytics_results["event_month_analysis"].index, categories=month_order, ordered=True)
+analytics_results["event_month_analysis"] = analytics_results["event_month_analysis"].sort_values("month")
+This should work as long as the index of that DF is month names. Just verify that logic when running.
+Empty Data Scenarios: It’s possible some sub-analyses yield no data. For example, if no leads have a referral source (maybe all leads came from marketing campaigns), the referral_source_analysis might be an empty DataFrame. The code checks for .empty and then either plots or shows a dataframe accordingly. Ensure that in empty cases, a message is shown (like “No data for referral source analysis”) instead of leaving a blank space. The code structure shows else: st.info(...) in some cases, just confirm each analysis has that pattern.
+Use of Actual Deal Value: The price-per-guest analysis likely divides actual_deal_value by number_of_guests to see how per-person pricing might affect conversion or revenue. For leads that never converted (lost), actual_deal_value might be NaN or 0. The analysis might separate won vs lost to see average price per guest or something. We should ensure that actual_deal_value is merged and numeric (which we did) and that NaNs are handled (could be dropped or considered 0 for lost deals). If currently a lost lead has NaN deal value, the division will result in NaN, and that lead might be excluded from analysis inadvertently. Possibly, the analysis function already filters to only won deals for price per guest (since lost deals have no price). If that’s the case, it might be showing distribution of deal sizes per guest for won deals, identifying any trend (like maybe mid-range per-person prices sell best).
+Performance considerations: Running all these analytics can be done quickly since the dataset isn’t huge. Just ensure it’s only done once per run (likely they store analytics_results in session to avoid redoing on every interaction). The code does st.session_state.analytics_results = analytics_results and then on subsequent runs uses that if available.
+Recommended Fixes:
+Include Event Type in “Booking Type” Analysis: Update the advanced analytics computation to handle the case where booking_type is not present. For example, in the function that computes booking_type_analysis, add:
+python
+Copy
+Edit
+if 'booking_type' in df.columns:
+    result['booking_type_analysis'] = compute_conversion_by_category(df, 'booking_type')
+elif 'event_type' in df.columns:
+    result['booking_type_analysis'] = compute_conversion_by_category(df, 'event_type')
+    result['booking_type_analysis'].index.name = 'Event Type'
+And later, when displaying, if you know it’s actually event type data, adjust the chart title or label. Since the display code currently always labels it “Conversion by Booking Type”, you could conditionally change:
+python
+Copy
+Edit
+title = "Conversion by Booking Type"
+if 'event_type' in df.columns and 'booking_type' not in df.columns:
+    title = "Conversion by Event Type"
+# then use title in st.subheader or chart titles
+This way the user isn’t confused.
+Verify and Guard Each Analysis: For each analysis in analytics_results, make sure the code checks for emptiness or existence. The pattern in code is already doing if analytics_results and not analytics_results["XYZ"].empty: before plotting. Continue this pattern consistently. If an analysis key might not exist at all (for instance, if code skips creating one due to missing column), then analytics_results.get("key") should be used to avoid KeyError. E.g.
+python
+Copy
+Edit
+if analytics_results.get("booking_type_analysis") is not None and not analytics_results["booking_type_analysis"].empty:
+    ... plot ...
+elif analytics_results.get("booking_type_analysis") is not None:
+    st.info("No data available for Booking/Event Type analysis.")
+This covers both an empty DF or a missing key.
+Improve Visualizations: Ensure each subplot has a clear title and axis labels. For example, in referral_source_analysis, label the axes (“Referral Source” vs “Conversion Rate (%)” perhaps). Use percentage format for conversion rate if appropriate. Some of this is nicety, but it makes the advanced insights easier to interpret.
+Cross-check Calculations: It’s worth verifying what each analysis is actually calculating:
+Referral/Marketing Source Analysis: likely grouping by referral_source and marketing_source and computing conversion rate per group. Ensure that these include an “All other” or something if too many categories, or perhaps limit to top 5 sources for clarity. If the function already picks top categories (as hint from plot_top_categories usage, but that was in conversion tab), perhaps advanced analysis shows all. It’s fine either way; just ensure that if dozens of distinct sources exist, the chart is still readable (maybe use a horizontal bar chart or allow scrolling in a table instead).
+Price per Guest Analysis: likely bins leads by price-per-guest ranges. Check that it’s computing that only on relevant leads. If lost leads have no price, they might be excluded, which is fine. The result might show something like conversion rate by price-per-guest bucket, or maybe just distribution of deal sizes. Once it runs, verify the interpretation and consider adding an annotation/explanation like “Price per Guest (for won deals) distribution.”
+Staff Ratio Analysis: uses ratio_bin or similar. We created ratio = bartenders_needed / number_of_guests and binned it as ratio_bin in normalization. So likely this analysis looks at conversion by staffing ratio categories. It could reveal if events with higher staff-to-guest ratio (maybe indicating VIP service) close more often, or vice versa (just speculation). Make sure the ratio was computed (our normalize did that if both fields present). If many leads lack one of these fields, the ratio might be NaN for them and those leads might be left out of this analysis. That’s fine, but if too much data is missing, it could be meaningless. However, typically staffing needs might be known only for certain leads. Anyway, ensure the code handles missing by ignoring those leads.
+Streamline Execution: Possibly add a “Run Advanced Analytics” button if you want to avoid computing everything on every page load. The code seems to assume either a button or at least caching via session state. Given that after first run it stores results, it should be okay. You could explicitly put:
+python
+Copy
+Edit
+if st.button("Run Advanced Analytics"):
+    analytics_results = run_all_analytics(filtered_df)
+    st.session_state.analytics_results = analytics_results
+and then display. If you do that, also handle if analytics_results already in session (to show a “Showing previously computed results” message as the code snippet suggests with st.success("Showing previously...")). This prevents confusion if the user toggles away and back; they won’t have to press the button again unless data changed.
+The Advanced Analytics tab after these fixes will present several insightful charts. Sales and marketing teams can learn, for example, which marketing channels yield the best conversion, how seasonal timing affects bookings, and if certain deal sizes or staffing expectations correlate with success. All the analyses will handle missing data gracefully and label the charts correctly (Booking vs Event type, etc.), resolving the previously broken or hidden visualizations.
+AI Insights Tab
+Intended Function: This tab leverages an AI (labeled “Mistral AI” in the code) to generate higher-level insights and recommendations. The user can select different types of AI analysis such as Sales Opportunity Analysis (possibly looking at where the sales process can improve), Booking Type Recommendations (maybe suggestions on which booking types to target or how to improve them), and Customer Segment Insights. When the user selects an analysis type and provides an API key for the AI service, the system should send the relevant data and prompt to the AI and display the returned insights. Problems Identified:
+API Key Requirement: The tab requires a MISTRAL_API_KEY (likely for an external API) to run. If the key is not set, the UI stays in a state asking for the key. That’s fine, but just ensure the user understands they need to input it. The code provides a text input and “Set API Key” button. Once set, it suggests refreshing the page to load AI insights. This could be smoother (maybe immediately enable analysis options without a refresh by using st.experimental_rerun() after setting the env var).
+Integration with Data: The AI functions generate_sales_opportunity_analysis(filtered_df), generate_booking_type_recommendations(filtered_df), etc., likely package up the data or some summary of it and call the AI. It’s crucial these functions handle the data volume properly (maybe summarizing it rather than sending every row) and have well-crafted prompts so the AI returns useful info. We don’t see their implementation here, but assuming they exist and work with the API. If they are not implemented, then this tab won’t function beyond the UI. That would be a major missing piece, but presumably the focus is on earlier tabs.
+Error Handling: The AI calls should be wrapped in try/except to catch API errors or timeouts, and display a friendly error (st.error("Failed to retrieve AI insights. Please try again.")). The code likely does something like that, but double-check.
+Output Formatting: The AI’s response might be text (which could include line breaks, lists, etc.). The code should display it nicely. Using st.markdown(analysis_result) or similar can format any markdown the AI returns. If the AI returns a structured object, then it needs formatting. Given these functions names, probably the AI returns a string of insights.
+Recommended Fixes:
+Automatic Refresh After Key Set: To improve UX, when the user enters the API key and clicks the set button, you can programmatically trigger a rerun so that the key is now present in os.environ and the select box + generate button appear immediately. This can be done with st.experimental_rerun(). For example:
+python
+Copy
+Edit
+if st.button("Set API Key") and api_key_input:
+    os.environ["MISTRAL_API_KEY"] = api_key_input
+    st.success("API key set successfully!")
+    st.experimental_rerun()
+This will reload the app and, because the env var is now set, show the AI analysis options.
+Verify AI Functions Availability: Make sure generate_sales_opportunity_analysis, generate_booking_type_recommendations, and generate_customer_segment_insights are imported or defined. The code snippet showed them being imported at the top of app.py. If the actual implementations are in a module, ensure that module is included and the functions work. If they are not implemented yet, you may need to implement at least dummy versions to avoid runtime errors. For instance, as a placeholder, they could return a string like "Recommendation: Focus on X..." based on a quick look at data. However, presumably the AI integration is a whole separate system that might be configured outside of our current scope.
+Data Privacy Consideration: If you send raw data to an AI API, consider if that’s acceptable or if summarization is needed for privacy. It may be okay since this is internal analysis, but it’s something to keep in mind (perhaps not a code fix, but a note to use aggregated stats in prompts rather than full PII).
+Contextual Prompts: Ensure each analysis type provides enough context to the AI. For example, generate_booking_type_recommendations(df) might do: “Summarize how different booking types perform and suggest which to focus on.” The quality of output depends on prompt engineering. If the output is not useful, refine the prompt or the data passed. This is more of a content tweak than a code bug, but it affects whether the tab feels “broken” or not.
+Output Display: After receiving analysis_result from the AI, format it. If it’s a string containing multiple lines or bullet points, use st.markdown(analysis_result) to preserve formatting. If it’s long, consider putting it in an expandable container (st.expander) or just let the user scroll. Also, possibly split the response into multiple st.write calls if needed for separation of points.
+If everything is set up correctly, the AI Insights tab will allow the user to leverage AI for narrative analysis and recommendations. For example, the AI could say things like “Opportunity: Many leads from referrals are not converting – consider providing referral incentives.” or “Recommendation: Increase focus on corporate event leads in Q4 as they show higher conversion.” These qualitative insights complement the quantitative charts from earlier tabs.
+With all of the above fixes, the Sales Conversion Analytics Dashboard will be fully functional and robust. All charts and data will render properly across tabs, and the insights drawn will be accurate and actionable. Below is a summary of the specific repair steps for implementation.
