@@ -275,19 +275,6 @@ if st.session_state.processed_df is not None:
             st.error(f"Error in Raw Data tab: {str(e)}")
             import traceback
             st.text(traceback.format_exc())
-        
-        # Show data info
-        with st.expander("Data Information"):
-            # Show column descriptions
-            st.markdown("#### Column Descriptions")
-            col_desc = pd.DataFrame({
-                'Column': filtered_df.columns.tolist(),
-                'Type': filtered_df.dtypes.astype(str).tolist(),
-                'Non-Null Count': filtered_df.count().tolist(),
-                'Null Count': filtered_df.isna().sum().tolist(),
-                'Non-Null %': (filtered_df.count() / len(filtered_df) * 100).round(2).astype(str) + '%'
-            })
-            st.dataframe(col_desc)
 
 else:
     st.warning("No data loaded. Please select a data source and load data to begin.")

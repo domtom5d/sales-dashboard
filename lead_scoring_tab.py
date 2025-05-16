@@ -10,7 +10,139 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from derive_scorecard import generate_lead_scorecard, score_lead
+from derive_scorecard import score_lead
+from evaluate import plot_score_distributions
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import roc_curve, roc_auc_score, precision_recall_curve, auc, f1_score
+
+def generate_lead_scorecard(df):
+    """
+    Generate a lead scorecard based on the provided DataFrame
+    
+    Args:
+        df (DataFrame): Processed dataframe with outcome column
+        
+    Returns:
+        tuple: (weights_df, thresholds, metrics)
+    """
+    try:
+        # Check if df is a DataFrame and has the outcome column
+        if not isinstance(df, pd.DataFrame):
+            raise ValueError("Input must be a pandas DataFrame")
+        
+        if 'outcome' not in df.columns:
+            raise ValueError("DataFrame must contain an 'outcome' column")
+        
+        # Verify we have enough data
+        win_count = df['outcome'].sum()
+        loss_count = len(df) - win_count
+        
+        if win_count < 5 or loss_count < 5:
+            raise ValueError(f"Insufficient data for modeling: {win_count} wins, {loss_count} losses")
+        
+        # Select numeric features only
+        numeric_df = df.select_dtypes(include=['int64', 'float64'])
+        
+        # Make sure outcome is included
+        if 'outcome' not in numeric_df.columns:
+            numeric_df['outcome'] = df['outcome']
+        
+        # Remove any columns with all NaN values
+        numeric_df = numeric_df.dropna(axis=1, how='all')
+        
+        # Get features (exclude outcome)
+        features = [col for col in numeric_df.columns if col != 'outcome']
+        
+        if len(features) < 2:
+            raise ValueError("Not enough numeric features for modeling")
+        
+        # Prepare X and y
+        X = numeric_df[features].fillna(0)
+        y = numeric_df['outcome']
+        
+        # Scale features
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+        
+        # Train a Random Forest model
+        rf_model = RandomForestClassifier(
+            n_estimators=100,
+            max_depth=5,
+            min_samples_split=10,
+            random_state=42
+        )
+        rf_model.fit(X_scaled, y)
+        
+        # Train Logistic Regression for interpretability
+        lr_model = LogisticRegression(max_iter=1000, C=0.1, solver='liblinear')
+        lr_model.fit(X_scaled, y)
+        
+        # Get feature importance from both models
+        rf_importance = pd.Series(rf_model.feature_importances_, index=features)
+        coefs = pd.Series(lr_model.coef_[0], index=features)
+        
+        # Create hybrid importance that uses magnitude from RF but direction from LR
+        importance = rf_importance.copy()
+        
+        # Apply direction from logistic regression
+        for feat in features:
+            if coefs[feat] < 0:
+                importance[feat] = -importance[feat]
+        
+        # Sort by absolute importance
+        imp = importance.abs().sort_values(ascending=False)
+        
+        # Scale to a 0-10 point system
+        weights = (imp / imp.iloc[0] * 10).round(2) if len(imp) > 0 else pd.Series()
+        
+        # Create feature direction mapping
+        feature_direction = {feat: "+" if coefs[feat] > 0 else "-" for feat in features}
+        
+        # Create DataFrame for display
+        result_df = pd.DataFrame({
+            'feature': weights.index,
+            'weight': [weights[feat] if feat in weights else 0 for feat in features],
+            'direction': [feature_direction[feat] for feat in features]
+        })
+        
+        # Sort by absolute weight
+        result_df = result_df.sort_values(by='weight', key=abs, ascending=False)
+        
+        # Calculate model metrics
+        y_probs = rf_model.predict_proba(X_scaled)[:, 1]
+        
+        # Store probabilities and true values in session state for plotting
+        import streamlit as st
+        st.session_state.y_probs = y_probs
+        st.session_state.y_true = y
+        
+        # Calculate ROC curve and AUC
+        fpr, tpr, thresholds_roc = roc_curve(y, y_probs)
+        roc_auc = roc_auc_score(y, y_probs)
+        
+        # Simple thresholds based on percentiles
+        thresholds = {
+            'hot': 0.75,   # Top 25%
+            'warm': 0.5,   # Top 50%
+            'cool': 0.25   # Top 75%
+        }
+        
+        # Model metrics for display
+        metrics = {
+            'roc_auc': roc_auc,
+            'accuracy': rf_model.score(X_scaled, y),
+            'f1': f1_score(y, (y_probs >= 0.5).astype(int))
+        }
+        
+        return result_df, thresholds, metrics
+        
+    except Exception as e:
+        import traceback
+        print(f"Error generating scorecard: {str(e)}")
+        print(traceback.format_exc())
+        return None, None, None
 from evaluate import plot_score_distributions
 
 def render_lead_scoring_tab(df):
