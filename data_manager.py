@@ -271,6 +271,12 @@ def process_data(leads_df, operations_df=None):
             if 'box_key' in df.columns and 'box_key' in ops_df.columns:
                 # Merge on Box Key
                 merge_cols = ['box_key', 'actual_deal_value']
+                
+                # Add event_type and booking_type if available in operations data
+                if 'event_type' in ops_df.columns:
+                    merge_cols.append('event_type')
+                if 'booking_type' in ops_df.columns:
+                    merge_cols.append('booking_type')
                 if 'region' in ops_df.columns:
                     merge_cols.append('region')
                 
