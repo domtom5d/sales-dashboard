@@ -1,0 +1,49 @@
+Feature Correlation Tab
+Intended Function: This tab should analyze how each feature correlates with the conversion outcome. The expected content is a list (or bar chart) of features ranked by their correlation with the target (Won/Lost), as well as a correlation matrix across features. This helps identify which factors have the strongest linear relationship with conversion. Problems Identified:
+Function Not Implemented: The code calls a function calculate_correlations(filtered_df) inside tab 2, but there is no definition for calculate_correlations in the provided code. It’s neither in the main app file nor imported, which means this will raise an error. (The try/except around it will catch the error and just display an error message on the app.) Thus, currently no correlation analysis is actually performed or shown.
+Including Non-Numeric Columns: When implementing correlation, we need to consider that the dataset has many categorical columns (state, city, referral source, etc.) which can’t be used directly in a Pearson correlation calculation. If we blindly run df.corr(), pandas will automatically exclude non-numeric columns, which is fine. But we should also be deliberate in choosing which fields to correlate. For example, if a field is encoded as numeric ID codes or has missing values, it could mislead the correlation.
+Outcome Handling: The outcome is stored as 0/1 in the outcome column (with 1 = won). We want to see correlation of other features with this outcome. Since outcome is binary, Pearson correlation is an acceptable measure of linear association, though not the only one. We should ensure outcome is numeric (it is, by design) and included in the correlation analysis.
+Recommended Fixes:
+Implement calculate_correlations: Define this function to compute two things: (1) a DataFrame of correlation coefficients between each feature and the outcome, and (2) a full correlation matrix for the relevant features. For instance:
+python
+Copy
+Edit
+def calculate_correlations(df):
+    # Consider only numeric columns for correlation
+    numeric_df = df.select_dtypes(include='number').copy()
+    if 'outcome' in numeric_df.columns:
+        # Drop any constant or all-null columns to avoid NaNs
+        numeric_df = numeric_df.loc[:, numeric_df.nunique() > 1]
+        # Compute correlation matrix
+        corr_matrix = numeric_df.corr(method='pearson')
+        # Correlation of each feature with outcome
+        corr_outcome = corr_matrix[['outcome']].drop(index='outcome', errors='ignore')
+        corr_outcome = corr_outcome.rename(columns={'outcome': 'Correlation with Outcome'})
+        corr_outcome.insert(0, 'Feature', corr_outcome.index)
+        corr_outcome = corr_outcome.reset_index(drop=True)
+        return corr_outcome, corr_matrix
+    else:
+        return pd.DataFrame(), pd.DataFrame()
+This is a simplified approach: we take all numeric columns (which includes outcome, and any numeric features like number_of_guests, days_until_event, etc.), drop columns that are constant (to avoid division-by-zero in correlation), then compute Pearson correlations. We extract the “outcome” column from the matrix to get correlations of outcome with each feature.
+Display Correlation Results: Once corr_outcome and corr_matrix are available, update the tab content to display them. A good approach is: show a bar chart of the top correlations with outcome, and possibly a heatmap or table for the correlation matrix. For example, you can use matplotlib or seaborn to create a horizontal bar plot of the top N features by absolute correlation with outcome. The code might look like:
+python
+Copy
+Edit
+corr_outcome = corr_outcome.sort_values("Correlation with Outcome", ascending=False)
+top_corr = corr_outcome.head(10)  # top 10 features
+fig, ax = plt.subplots(figsize=(8, 6))
+sns.barplot(x="Correlation with Outcome", y="Feature", data=top_corr, ax=ax)
+ax.set_title("Top Feature Correlations with Conversion")
+st.pyplot(fig)
+And below that, you could present the full correlation matrix as a heatmap or an interactive table. If using seaborn heatmap:
+python
+Copy
+Edit
+fig2, ax2 = plt.subplots(figsize=(8,6))
+sns.heatmap(corr_matrix, ax=ax2, cmap="YlGnBu", annot=False)
+ax2.set_title("Correlation Matrix of Features")
+st.pyplot(fig2)
+Make sure to catch cases where corr_matrix might be empty (e.g. if no numeric features exist, though unlikely here).
+Exclude Irrelevant Fields: Consider dropping the box_key (unique ID) or any identifier fields from the correlation, as they don’t carry meaning. Also, if certain features are essentially binary or one-hot encoded from categoricals, Pearson correlation might still handle them, but just interpret results carefully. The main numeric features likely are already things like days until event, number of guests, etc., which is fine.
+Verify Data Types: Ensure that by the time you call calculate_correlations, the data is fully numeric for intended fields. The normalization step should have converted things like days_since_inquiry, bartenders_needed, etc. to numeric. If some slip through as strings (maybe if there’s a column of IDs or phone numbers), they would be dropped by select_dtypes. Just double-check that outcome is int (it should be, as set in normalization).
+After implementing this, the Feature Correlation tab will show a clear ranking of features by correlation with outcome, and provide insight into multicollinearity or relationships via the correlation matrix. This addresses the missing charts issue here.

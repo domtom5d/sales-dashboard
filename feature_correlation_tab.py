@@ -25,30 +25,45 @@ def render_feature_correlation_tab(df):
     # Add data shape debugging
     st.write(f"DEBUG: DataFrame shape: {df.shape}, columns: {df.columns.tolist()}")
     
-    # Select only numeric columns for correlation analysis
-    numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+    # Handle both uppercase and lowercase outcome column
+    outcome_col = 'Outcome' if 'Outcome' in df.columns else 'outcome' if 'outcome' in df.columns else None
     
-    if len(numeric_cols) > 0 and 'outcome' in df.columns:
-        # Calculate and display correlation with outcome
-        outcome_corr, full_corr = calculate_correlations(df)
+    if outcome_col:
+        # Select only numeric columns for correlation analysis
+        numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
         
-        if not outcome_corr.empty:
+        if len(numeric_cols) > 0:
             st.markdown("### Correlation with Deal Outcome")
             st.markdown("Positive values indicate factors that correlate with winning deals, negative values with losing deals.")
-        
-        # Create a horizontal bar chart of correlations if data is available
-        if not outcome_corr.empty:
-            fig, ax = plt.subplots(figsize=(10, 6))
             
-            # Sort by absolute correlation value (handle different column names)
-            correlation_col = 'Correlation with Outcome' if 'Correlation with Outcome' in outcome_corr.columns else 'correlation'
-            feature_col = 'index' if 'index' in outcome_corr.columns else 'feature'
-            
-            # Make sure outcome_corr is sorted properly
-            outcome_corr = outcome_corr.sort_values(by=correlation_col, key=abs, ascending=False)
-            
-            # Create color map (blue for positive, red for negative)
-            colors = ['#1E88E5' if c >= 0 else '#f44336' for c in outcome_corr[correlation_col]]
+            # Calculate our own correlations to ensure proper column handling
+            try:
+                # Create a copy with just numeric columns
+                numeric_df = df[numeric_cols].copy()
+                
+                # Make sure all columns are properly converted to numeric
+                for col in numeric_df.columns:
+                    numeric_df[col] = pd.to_numeric(numeric_df[col], errors='coerce')
+                
+                # Drop columns with all NaN values
+                numeric_df = numeric_df.dropna(axis=1, how='all')
+                
+                # Calculate correlation matrix
+                corr_matrix = numeric_df.corr()
+                
+                # Extract correlations with outcome
+                if outcome_col in corr_matrix.columns:
+                    outcome_corr = corr_matrix[outcome_col].drop(outcome_col).reset_index()
+                    outcome_corr.columns = ['Feature', 'Correlation']
+                    
+                    # Sort by absolute correlation
+                    outcome_corr = outcome_corr.sort_values('Correlation', key=abs, ascending=False)
+                    
+                    # Create a horizontal bar chart of correlations
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    
+                    # Create color map (blue for positive, red for negative)
+                    colors = ['#1E88E5' if c >= 0 else '#f44336' for c in outcome_corr['Correlation']]
             
             # Plot data
             ax.barh(outcome_corr[feature_col], outcome_corr[correlation_col], color=colors)
