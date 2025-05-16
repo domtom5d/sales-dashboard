@@ -11,6 +11,57 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+def calculate_correlations(df, outcome_col='outcome', numeric_cols=None):
+    """
+    Calculate correlation between features and outcome
+    
+    Args:
+        df (DataFrame): DataFrame with numeric features and outcome
+        outcome_col (str): Name of the outcome column (default: 'outcome')
+        numeric_cols (list, optional): List of numeric columns to use for correlation.
+                                      If None, will automatically select numeric columns.
+    
+    Returns:
+        tuple: (
+            DataFrame: Sorted correlations with outcome,
+            DataFrame: Full correlation matrix
+        )
+    """
+    # If no numeric columns specified, automatically select numeric ones
+    if numeric_cols is None:
+        numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+    
+    # Make sure outcome_col is in numeric_cols
+    if outcome_col not in numeric_cols and outcome_col in df.columns:
+        numeric_cols.append(outcome_col)
+    
+    # Validate that we have enough data
+    if len(numeric_cols) <= 1:
+        return None, None
+    
+    # Create a copy of the DataFrame with only numeric columns
+    numeric_df = df[numeric_cols].copy()
+    
+    # Convert all columns to numeric, replacing non-numeric values with NaN
+    for col in numeric_df.columns:
+        numeric_df[col] = pd.to_numeric(numeric_df[col], errors='coerce')
+    
+    # Calculate correlation matrix using Pearson correlation
+    corr_matrix = numeric_df.corr(method='pearson')
+    
+    # Extract correlations with outcome
+    if outcome_col in corr_matrix.columns:
+        # Get correlations with outcome and drop the outcome's self-correlation
+        outcome_corr = corr_matrix[outcome_col].drop(outcome_col).reset_index()
+        # Rename columns
+        outcome_corr.columns = ['feature', 'correlation']
+        # Sort by absolute correlation value
+        outcome_corr = outcome_corr.sort_values('correlation', key=abs, ascending=False)
+        
+        return outcome_corr, corr_matrix
+    else:
+        return None, corr_matrix
+
 def render_feature_correlation_tab(df):
     """
     Render the complete Feature Correlation Analysis tab
@@ -66,19 +117,15 @@ def render_feature_correlation_tab(df):
         # Drop rows with NaN in outcome column
         numeric_df = numeric_df.dropna(subset=[outcome_col])
         
-        # Calculate correlation matrix
-        corr_matrix = numeric_df.corr()
+        # Use calculate_correlations function to get correlation data
+        outcome_corr, corr_matrix = calculate_correlations(numeric_df, outcome_col=outcome_col)
         
-        # Extract correlations with outcome
-        if outcome_col in corr_matrix.columns:
-            outcome_corr = corr_matrix[outcome_col].drop(outcome_col).reset_index()
+        if outcome_corr is not None:
+            # Rename columns to match existing code
             outcome_corr.columns = ['Feature', 'Correlation']
             
             # Remove near-zero correlations
             outcome_corr = outcome_corr[outcome_corr['Correlation'].abs() > 0.01]
-            
-            # Sort by absolute correlation value
-            outcome_corr = outcome_corr.sort_values('Correlation', key=abs, ascending=False)
             
             if not outcome_corr.empty:
                 st.markdown("### Correlation with Deal Outcome")
