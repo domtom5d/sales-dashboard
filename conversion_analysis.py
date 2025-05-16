@@ -566,10 +566,18 @@ def plot_referral_marketing_sources(df):
     col1, col2 = st.columns(2)
     
     with col1:
-        plot_top_categories(df, 'referral_source', "Referral Source")
+        # Check if referral_source column exists and has data
+        if 'referral_source' in df.columns and df['referral_source'].notna().sum() > 0:
+            plot_top_categories(df, 'referral_source', "Referral Source")
+        else:
+            st.info("No Referral Source data available")
     
     with col2:
-        plot_top_categories(df, 'marketing_source', "Marketing Source")
+        # Check if marketing_source column exists and has data
+        if 'marketing_source' in df.columns and df['marketing_source'].notna().sum() > 0:
+            plot_top_categories(df, 'marketing_source', "Marketing Source")
+        else:
+            st.info("No Marketing Source data available")
 
 def plot_timing_factors(df):
     """Plot conversion rates by various timing factors"""
@@ -579,7 +587,7 @@ def plot_timing_factors(df):
     # Days Until Event
     with col1:
         st.write("#### Days Until Event")
-        if 'due_bin' in df.columns:
+        if 'due_bin' in df.columns and df['due_bin'].notna().sum() > 0 and 'outcome' in df.columns:
             try:
                 summary = df.groupby('due_bin')['outcome'].mean().fillna(0)
                 
@@ -604,7 +612,7 @@ def plot_timing_factors(df):
     # Days Since Inquiry
     with col2:
         st.write("#### Days Since Inquiry")
-        if 'dsi_bin' in df.columns:
+        if 'dsi_bin' in df.columns and df['dsi_bin'].notna().sum() > 0 and 'outcome' in df.columns:
             try:
                 summary = df.groupby('dsi_bin')['outcome'].mean().fillna(0)
                 
