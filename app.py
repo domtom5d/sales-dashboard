@@ -305,6 +305,20 @@ if st.session_state.processed_df is not None:
             import traceback
             st.text(traceback.format_exc())
             
+    # Tab 7: Lead Personas
+    with tab7:
+        try:
+            # Import and use the dedicated lead personas tab module
+            from lead_personas_tab import render_lead_personas_tab
+            
+            # Call the modular implementation
+            render_lead_personas_tab(filtered_df)
+            
+        except Exception as e:
+            st.error(f"Error in Lead Personas tab: {str(e)}")
+            import traceback
+            st.text(traceback.format_exc())
+
     # Tab 8: Advanced Analytics
     with tab8:
         try:
