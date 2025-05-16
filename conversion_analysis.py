@@ -541,15 +541,25 @@ def plot_top_categories(df, col, title, min_count=10):
         st.info(f"No {title} data available")
 
 def plot_booking_types(df, min_count=10):
-    """Plot conversion rates by booking type"""
+    """Plot conversion rates by booking type or event type"""
     booking_col = None
-    if 'booking_type' in df.columns:
+    title = "Booking Type"
+    
+    # First check for clean_booking_type (preferred)
+    if 'clean_booking_type' in df.columns:
+        booking_col = 'clean_booking_type'
+    # Then check for booking_type
+    elif 'booking_type' in df.columns:
         booking_col = 'booking_type'
+    # Then check for event_type (lowercase)
+    elif 'event_type' in df.columns:
+        booking_col = 'event_type'
+        title = "Event Type"
     
     if booking_col:
-        plot_top_categories(df, booking_col, "Booking Type", min_count)
+        plot_top_categories(df, booking_col, title, min_count)
     else:
-        st.info("No Booking Type data available")
+        st.info("No Booking Type or Event Type data available")
 
 def plot_referral_marketing_sources(df):
     """Plot conversion rates by referral and marketing sources"""
