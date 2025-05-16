@@ -1,0 +1,302 @@
+Great! We have a few deep-dive options on the table—let’s zero in on one to tackle first. Which of these would you like to implement right now?
+
+Deal Value Insights (avg deal value by category, total revenue over time, price-per-guest trends)
+
+Funnel Stage Conversion (multi-stage drop-off funnel chart)
+
+Cohort Analysis (conversion by inquiry-month cohort over time)
+
+Repeat Business (retention rate of clients who re-book)
+
+Let me know your pick and I’ll provide the exact Streamlit code snippet to slot in.
+
+You said:
+start with one
+ChatGPT said:
+
+Thought for 8 seconds
+
+Analysis errored
+python
+Always show details
+
+Copy
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import streamlit as st
+
+# Deal Value Insights
+
+# 1. Average Deal Value by Booking Type
+df['actual_deal_value'] = pd.to_numeric(df.get('actual_deal_value', df.get('Actual Deal Value', None)), errors='coerce')
+dv_bt = df.groupby('booking_type')['actual_deal_value'].mean().sort_values(ascending=False)
+
+st.subheader("Average Deal Value by Booking Type")
+st.bar_chart(dv_bt)
+
+# 2. Total Revenue Over Time
+df['event_date_dt'] = pd.to_datetime(df.get('event_date', df.get('Event Date')), errors='coerce')
+df['month'] = df['event_date_dt'].dt.to_period('M').dt.to_timestamp()
+rev_month = df.dropna(subset=['month','actual_deal_value']).groupby('month')['actual_deal_value'].sum()
+
+st.subheader("Total Revenue by Month")
+st.line_chart(rev_month)
+
+# 3. Average Price-Per-Guest Trend
+df['number_of_guests'] = pd.to_numeric(df.get('number_of_guests', df.get('Number Of Guests')), errors='coerce')
+df['price_per_guest'] = df['actual_deal_value'] / df['number_of_guests'].replace(0, np.nan)
+ppg_month = df.dropna(subset=['month','price_per_guest']).groupby('month')['price_per_guest'].mean()
+
+st.subheader("Average Price Per Guest by Month")
+st.line_chart(ppg_month)
+---------------------------------------------------------------------------
+ModuleNotFoundError                       Traceback (most recent call last)
+Cell In[14], line 4
+      2 import numpy as np
+      3 import matplotlib.pyplot as plt
+----> 4 import streamlit as st
+      6 # Deal Value Insights
+      7 
+      8 # 1. Average Deal Value by Booking Type
+      9 df['actual_deal_value'] = pd.to_numeric(df.get('actual_deal_value', df.get('Actual Deal Value', None)), errors='coerce')
+
+ModuleNotFoundError: No module named 'streamlit'
+It looks like the Python execution environment for preview doesn’t have Streamlit installed, causing the import error. In your Replit Streamlit app, though, the streamlit module will already be available.
+
+To adapt for Streamlit, drop the import line into your app.py and run within the app’s context. Here’s the cleaned snippet you can paste directly into the Conversion Analysis tab (after your existing sections):
+
+python
+Copy
+Edit
+# --- Deal Value Insights ---
+import pandas as pd
+import numpy as np
+
+# 1. Average Deal Value by Booking Type
+df['actual_deal_value'] = pd.to_numeric(df['actual_deal_value'], errors='coerce')
+dv_bt = df.groupby('booking_type')['actual_deal_value'].mean().sort_values(ascending=False)
+
+st.subheader("Average Deal Value by Booking Type")
+st.bar_chart(dv_bt)
+
+# 2. Total Revenue Over Time
+df['event_date_dt'] = pd.to_datetime(df['event_date'], errors='coerce')
+df['month'] = df['event_date_dt'].dt.to_period('M').dt.to_timestamp()
+rev_month = df.dropna(subset=['month','actual_deal_value']).groupby('month')['actual_deal_value'].sum()
+
+st.subheader("Total Revenue by Month")
+st.line_chart(rev_month)
+
+# 3. Average Price-Per-Guest Trend
+df['number_of_guests'] = pd.to_numeric(df['number_of_guests'], errors='coerce')
+df['price_per_guest'] = df['actual_deal_value'] / df['number_of_guests'].replace(0, np.nan)
+ppg_month = df.dropna(subset=['month','price_per_guest']).groupby('month')['price_per_guest'].mean()
+
+st.subheader("Average Price Per Guest by Month")
+st.line_chart(ppg_month)
+Notes:
+
+Ensure these lines come after df is defined (your merged leads+ops DataFrame).
+
+You don’t need the Streamlit import in the snippet since it’s already at the top of your app.
+
+This will produce three new sections under Price & Size Factors or as its own “Deal Value Insights” section.
+
+Paste this into your app.py, restart the server, and you’ll see your new Deal Value Insights charts live in your dashboard. 
+
+You said:
+next
+ChatGPT said:
+
+Thought for 7 seconds
+Let’s add a Funnel Stage Conversion chart so you can see drop-off at each sales step. You’ll need a column in your DataFrame that records the current CRM stage (e.g. "stage", "pipeline_stage" or similar). If you don’t have one, replace df['stage'] below with the correct column.
+
+Paste this into your Conversion Analysis tab (somewhere after the Deal Value Insights):
+
+python
+Copy
+Edit
+# --- Funnel Stage Conversion ---
+import plotly.express as px
+
+st.subheader("Funnel Stage Conversion")
+
+# Define the ordered stages in your process:
+stage_order = [
+    "New Lead",
+    "Contacted",
+    "Proposal Sent",
+    "Won",
+    "Lost"
+]
+
+# Make sure the column name matches your CRM field
+stage_col = "stage"  # ← change to your actual column, e.g. 'pipeline_stage'
+
+if stage_col in df.columns:
+    # Count how many leads are in each stage
+    counts = df[stage_col].fillna("Unknown").astype(str).value_counts()
+    # Reindex to our defined order, fill missing with zero
+    funnel_counts = counts.reindex(stage_order, fill_value=0)
+
+    # Build the funnel chart
+    fig = px.funnel(
+        x=funnel_counts.values,
+        y=funnel_counts.index,
+        labels={'x':'Number of Leads','y':'Stage'},
+        title="Lead Conversion Funnel"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info(f"No `{stage_col}` column found; please adjust to your stage field.")
+What this does:
+
+Orders your stages from top (New Lead) to bottom (Won/Lost).
+
+Counts how many leads are sitting in each stage.
+
+Renders a Plotly funnel chart that visually shows drop-off at each step.
+
+Once you’ve got that in place and pointed at the right column, you’ll instantly see where your biggest leak points are—and can prioritize workflow fixes accordingly.
+
+ChatGPT said:
+
+Thought for 9 seconds
+Let’s add Cohort Analysis next—showing conversion rates for leads grouped by their inquiry month. Paste this into your Conversion Analysis tab after the Funnel chart:
+
+python
+Copy
+Edit
+# --- Cohort Analysis: Conversion by Inquiry Month ---
+st.subheader("Cohort Analysis: Conversion by Inquiry Month")
+
+# 1) Ensure inquiry_date is datetime
+df['inquiry_date_dt'] = pd.to_datetime(df['inquiry_date'], errors='coerce')
+
+# 2) Create an 'inquiry_month' period
+df['inquiry_month'] = df['inquiry_date_dt'].dt.to_period('M').dt.to_timestamp()
+
+# 3) Aggregate conversion rate per cohort
+cohort = (
+    df.dropna(subset=['inquiry_month','outcome'])
+      .groupby('inquiry_month')['outcome']
+      .agg(total='size', won='sum')
+)
+cohort['rate'] = cohort['won'] / cohort['total']
+
+if not cohort.empty:
+    # 4) Display as line chart
+    st.line_chart(cohort['rate'])
+    
+    # 5) And show the underlying table
+    display = cohort.reset_index()
+    display['rate'] = display['rate'].map(lambda x: f"{x:.1%}")
+    st.table(display[['inquiry_month','total','won','rate']])
+else:
+    st.info("No inquiry_date data available for cohorts.")
+What this does:
+
+Parses your inquiry_date into a datetime.
+
+Buckets each lead into an inquiry_month (e.g. Jan 2025, Feb 2025).
+
+Calculates how many leads came in each month and how many of those converted.
+
+Plots the conversion rate over time, so you see which acquisition months produced the strongest leads.
+
+Shows the raw numbers behind the chart for verification.
+
+Once you drop that in, you’ll have clear visibility into how your “cohorts” of leads—by month of inquiry—perform over time.
+
+You said:
+next
+ChatGPT said:
+
+Thought for 6 seconds
+
+Analysis errored
+python
+Always show details
+
+Copy
+import pandas as pd
+import numpy as np
+import streamlit as st
+
+# --- Repeat Business & Retention ---
+st.subheader("Repeat Business (Client Retention)")
+
+if 'email' in df.columns:
+    # Consider only leads that converted (Outcome == 1)
+    wins = df[df['outcome'] == 1].copy()
+    # Count number of wins per client
+    wins['client'] = wins['email'].str.lower().str.strip()
+    client_wins = wins.groupby('client').size()
+
+    total_clients = client_wins.count()
+    repeat_clients = client_wins[client_wins > 1].count()
+    retention_rate = repeat_clients / total_clients if total_clients else 0
+
+    # Display key metrics
+    col1, col2 = st.columns(2)
+    col1.metric("Total Converting Clients", f"{total_clients:,}")
+    col2.metric("Repeat Clients", f"{repeat_clients:,}", delta=f"{retention_rate:.1%}")
+
+    # Distribution of wins per client
+    win_counts = client_wins.value_counts().sort_index()
+    st.bar_chart(win_counts)
+else:
+    st.info("No email data available to compute repeat business.")
+
+---------------------------------------------------------------------------
+ModuleNotFoundError                       Traceback (most recent call last)
+Cell In[15], line 3
+      1 import pandas as pd
+      2 import numpy as np
+----> 3 import streamlit as st
+      5 # --- Repeat Business & Retention ---
+      6 st.subheader("Repeat Business (Client Retention)")
+
+ModuleNotFoundError: No module named 'streamlit'
+That Streamlit import error is expected in this notebook environment, but in your Replit Streamlit app you already have import streamlit as st at the top. Just paste the core logic block into your app under the Conversion Analysis tab (after the Cohort section), and it will run correctly.
+
+Here’s the snippet (without the import):
+
+python
+Copy
+Edit
+# --- Repeat Business & Retention ---
+st.subheader("Repeat Business (Client Retention)")
+
+if 'email' in df.columns:
+    # Focus on converted leads
+    wins = df[df['outcome'] == 1].copy()
+    wins['client'] = wins['email'].str.lower().str.strip()
+    client_wins = wins.groupby('client').size()
+
+    total_clients = client_wins.count()
+    repeat_clients = client_wins[client_wins > 1].count()
+    retention_rate = repeat_clients / total_clients if total_clients else 0
+
+    # Show metrics side-by-side
+    c1, c2 = st.columns(2)
+    c1.metric("Total Converting Clients", f"{total_clients:,}")
+    c2.metric("Repeat Clients",            f"{repeat_clients:,}", delta=f"{retention_rate:.1%}")
+
+    # Plot distribution of wins per client
+    win_counts = client_wins.value_counts().sort_index()
+    st.bar_chart(win_counts)
+else:
+    st.info("No email data available to compute repeat business.")
+Paste that after your Cohort Analysis. It will:
+
+Count unique clients by email who have at least one won deal
+
+Compute how many have more than one won deal (repeat business)
+
+Display the retention rate
+
+Chart how many clients fall into “1 win,” “2 wins,” etc.
+
+Let me know once you’ve added it and we can verify your retention insights live. 
