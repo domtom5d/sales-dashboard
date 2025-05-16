@@ -637,13 +637,13 @@ def plot_timing_factors(df):
     # Submission Weekday
     with col3:
         st.write("#### Inquiry Weekday")
-        if 'weekday' in df.columns:
+        if 'weekday' in df.columns and df['weekday'].notna().sum() > 0 and 'outcome' in df.columns:
             try:
                 # Order by day of week
                 weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
                 summary = df.groupby('weekday')['outcome'].mean().reindex(weekday_order).fillna(0)
                 
-                if not summary.empty:
+                if not summary.empty and not summary.isna().all():
                     fig, ax = plt.subplots(figsize=(8, 5))
                     summary.plot(kind='bar', ax=ax)
                     ax.set_ylim(0, min(1, summary.max() * 1.2))
@@ -669,11 +669,11 @@ def plot_size_factors(df):
     # Number of Guests
     with col1:
         st.write("#### Number of Guests")
-        if 'guest_bin' in df.columns:
+        if 'guest_bin' in df.columns and df['guest_bin'].notna().sum() > 0 and 'outcome' in df.columns:
             try:
                 summary = df.groupby('guest_bin')['outcome'].mean().fillna(0)
                 
-                if not summary.empty:
+                if not summary.empty and not summary.isna().all():
                     fig, ax = plt.subplots(figsize=(8, 5))
                     summary.plot(kind='bar', ax=ax)
                     ax.set_ylim(0, min(1, summary.max() * 1.2))
@@ -694,11 +694,11 @@ def plot_size_factors(df):
     # Staff-to-Guest Ratio
     with col2:
         st.write("#### Staff-to-Guest Ratio")
-        if 'ratio_bin' in df.columns:
+        if 'ratio_bin' in df.columns and df['ratio_bin'].notna().sum() > 0 and 'outcome' in df.columns:
             try:
                 summary = df.groupby('ratio_bin')['outcome'].mean().fillna(0)
                 
-                if not summary.empty:
+                if not summary.empty and not summary.isna().all():
                     fig, ax = plt.subplots(figsize=(8, 5))
                     summary.plot(kind='bar', ax=ax)
                     ax.set_ylim(0, min(1, summary.max() * 1.2))
@@ -720,7 +720,7 @@ def plot_geographic_insights(df):
     """Plot conversion rates by geography"""
     st.subheader("Geographic Insights")
     
-    if 'state' in df.columns:
+    if 'state' in df.columns and df['state'].notna().sum() > 0 and 'outcome' in df.columns:
         try:
             # Get states with at least 5 leads
             state_counts = df.groupby('state').size()
@@ -733,7 +733,7 @@ def plot_geographic_insights(df):
                 # Calculate conversion rates
                 rates = df_geo.groupby('state')['outcome'].mean().sort_values(ascending=False)
                 
-                if not rates.empty:
+                if not rates.empty and not rates.isna().all():
                     fig, ax = plt.subplots(figsize=(10, 6))
                     rates.plot(kind='bar', ax=ax)
                     ax.set_ylim(0, min(1, rates.max() * 1.2))
@@ -744,6 +744,14 @@ def plot_geographic_insights(df):
                     
                     plt.tight_layout()
                     st.pyplot(fig)
+                    
+                    # Add supplementary insight
+                    best_state = rates.index[0]
+                    worst_state = rates.index[-1]
+                    st.markdown(f"**Insights:**")
+                    st.markdown(f"- **{best_state}** has the highest conversion rate at {rates.iloc[0]:.1%}")
+                    st.markdown(f"- **{worst_state}** has the lowest conversion rate at {rates.iloc[-1]:.1%}")
+                    st.markdown(f"- {len(valid_states)} states have enough data for analysis (5+ leads)")
                 else:
                     st.info("Not enough data for geographic analysis")
             else:
