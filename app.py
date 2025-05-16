@@ -290,6 +290,20 @@ if st.session_state.processed_df is not None:
             st.error(f"Error in Key Findings tab: {str(e)}")
             import traceback
             st.text(traceback.format_exc())
+            
+    # Tab 6: Explanations
+    with tab6:
+        try:
+            # Import and use the dedicated explanations tab module
+            from explanations_tab import render_explanations_tab
+            
+            # Call the modular implementation
+            render_explanations_tab()
+            
+        except Exception as e:
+            st.error(f"Error in Explanations tab: {str(e)}")
+            import traceback
+            st.text(traceback.format_exc())
 
 # Tab 9: AI Insights
     with tab9:
