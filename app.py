@@ -10,8 +10,9 @@ import datetime
 import seaborn as sns
 from sqlalchemy import create_engine
 from sklearn.metrics import confusion_matrix
-from database import import_leads_data, import_operations_data, get_lead_data, get_operation_data, get_merged_data, initialize_db_if_empty, migrate_database, process_phone_matching
-from utils import process_data, calculate_conversion_rates, calculate_correlations, load_and_normalize_data
+from database import import_leads_data, import_operations_data, initialize_db_if_empty, migrate_database, process_phone_matching
+from data_manager import load_data, apply_filters
+from utils import calculate_conversion_rates, calculate_correlations
 from derive_scorecard import generate_lead_scorecard, score_lead
 from conversion import analyze_phone_matches, analyze_time_to_conversion
 from evaluate import (
@@ -24,7 +25,7 @@ from evaluate import (
 from findings import generate_findings
 from segmentation import segment_leads, plot_clusters, plot_cluster_conversion_rates, plot_feature_importance_by_cluster
 from advanced_analytics import run_all_analytics, plot_conversion_by_category
-from conversion_analysis import run_conversion_analysis, normalize_data, apply_filters
+from conversion_analysis import run_conversion_analysis
 from mistral_insights import generate_sales_opportunity_analysis, generate_booking_type_recommendations, generate_customer_segment_insights
 
 # Set page config and title
