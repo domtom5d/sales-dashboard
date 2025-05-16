@@ -218,9 +218,13 @@ def render_lead_scoring_tab(df):
                 st.session_state.thresholds = thresholds
                 st.session_state.metrics = metrics
                 
-                # Ensure model_metrics is also set for other tabs to use
-                if 'model_metrics' not in st.session_state and metrics is not None:
+                # Always set model_metrics for other tabs to use
+                if metrics is not None:
                     st.session_state.model_metrics = metrics
+                    
+                    # Ensure the specific y_pred_proba is directly available in session state
+                    if 'y_pred_proba' in metrics:
+                        st.session_state.y_pred_proba = metrics['y_pred_proba']
                 
                 st.success("Lead scoring model generated successfully!")
         except Exception as e:

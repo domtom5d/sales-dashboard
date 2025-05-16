@@ -35,6 +35,8 @@ def render_key_findings_tab(df):
                 metrics = st.session_state.model_metrics
                 if 'y_pred_proba' in metrics:
                     y_scores = metrics['y_pred_proba']
+                elif 'y_pred_proba' in st.session_state:
+                    y_scores = st.session_state.y_pred_proba
                 elif 'y_probs' in st.session_state:
                     y_scores = st.session_state.y_probs
             
