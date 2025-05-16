@@ -83,15 +83,44 @@ def render_feature_correlation_tab(df):
         st.warning("No outcome column found in the data. This tab requires either 'outcome' or 'Outcome' column.")
         return
     
+    # Check if there's any data
+    if df.empty:
+        st.warning("No data available for correlation analysis. Please ensure your dataset is loaded correctly.")
+        return
+        
     # Select only numeric columns for correlation analysis
     numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
     
+    # Display empty state with helpful message if no numeric features are found
+    if len(numeric_cols) == 0:
+        st.warning("No numeric columns found in the dataset. Correlation analysis requires numeric data.")
+        
+        # Show helpful suggestions
+        st.markdown("""
+        ### Suggestions to fix this issue:
+        1. Ensure your data includes numeric columns (e.g., price, quantity, days between events)
+        2. Convert categorical variables to numeric if appropriate (e.g., yes/no to 1/0)
+        3. Check that data types are correctly identified during import
+        """)
+        return
+    
     if outcome_col not in numeric_cols:
         st.warning(f"The {outcome_col} column is not numeric. This tab requires a numeric outcome column (0 for lost, 1 for won).")
+        
+        # Show sample of outcome column to help diagnose
+        if outcome_col in df.columns:
+            st.markdown(f"**Sample values in '{outcome_col}' column:**")
+            st.write(df[outcome_col].value_counts().head(10))
+            st.markdown("The outcome column should be numeric with values 0 (lost) and 1 (won).")
         return
     
     if len(numeric_cols) <= 1:
-        st.warning("Not enough numeric columns available for correlation analysis.")
+        st.warning("Not enough numeric columns available for correlation analysis. At least two numeric columns are needed.")
+        
+        # Show available columns for reference
+        st.markdown("**Available columns in dataset:**")
+        for col_type, columns in df.dtypes.groupby(df.dtypes).items():
+            st.markdown(f"- {col_type}: {', '.join(columns.index.tolist())}")
         return
     
     try:
@@ -131,29 +160,41 @@ def render_feature_correlation_tab(df):
                 st.markdown("### Correlation with Deal Outcome")
                 st.markdown("Positive values indicate factors that correlate with winning deals, negative values with losing deals.")
                 
-                # Create a horizontal bar chart of correlations
+                # Create a horizontal bar chart of correlations using seaborn
                 fig, ax = plt.subplots(figsize=(10, 6))
                 
-                # Create color map (blue for positive, red for negative)
-                colors = ['#1E88E5' if c >= 0 else '#f44336' for c in outcome_corr['Correlation']]
+                # Limit to top 15 correlations for readability
+                top_corrs = outcome_corr.head(15)
                 
-                # Plot data
-                ax.barh(outcome_corr['Feature'], outcome_corr['Correlation'], color=colors)
+                # Create color palette - blue for positive, red for negative
+                colors = ['#1E88E5' if c >= 0 else '#f44336' for c in top_corrs['Correlation']]
+                
+                # Plot with seaborn barplot
+                sns.barplot(
+                    x='Correlation', 
+                    y='Feature',
+                    data=top_corrs,
+                    palette=colors,
+                    ax=ax
+                )
                 
                 # Customize plot
                 ax.set_xlabel('Correlation with Win/Loss')
                 ax.set_ylabel('Feature')
-                ax.set_title('Feature Correlation with Deal Outcome')
+                ax.set_title('Top Feature Correlations with Deal Outcome')
                 ax.grid(axis='x', linestyle='--', alpha=0.7)
                 
                 # Add labels with the actual correlation values
-                for i, v in enumerate(outcome_corr['Correlation']):
+                for i, v in enumerate(top_corrs['Correlation']):
                     ax.text(v + (0.01 if v >= 0 else -0.01), 
                             i, 
                             f"{v:.2f}", 
                             va='center', 
                             ha='left' if v >= 0 else 'right',
                             fontweight='bold')
+                
+                # Display number of features analyzed
+                st.caption(f"Showing top {len(top_corrs)} of {len(outcome_corr)} features with significant correlation.")
                 
                 # Only show plot if we have data
                 st.pyplot(fig)
@@ -182,33 +223,66 @@ def render_feature_correlation_tab(df):
                     st.markdown("### Correlation Matrix")
                     st.markdown("This heatmap shows how different features correlate with each other.")
                     
+                    # Add option to choose number of features to display
+                    col1, col2 = st.columns([1, 3])
+                    with col1:
+                        max_features = min(15, len(outcome_corr))
+                        num_features = st.slider("Number of features", 3, max_features, min(8, max_features))
+                        
+                    with col2:
+                        matrix_display = st.radio(
+                            "Display format",
+                            options=["Heatmap", "Table"],
+                            horizontal=True
+                        )
+                    
                     # Limit to top correlated features for readability
-                    top_features = list(outcome_corr['Feature'].head(8))
+                    top_features = list(outcome_corr['Feature'].head(num_features))
                     if outcome_col not in top_features:
                         top_features.append(outcome_col)
                     
                     # Create a subset correlation matrix
                     subset_corr = corr_matrix.loc[top_features, top_features]
                     
-                    # Create a correlation heatmap
-                    fig, ax = plt.subplots(figsize=(10, 8))
+                    # Display as chosen format
+                    if matrix_display == "Heatmap":
+                        # Create a correlation heatmap
+                        fig, ax = plt.subplots(figsize=(10, 8))
+                        
+                        # Generate a custom diverging colormap
+                        cmap = sns.diverging_palette(230, 20, as_cmap=True)
+                        
+                        # Draw the heatmap
+                        sns.heatmap(subset_corr, cmap=cmap, vmax=1, vmin=-1, center=0,
+                                    square=True, linewidths=0.5, cbar_kws={"shrink": 0.8}, 
+                                    annot=True, fmt=".2f", ax=ax)
+                        
+                        # Rotate x-axis labels for readability
+                        plt.xticks(rotation=45, ha='right')
+                        
+                        # Set plot title
+                        ax.set_title('Feature Correlation Matrix')
+                        
+                        # Display the plot
+                        st.pyplot(fig)
+                    else:
+                        # Format table with highlighting
+                        def color_corr(val):
+                            """Color function for correlation values in dataframe styling"""
+                            color = '#B7E0F2' if val > 0 else '#F2B8C6' if val < 0 else 'white'
+                            intensity = min(abs(val) * 2, 1)  # Scale for color intensity
+                            return f'background-color: rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, {intensity})'
+                        
+                        # Display as styled table with formatting
+                        st.dataframe(
+                            subset_corr.style.format("{:.2f}")
+                                          .applymap(color_corr)
+                                          .set_caption("Correlation Matrix"),
+                            use_container_width=True
+                        )
                     
-                    # Generate a custom diverging colormap
-                    cmap = sns.diverging_palette(230, 20, as_cmap=True)
-                    
-                    # Draw the heatmap
-                    sns.heatmap(subset_corr, cmap=cmap, vmax=1, vmin=-1, center=0,
-                                square=True, linewidths=0.5, cbar_kws={"shrink": 0.8}, 
-                                annot=True, fmt=".2f", ax=ax)
-                    
-                    # Rotate x-axis labels for readability
-                    plt.xticks(rotation=45, ha='right')
-                    
-                    # Set plot title
-                    ax.set_title('Feature Correlation Matrix')
-                    
-                    # Display the plot
-                    st.pyplot(fig)
+                    # Add explanation for how to interpret the matrix
+                    st.caption("The correlation matrix shows relationships between all pairs of features. Values close to 1 or -1 indicate strong correlations.")
             else:
                 st.warning("No significant correlations found between features and the outcome.")
         else:
