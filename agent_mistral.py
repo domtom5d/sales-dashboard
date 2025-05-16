@@ -101,12 +101,30 @@ def analyze_conversion_opportunities(df):
         str: AI-generated analysis of conversion opportunities
     """
     # Prepare a summary of the data for the agent
+    # Handle potential missing columns
+    total_leads = len(df)
+    conversion_rate = df['outcome'].mean() if 'outcome' in df.columns else 0
+    
+    # Safely get top booking types
+    top_booking_types = ', '.join(df['booking_type'].value_counts().head(3).index.tolist()) if 'booking_type' in df.columns else 'Unknown'
+    
+    # Safely get date range
+    start_date = 'Unknown'
+    end_date = 'Unknown'
+    if 'inquiry_date' in df.columns:
+        if not df['inquiry_date'].empty and pd.notna(df['inquiry_date']).any():
+            min_date = df['inquiry_date'].min()
+            max_date = df['inquiry_date'].max()
+            if pd.notna(min_date) and pd.notna(max_date):
+                start_date = min_date.strftime('%Y-%m-%d') if hasattr(min_date, 'strftime') else str(min_date)
+                end_date = max_date.strftime('%Y-%m-%d') if hasattr(max_date, 'strftime') else str(max_date)
+    
     data_summary = f"""
     Dataset overview:
-    - Total leads: {len(df)}
-    - Conversion rate: {df['outcome'].mean():.1%}
-    - Top booking types: {', '.join(df['booking_type'].value_counts().head(3).index.tolist())}
-    - Date range: {df['inquiry_date'].min().strftime('%Y-%m-%d') if 'inquiry_date' in df.columns else 'Unknown'} to {df['inquiry_date'].max().strftime('%Y-%m-%d') if 'inquiry_date' in df.columns else 'Unknown'}
+    - Total leads: {total_leads}
+    - Conversion rate: {conversion_rate:.1%}
+    - Top booking types: {top_booking_types}
+    - Date range: {start_date} to {end_date}
     """
     
     # Define the specific question
