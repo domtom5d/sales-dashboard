@@ -96,47 +96,48 @@ if data_source == "Upload CSV Files":
     operations_file = st.sidebar.file_uploader("Upload Operations CSV", type=["csv"])
     
     if leads_file is not None:
-        try:
-            df_leads = pd.read_csv(leads_file)
-            st.session_state.lead_df = df_leads
+        # Option to import into database
+        if st.sidebar.button("Import Leads to Database"):
+            # Save uploaded file temporarily
+            temp_path = "temp_leads.csv"
+            with open(temp_path, "wb") as f:
+                f.write(leads_file.getvalue())
             
-            # Option to import into database
-            if st.sidebar.button("Import Leads to Database"):
-                # Save uploaded file temporarily
-                temp_path = "temp_leads.csv"
-                with open(temp_path, "wb") as f:
-                    f.write(leads_file.getvalue())
-                
-                # Import to database
-                imported_count = import_leads_data(temp_path)
-                st.sidebar.success(f"Successfully imported {imported_count} lead records to database")
-        except Exception as e:
-            st.error(f"Error loading leads file: {str(e)}")
+            # Import to database
+            imported_count = import_leads_data(temp_path)
+            st.sidebar.success(f"Successfully imported {imported_count} lead records to database")
     
     if operations_file is not None:
-        try:
-            df_operations = pd.read_csv(operations_file)
-            st.session_state.operation_df = df_operations
+        # Option to import into database
+        if st.sidebar.button("Import Operations to Database"):
+            # Save uploaded file temporarily
+            temp_path = "temp_operations.csv"
+            with open(temp_path, "wb") as f:
+                f.write(operations_file.getvalue())
             
-            # Option to import into database
-            if st.sidebar.button("Import Operations to Database"):
-                # Save uploaded file temporarily
-                temp_path = "temp_operations.csv"
-                with open(temp_path, "wb") as f:
-                    f.write(operations_file.getvalue())
-                
-                # Import to database
-                imported_count = import_operations_data(temp_path)
-                st.sidebar.success(f"Successfully imported {imported_count} operation records to database")
-        except Exception as e:
-            st.error(f"Error loading operations file: {str(e)}")
+            # Import to database
+            imported_count = import_operations_data(temp_path)
+            st.sidebar.success(f"Successfully imported {imported_count} operation records to database")
     
-    if st.session_state.lead_df is not None:
-        # Process data if leads are available
-        st.session_state.processed_df = process_data(
-            st.session_state.lead_df, 
-            st.session_state.operation_df
-        )
+    # Process uploaded files if available using centralized data loader
+    if leads_file is not None:
+        try:
+            # Use the new centralized data loading function
+            leads_df, operations_df, processed_df = load_data(
+                use_csv=True,
+                leads_file=leads_file,
+                operations_file=operations_file
+            )
+            
+            # Store in session state
+            st.session_state.lead_df = leads_df
+            st.session_state.operation_df = operations_df
+            st.session_state.processed_df = processed_df
+            
+            if leads_df is not None and not leads_df.empty:
+                st.sidebar.success(f"Processed {len(leads_df)} lead records")
+        except Exception as e:
+            st.error(f"Error processing data: {str(e)}")
 else:
     # Simplified loading from database without filters
     st.sidebar.header("Database Data")
@@ -145,20 +146,15 @@ else:
     # Add a load button without filters
     if st.sidebar.button("Load All Data"):
         try:
-            # Load all data from database
-            leads_df = get_lead_data()
-            operations_df = get_operation_data()
+            # Use the new centralized data loading function
+            leads_df, operations_df, processed_df = load_data(use_csv=False)
             
-            if leads_df is not None:
-                st.session_state.lead_df = leads_df
-                st.session_state.operation_df = operations_df
-                
-                # Process the data
-                st.session_state.processed_df = process_data(
-                    leads_df, 
-                    operations_df
-                )
-                
+            # Store in session state
+            st.session_state.lead_df = leads_df
+            st.session_state.operation_df = operations_df
+            st.session_state.processed_df = processed_df
+            
+            if leads_df is not None and not leads_df.empty:
                 st.sidebar.success(f"Loaded {len(leads_df)} lead records from database")
         except Exception as e:
             st.error(f"Error loading data from database: {str(e)}")
