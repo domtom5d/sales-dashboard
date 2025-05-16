@@ -1,0 +1,41 @@
+Lead Scoring Tab
+Intended Function: This tab is meant to build a predictive model (likely a logistic regression or similar) to score leads on their likelihood to convert. The user can click a button to generate the model. The output should include the model’s feature importance or coefficients (so we can see which factors drive conversion) and suggested score thresholds for categorizing leads (e.g. what score constitutes a “hot lead”). This tab doesn’t initially show charts, but rather data frames or text with model results. Problems Identified:
+Model Outputs Not Stored for Other Tabs: After generating the lead scoring model, the code stores scorecard_df (feature weights) in st.session_state.weights_df and threshold info in st.session_state.thresholds. However, it does not store the model’s predicted scores or metrics (e.g. accuracy) anywhere. The Key Findings tab expects st.session_state.model_metrics (with something like y_pred_proba) to be set, but it never is. This means even after running the model, the Key Findings tab won’t recognize it (and will prompt the user to run the model).
+Using generate_lead_scorecard: The model generation is handled by a function generate_lead_scorecard(use_sample_data=False), which isn’t defined in the provided snippet. We presume it trains a model on the current filtered_df (or full data) and returns a DataFrame of feature weights and a dict of thresholds. We need to ensure this function is working correctly. Potential issues inside it could include not handling missing values in features, or not splitting data for evaluation (depending on complexity). Given the scope, we can assume it either does an internal train/test split or just fits on all data for demonstration.
+Feature Selection for Model: The data contains many columns, including text or categorical fields that would need encoding to be used in a model. It’s unclear if generate_lead_scorecard takes care of encoding or if it expects a prepared set of features. If this function isn’t properly implemented, it might fail or produce a nonsensical model. For example, if it tries to include state or city without encoding, that would error out. Or if it includes actual_deal_value which has NaNs for non-booked leads, that could cause issues.
+No user feedback if already generated: Minor point – if the user clicks the generate button multiple times, it will regenerate each time. There’s no harm, but we might consider disabling the button or indicating when a model has been created. For now, it’s fine to leave as is, just something to note.
+Recommended Fixes:
+Persist Model Metrics: Modify the code to save the model’s metrics and predictions to st.session_state so other tabs can use them. For instance, after you call generate_lead_scorecard(), suppose it can also return a dict like model_metrics (containing keys like 'accuracy', 'precision', 'y_pred_proba', etc.). Capture that and do:
+python
+Copy
+Edit
+st.session_state.model_metrics = model_metrics
+If generate_lead_scorecard doesn’t currently return metrics, you should modify it to do so. At minimum, we want the predicted probabilities or scores for each lead (y_pred_proba) since Key Findings uses that. This might entail having the function internally predict on the data (or validation set) and return those probabilities.
+Ensure Proper Feature Usage: Inside generate_lead_scorecard, verify that it’s only using appropriate features. A safe approach is to use the same numeric features from the correlation analysis (and possibly one-hot encode a few key categorical features if desired). Likely, the important features are numeric fields like days_until_event, number_of_guests, etc., and possibly some binary flags (like whether the lead came from a certain source, which could be one-hot encoded by the AI function if implemented). If this function is using an AI or external service (the name “scorecard” hints it might be using a service or a special algorithm), ensure it’s fed cleaned data. In practice, check that things like city, state aren’t fed in as raw strings. If they are, either drop them or encode them. If using scikit-learn, one could do something like:
+python
+Copy
+Edit
+features = ['days_until_event','number_of_guests','bartenders_needed', ...]  # list numeric and important categorical encoded fields
+X = df[features].fillna(0)
+y = df['outcome']
+model = LogisticRegression(...)
+model.fit(X, y)
+weights = pd.DataFrame({
+    'Feature': features,
+    'Coefficient': model.coef_[0]
+})
+This is a simplified example. The key is to fill or drop NaNs (fillna(0) for something like actual_deal_value might be reasonable since no deal = $0). For categorical like booking_type if you want to include them, you’d need to convert to dummy variables. Given the complexity, it might be that generate_lead_scorecard focuses only on numeric fields or uses an automated approach to include categoricals (maybe via one-hot internally or an AI model). Just be aware of potential data type issues.
+Update UI Feedback: After generating the model, the tab currently displays the scorecard_df (feature weights) and recommended thresholds. This is good. We might also display model performance (if available). For example, if model_metrics has an accuracy or AUC, show those:
+python
+Copy
+Edit
+st.write(f"Model Accuracy: {model_metrics['accuracy']*100:.1f}%")
+And if the list of thresholds is provided (say a dictionary with keys like high, medium, low score thresholds), list those as well with an explanation (e.g. “Leads with a score above X are considered High Priority.”). This will make the output more actionable.
+Prevent Multiple Loads (Optional): If desired, disable the “Generate Lead Scoring Model” button after one use, or only allow re-running if data changes. This can be done by checking if st.session_state.weights_df already exists and then either hiding or changing the button. Not critical, but it improves UX. For example:
+python
+Copy
+Edit
+if 'weights_df' in st.session_state:
+    st.success("Lead scoring model is ready. You can re-run it to update.")
+This way the user knows it’s been done.
+By implementing these fixes, the Lead Scoring tab will produce a model and properly propagate its results to subsequent tabs. The user will see a table of feature importance (which features contribute most to conversion) and get threshold recommendations, and the backend will store the necessary info for Key Findings to use.
