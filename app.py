@@ -277,6 +277,69 @@ if st.session_state.processed_df is not None:
             import traceback
             st.text(traceback.format_exc())
 
+# Tab 9: AI Insights
+    with tab9:
+        try:
+            st.markdown("## 🧠 AI Insights")
+            
+            st.markdown("""
+            This tab uses Mistral AI to generate advanced insights and recommendations based on your data.
+            These AI-powered analyses can help identify patterns, opportunities, and strategies that might 
+            not be immediately obvious from the charts and metrics alone.
+            """)
+            
+            # Check for Mistral API key
+            mistral_api_key = os.environ.get("MISTRAL_API_KEY")
+            if not mistral_api_key:
+                st.warning("⚠️ Mistral API key not found. Please set the MISTRAL_API_KEY environment variable to enable AI insights.")
+                
+                # Button to set API key in session state
+                api_key_input = st.text_input("Enter your Mistral API key:", type="password")
+                if st.button("Set API Key") and api_key_input:
+                    os.environ["MISTRAL_API_KEY"] = api_key_input
+                    st.success("API key set successfully! Refresh the page to see AI insights.")
+            else:
+                # Display AI analysis options
+                st.subheader("Select Analysis Type")
+                
+                analysis_type = st.radio(
+                    "Choose an analysis to generate:",
+                    ["Sales Opportunity Analysis", "Booking Type Recommendations", "Customer Segment Insights"],
+                    index=0
+                )
+                
+                # Button to generate insights
+                if st.button("Generate AI Insights"):
+                    with st.spinner("Generating insights with Mistral AI... This may take a moment."):
+                        try:
+                            if analysis_type == "Sales Opportunity Analysis":
+                                insights = generate_sales_opportunity_analysis(filtered_df)
+                                st.subheader("🔍 Sales Opportunity Analysis")
+                            elif analysis_type == "Booking Type Recommendations":
+                                # Get booking type conversion rates
+                                conversion_rates = calculate_conversion_rates(filtered_df)
+                                booking_type_data = conversion_rates.get('booking_type', pd.DataFrame())
+                                insights = generate_booking_type_recommendations(filtered_df, booking_type_data)
+                                st.subheader("📝 Booking Type Recommendations")
+                            else:  # Customer Segment Insights
+                                insights = generate_customer_segment_insights(filtered_df)
+                                st.subheader("👥 Customer Segment Insights")
+                            
+                            # Store insights in session state
+                            st.session_state[f'{analysis_type.lower().replace(" ", "_")}_insights'] = insights
+                        except Exception as e:
+                            st.error(f"Error generating insights: {str(e)}")
+                
+                # Display insights if available in session state
+                for insight_type in ['sales_opportunity_analysis', 'booking_type_recommendations', 'customer_segment_insights']:
+                    if insight_type in st.session_state:
+                        st.markdown(st.session_state[insight_type])
+        
+        except Exception as e:
+            st.error(f"Error in AI Insights tab: {str(e)}")
+            import traceback
+            st.text(traceback.format_exc())
+
 # Tab 10: Debug
     with tab10:
         try:
