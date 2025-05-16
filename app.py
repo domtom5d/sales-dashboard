@@ -192,7 +192,7 @@ if st.session_state.processed_df is not None:
     st.info("Filters are currently disabled. Dashboard shows all available data.")
     
     # Create tabs for different analysis views
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
         "📊 Conversion Analysis", 
         "🔍 Feature Correlation", 
         "🤖 Lead Scoring", 
@@ -201,7 +201,8 @@ if st.session_state.processed_df is not None:
         "🛈 Explanations",
         "🧩 Lead Personas",
         "📊 Advanced Analytics",
-        "🧠 AI Insights"
+        "🧠 AI Insights",
+        "🔧 Debug"
     ])
     
     # First ensure all date columns are properly formatted as datetime
