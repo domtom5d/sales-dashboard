@@ -1,0 +1,78 @@
+1. Verify Your Tab Indexes & Imports
+Double-check that the order of tabs = st.tabs([...]) in app.py matches the order you’re using when you do with tabs[1]: # Feature Correlation, with tabs[2]: # Lead Scoring, etc.
+
+Ensure you’re importing the right render functions for each tab. If you have both feature_correlation.py and new_feature_correlation.py, make sure app.py points at the one with the real code.
+
+python
+Copy
+Edit
+# BAD: importing the stub
+from feature_correlation import plot_correlation  
+# GOOD: import your working code
+from new_feature_correlation import render_feature_correlation  
+2. Add Per-Tab Smoke-Tests
+Wrap each tab’s render call in a try/except so you can see any hidden exceptions:
+
+python
+Copy
+Edit
+with tabs[1]:
+    st.subheader("🔍 Feature Correlation")
+    try:
+        render_feature_correlation(df)
+    except Exception as e:
+        st.error(f"Feature Correlation failed: {e}")
+        import traceback; st.text(traceback.format_exc())
+That will surface any missing‐column or type errors directly in the UI instead of silently failing.
+
+3. Print the DataFrame Shape & Columns Inside Each Tab
+Right at the top of each render function, drop:
+
+python
+Copy
+Edit
+st.write("DEBUG:", df.shape, "columns:", df.columns.tolist())
+That confirms you’re passing a non-empty DataFrame with the expected schema into each module.
+
+4. Confirm You Didn’t Shadow df
+Search your code for any local assignments like df = something_else inside a tab that might overwrite the filtered/merged leads DataFrame with something empty.
+
+bash
+Copy
+Edit
+grep -R "df =" -n app.py
+Make sure your central df = raw_df (or filtered version) is the one used everywhere.
+
+5. Check Your requirements.txt
+If you moved any plotting code into a new file that uses Plotly, Altair, or Statsmodels, verify those libraries are listed in requirements.txt so Streamlit can import them at runtime.
+
+6. Unit‐Test Each Render Function
+In your test_app.py, write minimal tests:
+
+python
+Copy
+Edit
+import pandas as pd
+from new_conversion_tab import render_conversion_tab
+
+def test_conversion_tab_runs_without_error(tmp_path, capsys):
+    # create a tiny DataFrame
+    df = pd.DataFrame({
+        'outcome':[1,0],
+        'created':['2025-01-01','2025-01-08'],
+        'booking_type':['A','B']
+    })
+    # call render; should not raise
+    render_conversion_tab(df)
+Running pytest will catch any missing‐column issues before you even launch the app.
+
+7. Lint & Format
+Run:
+
+bash
+Copy
+Edit
+black . && flake8 .
+to catch typos in function names or wrong imports that could silently break your tabs.
+
+Pick one of these tactics—like adding that try/except around a tab—and you’ll get immediate feedback in the UI about what’s failing. Let me know what error pops up, and we’ll zero in on the fix!

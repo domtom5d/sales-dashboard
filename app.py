@@ -244,54 +244,69 @@ if st.session_state.processed_df is not None:
         
         if len(numeric_cols) > 0 and 'outcome' in filtered_df.columns:
             # Calculate and display correlation with outcome
-            outcome_corr = calculate_correlations(filtered_df, 'outcome', numeric_cols)
+            outcome_corr, full_corr = calculate_correlations(filtered_df)
             
-            st.markdown("### Correlation with Deal Outcome")
-            st.markdown("Positive values indicate factors that correlate with winning deals, negative values with losing deals.")
+            if not outcome_corr.empty:
+                st.markdown("### Correlation with Deal Outcome")
+                st.markdown("Positive values indicate factors that correlate with winning deals, negative values with losing deals.")
             
-            # Create a horizontal bar chart of correlations
-            fig, ax = plt.subplots(figsize=(10, 6))
-            
-            # Sort by absolute correlation value
-            outcome_corr = outcome_corr.sort_values(by='correlation', key=abs, ascending=False)
-            
-            # Create color map (blue for positive, red for negative)
-            colors = ['#1E88E5' if c >= 0 else '#f44336' for c in outcome_corr['correlation']]
-            
-            # Plot data
-            ax.barh(outcome_corr['feature'], outcome_corr['correlation'], color=colors)
-            
-            # Customize plot
-            ax.set_xlabel('Correlation with Win/Loss')
-            ax.set_ylabel('Feature')
-            ax.set_title('Feature Correlation with Deal Outcome')
-            ax.grid(axis='x', linestyle='--', alpha=0.7)
-            
-            # Add labels with the actual correlation values
-            for i, v in enumerate(outcome_corr['correlation']):
-                ax.text(v + (0.01 if v >= 0 else -0.01), 
-                        i, 
-                        f"{v:.2f}", 
-                        va='center', 
-                        ha='left' if v >= 0 else 'right',
-                        fontweight='bold')
-            
-            st.pyplot(fig)
-            
-            # Display feature explanations
-            st.markdown("### Feature Explanations")
-            for i, row in outcome_corr.iterrows():
-                # Skip features with very low correlation
-                if abs(row['correlation']) < 0.05:
-                    continue
+            # Create a horizontal bar chart of correlations if data is available
+            if not outcome_corr.empty:
+                fig, ax = plt.subplots(figsize=(10, 6))
                 
-                feature = row['feature']
-                corr = row['correlation']
+                # Sort by absolute correlation value (handle different column names)
+                correlation_col = 'Correlation with Outcome' if 'Correlation with Outcome' in outcome_corr.columns else 'correlation'
+                feature_col = 'index' if 'index' in outcome_corr.columns else 'feature'
                 
-                if corr > 0:
-                    st.markdown(f"**{feature}**: Positive correlation ({corr:.2f}) - Higher values tend to be associated with **won deals**")
-                else:
-                    st.markdown(f"**{feature}**: Negative correlation ({corr:.2f}) - Higher values tend to be associated with **lost deals**")
+                # Make sure outcome_corr is sorted properly
+                outcome_corr = outcome_corr.sort_values(by=correlation_col, key=abs, ascending=False)
+                
+                # Create color map (blue for positive, red for negative)
+                colors = ['#1E88E5' if c >= 0 else '#f44336' for c in outcome_corr[correlation_col]]
+                
+                # Plot data
+                ax.barh(outcome_corr[feature_col], outcome_corr[correlation_col], color=colors)
+                
+                # Customize plot
+                ax.set_xlabel('Correlation with Win/Loss')
+                ax.set_ylabel('Feature')
+                ax.set_title('Feature Correlation with Deal Outcome')
+                ax.grid(axis='x', linestyle='--', alpha=0.7)
+                
+                # Add labels with the actual correlation values
+                for i, v in enumerate(outcome_corr[correlation_col]):
+                    ax.text(v + (0.01 if v >= 0 else -0.01), 
+                            i, 
+                            f"{v:.2f}", 
+                            va='center', 
+                            ha='left' if v >= 0 else 'right',
+                            fontweight='bold')
+                
+                # Only show plot if we have data
+                st.pyplot(fig)
+            else:
+                st.warning("Not enough data to calculate correlations. Make sure your dataset has numeric features and outcome labels.")
+            
+            # Display feature explanations if we have correlations data
+            if not outcome_corr.empty:
+                st.markdown("### Feature Explanations")
+                
+                # Get the correlation column name
+                correlation_col = 'Correlation with Outcome' if 'Correlation with Outcome' in outcome_corr.columns else 'correlation'
+                feature_col = 'index' if 'index' in outcome_corr.columns else 'feature'
+                
+                for i, row in outcome_corr.iterrows():
+                    # Skip features with very low correlation
+                    corr_value = row[correlation_col]
+                    if abs(corr_value) < 0.05:
+                        continue
+                    
+                    feature = row[feature_col]
+                    
+                    if corr_value > 0:
+                        st.markdown(f"**{feature}**: Positive correlation ({corr_value:.2f}) - Higher values tend to be associated with **won deals**")
+                    else:
+                        st.markdown(f"**{feature}**: Negative correlation ({corr_value:.2f}) - Higher values tend to be associated with **lost deals**")
         else:
             st.warning("Not enough numeric data available for correlation analysis. Make sure your dataset includes numeric features and outcome labels.")
 
