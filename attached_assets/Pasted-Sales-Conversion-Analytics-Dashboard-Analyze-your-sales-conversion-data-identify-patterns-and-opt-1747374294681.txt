@@ -1,0 +1,97 @@
+Sales Conversion Analytics Dashboard
+Analyze your sales conversion data, identify patterns, and optimize your lead scoring.
+Successfully loaded 27432 lead records from database
+
+Successfully loaded 6956 operation records from database
+
+Filters are currently disabled. Dashboard shows all available data.
+
+
+📊 Conversion Analysis
+
+
+🔍 Feature Correlation
+
+
+🤖 Lead Scoring
+
+
+🗃️ Raw Data
+
+
+📈 Key Findings
+
+
+🛈 Explanations
+
+
+🧩 Lead Personas
+
+
+📊 Advanced Analytics
+
+
+🧠 AI Insights
+
+
+🔧 Debug
+
+Conversion Analysis
+Showing insights based on all available data
+
+Total Leads
+
+17,938
+Won Deals
+
+2,345
+Conversion Rate
+
+13.1%
+Avg. Deal Value
+
+N/A
+Conversion by Booking Type
+0
+Insights:
+
+Venue has the highest conversion rate at 82.4%
+0 has the lowest conversion rate at 0.3%
+Conversion by Time Factors
+Conversion by Days Until Event
+Not enough valid data for days until event analysis
+
+Conversion by Days Since Inquiry
+Not enough valid data for days since inquiry analysis
+
+Conversion by Day of Week
+Error in weekday analysis: plot_conversion_by_category() got an unexpected keyword argument 'custom_order'
+
+Traceback (most recent call last):
+  File "/home/runner/workspace/conversion_tab.py", line 342, in plot_timing_factors
+    plot_conversion_by_category(valid_df, 'weekday', 'Day of Week', sort_by='custom', custom_order=weekday_order)
+TypeError: plot_conversion_by_category() got an unexpected keyword argument 'custom_order'
+Conversion by Referral Source
+0
+Insights:
+
+Referral has the highest conversion rate at 100.0%
+Howe Farms has the lowest conversion rate at 57.1%
+Conversion by Event Size
+Conversion by Guest Count
+Conversion by Bartenders Needed
+Geographic Insights
+Conversion by State
+Conversion by City
+Contact Matching Analysis
+Conversion by Area Code Match
+Area Code Distribution
+Data Quality
+Data Completeness
+0
+Data Quality Insights:
+
+Fields with low data completeness (potential data quality issues):
+
+referral_source: 1.2% complete
+days_until_event: 0.0% complete

@@ -366,7 +366,7 @@ def analyze_staff_ratio(df):
     return sr_summary
 
 
-def plot_conversion_by_category(df, category_col, title, ax=None, sort_by='conversion', top_n=None):
+def plot_conversion_by_category(df, category_col, title, ax=None, sort_by='conversion', top_n=None, custom_order=None):
     """
     Plot conversion rates by a category column
     
@@ -375,8 +375,9 @@ def plot_conversion_by_category(df, category_col, title, ax=None, sort_by='conve
         category_col (str): Column to group by
         title (str): Title for the plot
         ax (matplotlib.axes.Axes, optional): Axes to plot on
-        sort_by (str): Column to sort by ('conversion' or 'volume')
+        sort_by (str): Column to sort by ('conversion', 'volume', 'natural', or 'custom')
         top_n (int, optional): Limit to top N categories
+        custom_order (list, optional): Custom ordering of categories (used when sort_by='custom')
     
     Returns:
         matplotlib.axes.Axes: The axes with the plot
@@ -401,6 +402,18 @@ def plot_conversion_by_category(df, category_col, title, ax=None, sort_by='conve
     # Sort by specified column and get top N if requested
     if sort_by == 'conversion':
         summary = summary.sort_values('conversion', ascending=False)
+    elif sort_by == 'volume':
+        summary = summary.sort_values('volume', ascending=False)
+    elif sort_by == 'custom' and custom_order is not None:
+        # Create a categorical column with the custom order
+        category_order = pd.Categorical(
+            summary[category_col], 
+            categories=custom_order, 
+            ordered=True
+        )
+        summary[category_col] = category_order
+        summary = summary.sort_values(category_col)
+    # Default to volume if sort_by is not recognized
     else:
         summary = summary.sort_values('volume', ascending=False)
         
