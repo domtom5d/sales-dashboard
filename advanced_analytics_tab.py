@@ -185,24 +185,12 @@ def render_advanced_analytics_tab(df):
             if (analytics_results.get('event_month') is not None and 
                 not analytics_results['event_month'].empty):
                 
-                # Get month order for proper sorting
-                month_order = ['January', 'February', 'March', 'April', 'May', 'June', 
-                              'July', 'August', 'September', 'October', 'November', 'December']
-                
                 # Create a proper plot with ordered months
                 fig, ax = plt.subplots(figsize=(10, 6))
                 
-                # Convert month to categorical with correct order
-                month_data = analytics_results['event_month'].copy()
-                month_data['month'] = pd.Categorical(
-                    month_data['month'], 
-                    categories=month_order, 
-                    ordered=True
-                )
-                month_data = month_data.sort_values('month')
-                
-                # Plot
-                bars = ax.bar(month_data['month'], month_data['conversion'], color='skyblue')
+                # Plot data (already ordered by month in the analysis function)
+                month_data = analytics_results['event_month']
+                bars = ax.bar(month_data['event_month'], month_data['Conversion'], color='skyblue')
                 
                 # Add data labels
                 for bar in bars:
@@ -210,26 +198,27 @@ def render_advanced_analytics_tab(df):
                     ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
                            f'{height:.1%}', ha='center', va='bottom')
                 
-                # Customize
+                # Customize plot
                 ax.set_title('Conversion Rate by Month', fontsize=14)
                 ax.set_xlabel('Month', fontsize=12)
                 ax.set_ylabel('Conversion Rate', fontsize=12)
                 ax.grid(axis='y', linestyle='--', alpha=0.7)
                 plt.xticks(rotation=45)
+                plt.tight_layout()
                 
                 st.pyplot(fig)
                 
                 # Display data table
-                st.markdown("**Monthly Conversion Rates:**")
-                st.dataframe(month_data[['month', 'total', 'won', 'conversion']])
+                st.markdown("**Monthly Conversion Details:**")
+                st.dataframe(month_data)
                 
                 # Add insights
-                best_month = month_data.loc[month_data['conversion'].idxmax()]
-                worst_month = month_data.loc[month_data['conversion'].idxmin()]
-                st.info(f"""
-                💡 **Seasonal Insights:** 
-                - Best month: {best_month['month']} ({best_month['conversion']:.1%})
-                - Worst month: {worst_month['month']} ({worst_month['conversion']:.1%})
+                if len(month_data) >= 2:
+                    best_month = month_data.sort_values('Conversion', ascending=False).iloc[0]
+                    worst_month = month_data.sort_values('Conversion').iloc[0]
+                    st.info(f"💡 **Seasonal Insight:** {best_month['event_month']} has your highest conversion rate at {best_month['Conversion %']}, while {worst_month['event_month']} has the lowest at {worst_month['Conversion %']}.")
+            else:
+                st.info("No event date data available for seasonal analysis. Make sure your data includes valid 'event_date' values.")
                 - Plan your sales efforts accordingly, focusing more resources during {worst_month['month']} to improve performance.
                 """)
             else:
