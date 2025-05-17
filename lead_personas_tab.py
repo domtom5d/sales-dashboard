@@ -472,8 +472,12 @@ def visualize_clusters(df, scaled_data, feature_cols, cluster_labels, kmeans):
             # Get the cluster centers and convert back to original scale
             centers = kmeans.cluster_centers_
             
-            # Get the scaler from session state if available (for cached personas)
-            current_scaler = st.session_state.get('personas_scaler', scaler)
+            # Get the scaler that was used to scale the data
+            if 'personas_scaler' in st.session_state:
+                current_scaler = st.session_state.personas_scaler
+            else:
+                # Create a new scaler as fallback (should not happen in normal flow)
+                current_scaler = StandardScaler()
             centers_orig = current_scaler.inverse_transform(centers)
             
             # Get the index positions of the selected features
