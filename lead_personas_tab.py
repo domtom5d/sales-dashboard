@@ -28,8 +28,42 @@ def render_lead_personas_tab(df):
         st.warning("No data available for analysis.")
         return
     
-    # Show the clustering analysis
-    create_lead_personas(df)
+    # Add a Generate Personas button
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        st.markdown("### Generate Lead Personas")
+        st.markdown("Click the button to identify distinct customer segments in your data.")
+    
+    with col2:
+        generate_button = st.button(
+            "Generate Personas", 
+            help="Click to create lead personas using K-Means clustering on your data"
+        )
+    
+    # Generate or retrieve personas
+    if generate_button or 'personas_df' in st.session_state:
+        # Show the clustering analysis
+        create_lead_personas(df)
+    else:
+        st.info("Click the 'Generate Personas' button to identify customer segments in your data.")
+        st.markdown("""
+        ### What are Lead Personas?
+        
+        Lead personas are distinct groups of customers with similar characteristics. Identifying these segments helps you:
+        
+        - Tailor your sales approach to different customer types
+        - Focus resources on the most promising segments
+        - Understand the unique needs of different customer groups
+        - Develop targeted marketing messages
+        
+        The clustering algorithm will analyze factors such as:
+        - Event size (number of guests)
+        - Price sensitivity
+        - Lead time
+        - Customer location
+        - Other key attributes in your data
+        """)
 
 def create_lead_personas(df):
     """
@@ -123,6 +157,12 @@ def create_lead_personas(df):
     # Add cluster labels back to the original data
     df_with_clusters = df.copy()
     df_with_clusters['lead_persona'] = cluster_labels
+    
+    # Save results to session state
+    st.session_state.personas_df = df_with_clusters
+    st.session_state.personas_kmeans = kmeans
+    st.session_state.personas_features = final_features
+    st.session_state.personas_scaler = scaler
     
     # Display cluster information
     show_cluster_profiles(df_with_clusters, final_features, kmeans, scaler)
