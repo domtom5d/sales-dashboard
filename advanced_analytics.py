@@ -81,22 +81,29 @@ def analyze_marketing_sources(df, min_count=10):
 
 def analyze_booking_types(df, min_count=10):
     """
-    Analyze conversion rates by booking type with name cleanup
+    Analyze conversion rates by booking type or event type with name cleanup
     
     Args:
         df (DataFrame): Processed dataframe with outcome
         min_count (int): Minimum number of leads for a booking type to be included
     
     Returns:
-        DataFrame: Summary of booking types with conversion rates
+        tuple: (DataFrame: Summary of booking/event types with conversion rates, 
+                str: column type used - 'booking_type' or 'event_type')
     """
-    if 'booking_type' not in df.columns:
-        return None
+    # Determine which column to use - prefer booking_type but fall back to event_type
+    column_used = 'booking_type'
     
-    # Create a copy with cleaned booking types
+    if 'booking_type' not in df.columns or df['booking_type'].notna().sum() < 10:
+        if 'event_type' in df.columns and df['event_type'].notna().sum() >= 10:
+            column_used = 'event_type'
+        else:
+            return None, None
+    
+    # Create a copy with cleaned booking/event types
     booking = df.copy()
-    booking['booking_type_clean'] = (
-        booking['booking_type']
+    booking['type_clean'] = (
+        booking[column_used]
           .fillna('Unknown')
           .astype(str)
           .str.lower()
@@ -104,14 +111,14 @@ def analyze_booking_types(df, min_count=10):
           .str.title()
     )
     
-    # Consolidate low-volume booking types
-    counts = booking['booking_type_clean'].value_counts()
+    # Consolidate low-volume booking/event types
+    counts = booking['type_clean'].value_counts()
     low_vol = counts[counts < min_count].index
-    booking['booking_type_clean'] = booking['booking_type_clean'].replace(low_vol, 'Other')
+    booking['type_clean'] = booking['type_clean'].replace(low_vol, 'Other')
     
     # Create summary
     bt_summary = (
-        booking.groupby('booking_type_clean')['outcome']
+        booking.groupby('type_clean')['outcome']
                .agg(Total='size', Won='sum')
                .assign(Conversion=lambda x: x['Won']/x['Total'])
                .sort_values('Conversion', ascending=False)
@@ -121,7 +128,10 @@ def analyze_booking_types(df, min_count=10):
     # Add percentage formatting for display
     bt_summary['Conversion %'] = (bt_summary['Conversion']*100).round(1).astype(str) + '%'
     
-    return bt_summary
+    # Rename the column to match expected output in other functions
+    bt_summary = bt_summary.rename(columns={'type_clean': 'booking_type_clean'})
+    
+    return bt_summary, column_used
 
 
 def analyze_price_per_guest(df):
@@ -476,10 +486,14 @@ def run_all_analytics(df):
     Returns:
         dict: Dictionary containing all analysis results
     """
+    # For booking types, we need to handle the tuple return value
+    booking_types_result, column_used = analyze_booking_types(df) if analyze_booking_types(df) != (None, None) else (None, None)
+    
     results = {
         'referral_sources': analyze_referral_sources(df),
         'marketing_sources': analyze_marketing_sources(df),
-        'booking_types': analyze_booking_types(df),
+        'booking_types': booking_types_result,
+        'booking_type_column_used': column_used,  # Store which column was used for the analysis
         'price_per_guest': analyze_price_per_guest(df),
         'days_since_inquiry': analyze_days_since_inquiry(df),
         'event_month': analyze_event_month(df),
