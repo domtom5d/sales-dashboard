@@ -217,7 +217,10 @@ def process_data(leads_df, operations_df=None):
     numeric_cols = ['actual_deal_value', 'number_of_guests', 'bartenders_needed']
     for col in numeric_cols:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            # Convert to numeric and handle NaN values properly
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            # Replace NaN values with 0
+            df[col] = df[col].fillna(0)
     
     # 4) Parse dates
     df['inquiry_date'] = pd.to_datetime(df.get('inquiry_date', df.get('created')), errors='coerce')

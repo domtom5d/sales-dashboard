@@ -178,6 +178,56 @@ if 'processed_df' in st.session_state and st.session_state.processed_df is not N
     filtered_df = st.session_state.processed_df.copy()
     raw_df = filtered_df  # For backward compatibility
     
+    # Data Health Check (expandable section)
+    with st.expander("🔍 Data Health Check", expanded=False):
+        st.markdown("### Data Completeness")
+        st.info("This section shows the percentage of missing values for each column in the processed dataset. Lower percentages are better.")
+        
+        # Calculate percentage of missing values
+        missing_pct = filtered_df.isna().mean().mul(100).round(1).sort_values(ascending=False)
+        
+        # Display as a dataframe with formatting
+        missing_df = missing_pct.to_frame("% Missing")
+        
+        # Add a completeness column (inverse of missing)
+        missing_df["% Complete"] = 100 - missing_df["% Missing"]
+        
+        # Add color highlighting based on completeness
+        def color_completeness(val):
+            if val >= 90:
+                return 'background-color: #d4edda'  # Green for high completeness
+            elif val >= 70:
+                return 'background-color: #fff3cd'  # Yellow for medium completeness
+            else:
+                return 'background-color: #f8d7da'  # Red for low completeness
+        
+        # Apply styling
+        styled_df = missing_df.style.applymap(color_completeness, subset=["% Complete"])
+        
+        # Display in two columns for better space usage
+        col1, col2 = st.columns(2)
+        
+        # Split the dataframe approximately in half
+        midpoint = len(missing_df) // 2
+        with col1:
+            st.dataframe(styled_df.iloc[:midpoint], use_container_width=True)
+        with col2:
+            st.dataframe(styled_df.iloc[midpoint:], use_container_width=True)
+        
+        # Quick summary of critical fields
+        st.markdown("### Critical Fields Summary")
+        critical_fields = ['actual_deal_value', 'booking_type', 'event_type', 'days_until_event', 
+                          'days_since_inquiry', 'price_per_guest', 'inquiry_date', 'event_date']
+        
+        field_exists = {field: field in filtered_df.columns for field in critical_fields}
+        field_status = pd.DataFrame({
+            'Field': critical_fields,
+            'Exists': [field_exists[f] for f in critical_fields],
+            'Complete (%)': [round(100 - missing_pct.get(f, 0), 1) if field_exists[f] else 0 for f in critical_fields]
+        })
+        
+        st.dataframe(field_status, use_container_width=True)
+    
     # Define filters with default values for compatibility
     filters = {
         'date_range': None,
