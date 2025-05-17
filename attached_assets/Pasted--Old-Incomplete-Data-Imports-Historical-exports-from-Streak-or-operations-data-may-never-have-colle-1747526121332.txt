@@ -1,0 +1,230 @@
+
+Old, Incomplete Data Imports
+Historical exports from Streak or operations data may never have collected referral_source, event_type, event_date, or other key fields. This inflates your dataset size but leaves gaps in core insights.
+
+Disjointed Form Inputs
+Since your system pulls from multiple forms and pipelines (e.g., Paperform → Streak), if those forms aren’t standardized, not all fields are captured consistently across leads.
+
+Poor Field Mapping During ETL (Extract, Transform, Load)
+Some missing fields might actually exist under alternate column names or formats in your raw CSVs, but the data-cleaning step in your current code may be dropping or failing to recognize them.
+
+Legacy Leads Without Automation
+If leads were entered manually or before Zapier/Streak automation was in place, you're likely seeing missing values for automated fields like timestamps, staff ratio, etc.
+
+🧠 What You Should Do About It
+Here’s what I’d recommend:
+
+✅ Short-Term Fixes (Code-Based in Replit or Streamlit):
+Add a "Missing Data Imputer" in your preprocessing script. Fill missing:
+
+referral_source with "Unknown"
+
+event_type with "Uncategorized"
+
+days_until_event by calculating from event_date - inquiry_date
+
+Visually highlight rows with missing critical values in the Raw Data tab.
+
+Update your AI agent to ignore leads with >50% missing values when analyzing or scoring.
+
+📈 Mid-Term Fixes (Structural and Strategic):
+Revise all intake forms to make key fields mandatory (referral source, event type, etc.).
+
+Add a backend check in your pipeline that logs or alerts when a lead enters without certain required fields.
+
+Introduce a "Data Completeness Score" per lead, to weight predictions accordingly.
+
+🧪 Smart Add-On (Optional):
+Add a Data Health Summary chart with:
+
+% of leads missing X field
+
+Heatmap of which regions/staff/lead sources tend to be incomplete
+
+Would you like me to generate the exact Python/Streamlit code to:
+
+Impute missing values
+
+Score data completeness
+
+Highlight bad data entries
+
+or all three?
+
+Let me know what’s most urgent, and I’ll tailor it to that.
+
+
+
+
+
+
+You said:
+sure
+ChatGPT said:
+
+Analysis errored
+python
+Always show details
+
+Copy
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from io import StringIO
+import numpy as np
+import ace_tools as tools
+
+# Load the latest uploaded CSV file (from previous user upload)
+file_path = "/mnt/data/2025-05-17T23-26_export.csv"
+df = pd.read_csv(file_path)
+
+# Clean column names (strip spaces and lowercase)
+df.columns = df.columns.str.strip().str.lower()
+
+# Step 1: Calculate missing values percentage per column
+missing_data = df.isnull().mean().sort_values(ascending=False) * 100
+missing_summary = pd.DataFrame({'missing_percentage': missing_data})
+
+# Step 2: Impute missing values for key fields
+df['referral_source'] = df['referral_source'].fillna('Unknown')
+df['event_type'] = df['event_type'].fillna('Uncategorized')
+if 'event_date' in df.columns and 'inquiry_date' in df.columns:
+    df['event_date'] = pd.to_datetime(df['event_date'], errors='coerce')
+    df['inquiry_date'] = pd.to_datetime(df['inquiry_date'], errors='coerce')
+    df['days_until_event'] = (df['event_date'] - df['inquiry_date']).dt.days
+    df['days_until_event'] = df['days_until_event'].fillna(-1)
+
+# Step 3: Create a "Data Completeness Score" column
+# Each missing critical field subtracts from score (max 1.0)
+critical_fields = ['referral_source', 'event_type', 'event_date', 'inquiry_date', 'days_until_event']
+df['data_completeness_score'] = 1 - df[critical_fields].isnull().mean(axis=1)
+
+# Step 4: Identify bad data entries (completeness < 0.5)
+df['data_quality_flag'] = np.where(df['data_completeness_score'] < 0.5, 'Poor', 'Good')
+
+# Prepare outputs for user
+tools.display_dataframe_to_user(name="Missing Data Summary", dataframe=missing_summary)
+tools.display_dataframe_to_user(name="Enhanced Lead Data", dataframe=df.head(50))
+
+# Export cleaned data
+df.to_csv("/mnt/data/cleaned_leads_with_completeness.csv", index=False)
+
+"/mnt/data/cleaned_leads_with_completeness.csv"
+
+Analysis errored
+python
+Always show details
+
+Copy
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from io import StringIO
+import numpy as np
+import ace_tools as tools
+
+# Load the latest uploaded CSV file
+file_path = "/mnt/data/2025-05-17T23-26_export.csv"
+df = pd.read_csv(file_path)
+
+# Clean column names (strip spaces and lowercase)
+df.columns = df.columns.str.strip().str.lower()
+
+# Step 1: Calculate missing values percentage per column
+missing_data = df.isnull().mean().sort_values(ascending=False) * 100
+missing_summary = pd.DataFrame({'missing_percentage': missing_data})
+
+# Step 2: Impute missing values for key fields
+df['referral_source'] = df['referral_source'].fillna('Unknown')
+df['event_type'] = df['event_type'].fillna('Uncategorized')
+if 'event_date' in df.columns and 'inquiry_date' in df.columns:
+    df['event_date'] = pd.to_datetime(df['event_date'], errors='coerce')
+    df['inquiry_date'] = pd.to_datetime(df['inquiry_date'], errors='coerce')
+    df['days_until_event'] = (df['event_date'] - df['inquiry_date']).dt.days
+    df['days_until_event'] = df['days_until_event'].fillna(-1)
+
+# Step 3: Create a "Data Completeness Score" column
+# Each missing critical field subtracts from score (max 1.0)
+critical_fields = ['referral_source', 'event_type', 'event_date', 'inquiry_date', 'days_until_event']
+df['data_completeness_score'] = 1 - df[critical_fields].isnull().mean(axis=1)
+
+# Step 4: Identify bad data entries (completeness < 0.5)
+df['data_quality_flag'] = np.where(df['data_completeness_score'] < 0.5, 'Poor', 'Good')
+
+# Prepare outputs for user
+tools.display_dataframe_to_user(name="Missing Data Summary", dataframe=missing_summary)
+tools.display_dataframe_to_user(name="Enhanced Lead Data", dataframe=df.head(50))
+
+# Export cleaned data
+df.to_csv("/mnt/data/cleaned_leads_with_completeness.csv", index=False)
+
+"/mnt/data/cleaned_leads_with_completeness.csv"
+---------------------------------------------------------------------------
+KeyError                                  Traceback (most recent call last)
+File ~/.local/lib/python3.11/site-packages/pandas/core/indexes/base.py:3802, in Index.get_loc(self, key, method, tolerance)
+   3801 try:
+-> 3802     return self._engine.get_loc(casted_key)
+   3803 except KeyError as err:
+
+File ~/.local/lib/python3.11/site-packages/pandas/_libs/index.pyx:138, in pandas._libs.index.IndexEngine.get_loc()
+
+File ~/.local/lib/python3.11/site-packages/pandas/_libs/index.pyx:165, in pandas._libs.index.IndexEngine.get_loc()
+
+File pandas/_libs/hashtable_class_helper.pxi:5745, in pandas._libs.hashtable.PyObjectHashTable.get_item()
+
+File pandas/_libs/hashtable_class_helper.pxi:5753, in pandas._libs.hashtable.PyObjectHashTable.get_item()
+
+KeyError: 'referral_source'
+
+The above exception was the direct cause of the following exception:
+
+KeyError                                  Traceback (most recent call last)
+Cell In[1], line 20
+     17 missing_summary = pd.DataFrame({'missing_percentage': missing_data})
+     19 # Step 2: Impute missing values for key fields
+---> 20 df['referral_source'] = df['referral_source'].fillna('Unknown')
+     21 df['event_type'] = df['event_type'].fillna('Uncategorized')
+     22 if 'event_date' in df.columns and 'inquiry_date' in df.columns:
+
+File ~/.local/lib/python3.11/site-packages/pandas/core/frame.py:3807, in DataFrame.__getitem__(self, key)
+   3805 if self.columns.nlevels > 1:
+   3806     return self._getitem_multilevel(key)
+-> 3807 indexer = self.columns.get_loc(key)
+   3808 if is_integer(indexer):
+   3809     indexer = [indexer]
+
+File ~/.local/lib/python3.11/site-packages/pandas/core/indexes/base.py:3804, in Index.get_loc(self, key, method, tolerance)
+   3802     return self._engine.get_loc(casted_key)
+   3803 except KeyError as err:
+-> 3804     raise KeyError(key) from err
+   3805 except TypeError:
+   3806     # If we have a listlike key, _check_indexing_error will raise
+   3807     #  InvalidIndexError. Otherwise we fall through and re-raise
+   3808     #  the TypeError.
+   3809     self._check_indexing_error(key)
+
+KeyError: 'referral_source'
+It looks like your dataset is missing some critical columns expected by the dashboard, such as 'referral_source'. This is likely why you're seeing missing values and broken analytics in several tabs of your dashboard.
+
+Here’s what this means and what to do next:
+
+🔍 Issue Breakdown
+Missing Columns:
+
+Your CSV file does not contain the referral_source, event_type, event_date, or inquiry_date fields.
+
+These are required for calculations like:
+
+Conversion by Referral Source
+
+Days Until Event
+
+Lead Score Decay
+
+Lead Funnel & Cohort Analysis
+
+Resulting Impact:
+
+Many visualizations fail because they try to compute values from these columns.
+
+Analytics tabs like Conversion by Category, Lead Decay, and Funnel Analysis will either show NaN, 0, or break entirely.
