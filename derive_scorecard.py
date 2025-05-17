@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import math
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
@@ -9,6 +10,27 @@ import database as db
 import sqlite3
 import streamlit as st
 import matplotlib.pyplot as plt
+
+def apply_decay(score, days_since, half_life):
+    """
+    Apply exponential decay to a score based on time elapsed and category-specific half-life
+    
+    Args:
+        score (float): Original score value to decay
+        days_since (float): Days elapsed since the inquiry
+        half_life (float): Half-life in days (category-specific)
+        
+    Returns:
+        float: Decayed score value
+    """
+    # Ensure inputs are valid
+    if days_since < 0:
+        days_since = 0
+    if half_life <= 0:
+        half_life = 30.0  # Default to 30 days if invalid half-life
+        
+    # Apply exponential decay: score * 2^(-days/half_life)
+    return score * (2 ** (-days_since / half_life))
 
 def generate_lead_scorecard(use_sample_data=True):
     """
@@ -512,19 +534,20 @@ def score_lead(lead_data, scorecard, category_half_lives=None):
                 elif feature == 'DaysSinceInquiry' and feature_value:
                     # Use category-specific half-life for decay calculation
                     # Convert days to a decay factor using exponential decay model
-                    # decay = 2^(-days/half_life)
+                    # Use apply_decay function for consistent decay calculation
                     days = float(feature_value)
-                    decay_factor = 2 ** (-days / half_life_days)
+                    # Get the raw value
+                    raw_value = apply_decay(1.0, days, half_life_days)
                     
                     # For scoring, we invert this if coefficient is negative
                     # (older leads are usually worse, so higher days = lower score)
                     if coef_sign < 0:
                         # For negative coefficient, invert the decay (1-decay)
                         # So newer leads (low days) get high scores
-                        normalized_value = 1.0 - decay_factor
+                        normalized_value = 1.0 - raw_value
                     else:
                         # For positive coefficient, use decay directly
-                        normalized_value = decay_factor
+                        normalized_value = raw_value
                     
                     contribution = points * abs(coef_sign) * normalized_value
                     total_score += contribution
