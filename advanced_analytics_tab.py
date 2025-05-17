@@ -115,21 +115,22 @@ def render_advanced_analytics_tab(df):
     
     # Tab 2: Booking Types Analysis
     with analysis_tabs[1]:
-        st.markdown("### Booking and Event Type Analysis")
-        st.markdown("Understand which types of events have the highest conversion rates and revenue potential.")
+        # Get column used from analytics results (booking_type or event_type)
+        column_used = analytics_results.get('booking_type_column_used', 'booking_type')
+        title_suffix = "Booking Type" if column_used == 'booking_type' else "Event Type"
         
-        # Determine which field to use (booking_type or event_type)
-        booking_field = 'booking_type' if 'booking_type' in df.columns else 'event_type'
-        title_suffix = "Booking Type" if booking_field == 'booking_type' else "Event Type"
+        # Set appropriate header title based on which data is being used
+        st.markdown(f"### {title_suffix} Analysis")
+        st.markdown("Understand which types of events have the highest conversion rates and revenue potential.")
         
         if (analytics_results.get('booking_types') is not None and 
             not analytics_results['booking_types'].empty):
             
-            # Plot booking types
+            # Plot booking/event types using the correct column
             fig, ax = plt.subplots(figsize=(10, 8))
             plot_conversion_by_category(
                 df, 
-                booking_field, 
+                column_used,  # Use the column that was used in the analysis
                 f"Conversion by {title_suffix}", 
                 ax=ax,
                 sort_by='conversion'
@@ -162,14 +163,14 @@ def render_advanced_analytics_tab(df):
                     # Filter for won deals with non-null values
                     won_deals = df[df['outcome'] == 1].dropna(subset=[value_col])
                     
-                    if not won_deals.empty and booking_field in won_deals.columns:
-                        avg_by_type = won_deals.groupby(booking_field)[value_col].mean().reset_index()
+                    if not won_deals.empty and column_used in won_deals.columns:
+                        avg_by_type = won_deals.groupby(column_used)[value_col].mean().reset_index()
                         avg_by_type[f'Average {value_col}'] = avg_by_type[value_col].map('${:,.2f}'.format)
                         
                         st.markdown("#### Average Deal Value by Type")
-                        st.dataframe(avg_by_type[[booking_field, f'Average {value_col}']].sort_values(value_col, ascending=False))
+                        st.dataframe(avg_by_type[[column_used, f'Average {value_col}']].sort_values(value_col, ascending=False))
         else:
-            st.info(f"No {title_suffix.lower()} data available. Make sure your data includes a '{booking_field}' column.")
+            st.info(f"No {title_suffix.lower()} data available. Make sure your data includes a '{column_used}' column.")
     
     # Tab 3: Timing Factors Analysis
     with analysis_tabs[2]:
