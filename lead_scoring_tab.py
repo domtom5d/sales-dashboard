@@ -10,7 +10,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from derive_scorecard import score_lead
+from derive_scorecard import score_lead, calculate_category_half_life
 from evaluate import plot_score_distributions
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier

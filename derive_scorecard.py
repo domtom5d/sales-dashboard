@@ -400,13 +400,60 @@ def generate_lead_scorecard(use_sample_data=True):
         print(f"Error generating scorecard: {str(e)}")
         return None, None, None
 
-def score_lead(lead_data, scorecard):
+def calculate_category_half_life(df, category_col='event_type'):
     """
-    Score a lead based on the generated scorecard
+    Calculate the average days-to-close for each event category
+    
+    Args:
+        df (DataFrame): DataFrame with lead data
+        category_col (str): Column name for event category
+        
+    Returns:
+        pd.Series: Series with half-life days for each category
+    """
+    if df is None or df.empty or category_col not in df.columns:
+        # Return default half-life if we can't calculate
+        return pd.Series({'default': 30.0})
+        
+    # Ensure we have the necessary columns
+    required_cols = ['outcome', 'days_since_inquiry']
+    if not all(col in df.columns for col in required_cols):
+        return pd.Series({'default': 30.0})
+    
+    # Filter to only closed leads (won or lost)
+    closed_leads = df[df['outcome'].isin([0, 1])].copy()
+    
+    if closed_leads.empty:
+        return pd.Series({'default': 30.0})
+    
+    # Calculate days-to-close for each category
+    half_lives = closed_leads.groupby(category_col)['days_since_inquiry'].mean()
+    
+    # Rename to 'half_life_days'
+    half_lives = half_lives.rename('half_life_days')
+    
+    # Ensure all values are positive and reasonable
+    half_lives = half_lives.clip(lower=7.0, upper=90.0)
+    
+    # Calculate the global average as fallback
+    global_half_life = half_lives.mean()
+    
+    # Add a default entry
+    half_lives['default'] = global_half_life
+    
+    # Fill any NaN values with the global average
+    half_lives = half_lives.fillna(global_half_life)
+    
+    return half_lives
+
+def score_lead(lead_data, scorecard, category_half_lives=None):
+    """
+    Score a lead based on the generated scorecard with category-specific half-life
     
     Args:
         lead_data (dict): Dictionary of lead data
         scorecard (DataFrame): Scorecard with features and points
+        category_half_lives (dict or Series, optional): Half-life values by category
         
     Returns:
         tuple: (score, category)
@@ -416,6 +463,21 @@ def score_lead(lead_data, scorecard):
         
     total_score = 0
     feature_contributions = {}
+    
+    # Get the lead's event category
+    event_category = None
+    for category_field in ['event_type', 'booking_type', 'clean_booking_type']:
+        if category_field in lead_data and lead_data[category_field]:
+            event_category = str(lead_data[category_field])
+            break
+    
+    # Determine the appropriate half-life to use
+    half_life_days = 30.0  # Default
+    if category_half_lives is not None:
+        if event_category and event_category in category_half_lives:
+            half_life_days = category_half_lives[event_category]
+        elif 'default' in category_half_lives:
+            half_life_days = category_half_lives['default']
     
     for _, row in scorecard.iterrows():
         feature = row['Feature']
@@ -448,10 +510,23 @@ def score_lead(lead_data, scorecard):
                     feature_contributions[feature] = contribution
                     
                 elif feature == 'DaysSinceInquiry' and feature_value:
-                    # Faster follow-up is better (if coefficient is negative)
-                    # Cap at 30 days
-                    normalized_value = min(float(feature_value) / 30.0, 1.0)
-                    contribution = points * coef_sign * normalized_value
+                    # Use category-specific half-life for decay calculation
+                    # Convert days to a decay factor using exponential decay model
+                    # decay = 2^(-days/half_life)
+                    days = float(feature_value)
+                    decay_factor = 2 ** (-days / half_life_days)
+                    
+                    # For scoring, we invert this if coefficient is negative
+                    # (older leads are usually worse, so higher days = lower score)
+                    if coef_sign < 0:
+                        # For negative coefficient, invert the decay (1-decay)
+                        # So newer leads (low days) get high scores
+                        normalized_value = 1.0 - decay_factor
+                    else:
+                        # For positive coefficient, use decay directly
+                        normalized_value = decay_factor
+                    
+                    contribution = points * abs(coef_sign) * normalized_value
                     total_score += contribution
                     feature_contributions[feature] = contribution
                     
