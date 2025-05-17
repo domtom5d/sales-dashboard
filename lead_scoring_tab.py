@@ -213,10 +213,24 @@ def render_lead_scoring_tab(df):
                 # Generate model
                 weights_df, thresholds, metrics = generate_lead_scorecard(df)
                 
+                # Calculate category-specific half-lives for decay function
+                category_half_lives = None
+                category_field = None
+                for col in ['event_type', 'booking_type', 'clean_booking_type']:
+                    if col in df.columns and not df[col].isna().all():
+                        try:
+                            category_half_lives = calculate_category_half_life(df, col)
+                            category_field = col
+                            break
+                        except Exception as e:
+                            st.warning(f"Could not calculate half-lives from {col}: {str(e)}")
+                
                 # Store in session state
                 st.session_state.weights_df = weights_df
                 st.session_state.thresholds = thresholds
                 st.session_state.metrics = metrics
+                st.session_state.category_half_lives = category_half_lives
+                st.session_state.category_field = category_field
                 
                 # Always set model_metrics for other tabs to use
                 if metrics is not None:
@@ -225,6 +239,27 @@ def render_lead_scoring_tab(df):
                     # Ensure the specific y_pred_proba is directly available in session state
                     if 'y_pred_proba' in metrics:
                         st.session_state.y_pred_proba = metrics['y_pred_proba']
+                
+                # Display category half-lives if available
+                if category_half_lives is not None:
+                    with st.expander("Category-Specific Half-Life Values", expanded=True):
+                        st.markdown(f"**Using '{category_field}' for category-specific decay rates**")
+                        st.markdown("Each event category has its own typical sales cycle length:")
+                        
+                        # Create dataframe for display
+                        half_life_df = pd.DataFrame({
+                            'Category': category_half_lives.index,
+                            'Half-Life (Days)': category_half_lives.values.round(1)
+                        })
+                        st.dataframe(half_life_df)
+                        
+                        # Show explanation
+                        st.markdown("""
+                        **Why this matters**: Leads decay at different rates depending on the event type. 
+                        For example, wedding leads might stay viable for 45 days, while corporate events 
+                        may convert much faster (14 days). The model now uses these category-specific
+                        half-lives for more accurate lead scoring.
+                        """)
                 
                 st.success("Lead scoring model generated successfully!")
         except Exception as e:
@@ -366,8 +401,35 @@ def render_lead_scoring_tab(df):
     # Process form submission
     if submit_button:
         try:
-            # Calculate score
-            score, probability = score_lead(input_values, weights_df)
+            # Get category half-lives if available
+            category_half_lives = st.session_state.get('category_half_lives', None)
+            
+            # Add event category selector if we have category_half_lives
+            event_category = None
+            if category_half_lives is not None:
+                st.markdown("### Event Category")
+                st.markdown("Select the event category to apply category-specific decay rates:")
+                
+                # Create dropdown with available categories
+                available_categories = [cat for cat in category_half_lives.index if cat != 'default']
+                selected_category = st.selectbox(
+                    "Event Category", 
+                    available_categories,
+                    help="Different event types have different sales cycles, which affects lead scoring"
+                )
+                
+                # Add to input values for scoring
+                category_field = st.session_state.get('category_field', 'event_type')
+                input_values[category_field] = selected_category
+                event_category = selected_category
+                
+                # Show the half-life used for this category
+                if selected_category in category_half_lives:
+                    half_life = category_half_lives[selected_category]
+                    st.info(f"Using {half_life:.1f} days half-life for {selected_category} leads")
+            
+            # Calculate score with category-specific half-life values
+            score, probability = score_lead(input_values, weights_df, category_half_lives)
             
             # Determine the lead category based on thresholds
             category = "Cool 🧊"
