@@ -28,7 +28,8 @@ def render_raw_data_tab(df):
     
     # Check if we have any data to display
     if display_df is None or display_df.empty:
-        st.warning("No data loaded. Please upload CSV files or connect to the database.")
+        st.warning("No data loaded. Please upload your Streak export CSV files or connect to the database.")
+        st.info("Go to the sidebar and select either 'Upload CSV' or 'Use Database' to load your sales data.")
         return
     
     # Show data dimensions and overview

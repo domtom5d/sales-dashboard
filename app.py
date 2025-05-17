@@ -173,7 +173,7 @@ else:
             st.error(f"Error loading data from database: {str(e)}")
 
 # Main content area with tabs
-if st.session_state.processed_df is not None:
+if 'processed_df' in st.session_state and st.session_state.processed_df is not None and not st.session_state.processed_df.empty:
     # Get the processed dataframe and use it directly without filtering
     filtered_df = st.session_state.processed_df.copy()
     raw_df = filtered_df  # For backward compatibility
@@ -447,7 +447,51 @@ if st.session_state.processed_df is not None:
             st.text(traceback.format_exc())
             
 else:
-    st.warning("No data loaded. Please select a data source and load data to begin.")
+    st.markdown("### <span class='main-header'>Sales Conversion Analytics Dashboard</span>", unsafe_allow_html=True)
+    
+    # User guidance with clear instructions
+    st.warning("⚠️ No data currently loaded. Please upload data files or load from the database to begin analysis.")
+    
+    # Add a more prominent call to action
+    st.info("""
+    ### How to Load Your Data:
+    1. Use the sidebar on the left to select your data source
+    2. Choose either **Upload CSV Files** or **Use Database**
+    3. If uploading CSVs, you'll need your Streak export files for Leads and Operations
+    4. If using the database, click the **Load All Data** button
+    """)
+    
+    # Display info about the dashboard
+    st.markdown("### About This Dashboard")
+    st.markdown("This dashboard analyzes your sales conversion data to help identify patterns and optimize your sales process.")
+    
+    # Sample insights that could be gained
+    st.markdown("### Insights You'll Gain:")
+    st.markdown("""
+    - **Conversion rates** by lead source, time period, and customer segment
+    - **Predictive lead scoring** to prioritize your sales efforts
+    - **Feature correlation analysis** to understand what drives conversions
+    - **Customer segmentation** to tailor your sales approach
+    """)
+    
+    # Show tabs description
+    st.markdown("### Available Analysis Tabs:")
+    st.markdown("""
+    - **Conversion Analysis**: Overview of conversion KPIs and trends
+    - **Feature Correlation**: How different factors relate to conversion
+    - **Lead Scoring**: Machine learning model to predict conversion likelihood
+    - **Raw Data**: View and export your complete dataset
+    - **Key Findings**: Automatically generated insights from your data
+    - **Explanations**: Documentation on how to use each feature
+    """)
+    
+    # Show sample chart as illustration
+    try:
+        sample_img = "generated-icon.png"
+        if os.path.exists(sample_img):
+            st.image(sample_img, use_column_width=True, caption="Sample visualization - load your data to see actual insights")
+    except Exception:
+        pass
 
 # Add a note about the project
 st.sidebar.markdown("---")
