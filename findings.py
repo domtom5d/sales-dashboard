@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics import roc_auc_score, precision_recall_curve, auc
 
-def generate_findings(df, y_scores, thresholds):
+def generate_findings(df, y_scores, thresholds, weights_df=None):
     """
     Generate key findings from the analyzed data
     
@@ -17,11 +17,66 @@ def generate_findings(df, y_scores, thresholds):
         df (DataFrame): Processed dataframe with outcome
         y_scores (array-like): Model prediction scores
         thresholds (dict): Dictionary of thresholds for categories
+        weights_df (DataFrame, optional): DataFrame with feature weights/importance
         
     Returns:
         list: List of findings as formatted strings
     """
     findings = []
+    
+    # Add insights from model feature importance if available
+    if weights_df is not None and not weights_df.empty:
+        try:
+            # Get top positive and negative features
+            weights_df_sorted = weights_df.sort_values(by='weight', key=abs, ascending=False)
+            
+            if 'weight' in weights_df_sorted.columns:
+                positive_features = weights_df_sorted[weights_df_sorted['weight'] > 0].head(3)
+                negative_features = weights_df_sorted[weights_df_sorted['weight'] < 0].head(3)
+                
+                if not positive_features.empty:
+                    top_pos = positive_features.iloc[0]
+                    findings.append(f"**Top Predictor:** Higher **{top_pos['feature']}** values strongly correlate with won deals (weight: +{top_pos['weight']:.2f}).")
+                
+                if not negative_features.empty:
+                    top_neg = negative_features.iloc[0]
+                    findings.append(f"**Top Risk Factor:** Higher **{top_neg['feature']}** values correlate with lost deals (weight: {top_neg['weight']:.2f}).")
+        except Exception as e:
+            # Silently skip if feature importance analysis fails
+            pass
+    
+    # Add overall conversion rate
+    try:
+        overall_rate = df['outcome'].mean()
+        findings.insert(0, f"**Overall Conversion Rate:** {overall_rate:.1%} of leads convert to won deals.")
+    except Exception as e:
+        # Silently skip if calculation fails
+        pass
+        
+    # Add high vs. low score conversion comparison
+    try:
+        if y_scores is not None and len(y_scores) > 0:
+            # Create a DataFrame with scores and outcomes
+            score_df = pd.DataFrame({
+                'score': y_scores,
+                'outcome': df['outcome'].values
+            })
+            
+            # Split into high and low score groups using median
+            median_score = np.median(y_scores)
+            high_scores = score_df[score_df['score'] >= median_score]
+            low_scores = score_df[score_df['score'] < median_score]
+            
+            # Calculate conversion rates for each group
+            high_conv_rate = high_scores['outcome'].mean()
+            low_conv_rate = low_scores['outcome'].mean()
+            
+            # Add finding if there's a meaningful difference
+            if high_conv_rate > low_conv_rate * 1.25:  # At least 25% better
+                findings.append(f"**Model Validation:** Leads with high scores convert at {high_conv_rate:.1%}, vs. low scores at {low_conv_rate:.1%}, a {(high_conv_rate/low_conv_rate - 1):.0%} improvement.")
+    except Exception as e:
+        # Silently skip if calculation fails
+        pass
     
     # Add time to conversion analysis
     try:

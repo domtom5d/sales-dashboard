@@ -49,8 +49,13 @@ def render_key_findings_tab(df):
                 st.warning("Missing model scores or thresholds. Please regenerate the model in the Lead Scoring tab.")
                 return
             
+            # Get feature weights from session state
+            weights_df = None
+            if 'weights_df' in st.session_state and st.session_state.weights_df is not None:
+                weights_df = st.session_state.weights_df
+            
             # Generate dynamic findings
-            findings = generate_findings(df, y_scores, thresholds)
+            findings = generate_findings(df, y_scores, thresholds, weights_df=weights_df)
             
             # Display findings with bullet points
             st.markdown("### Key Insights")
