@@ -232,18 +232,114 @@ if 'processed_df' in st.session_state and st.session_state.processed_df is not N
         
         st.dataframe(field_status, use_container_width=True)
     
-    # Define filters with default values for compatibility
+    # Add filtering options in the sidebar
+    st.sidebar.header("Data Filters")
+    
+    # Data Quality Filter
+    st.sidebar.subheader("Data Quality Settings")
+    
+    # Display data completeness information
+    if 'field_completeness' in st.session_state:
+        field_completeness = st.session_state['field_completeness']
+        
+        # Show average completeness across all critical fields
+        avg_completeness = sum(field_completeness.values()) / len(field_completeness) if field_completeness else 0
+        st.sidebar.progress(avg_completeness / 100.0, f"Overall Data Completeness: {avg_completeness:.1f}%")
+        
+        # Add option to filter by data quality
+        data_quality_options = ["All", "Good", "Fair", "Poor"]
+        selected_data_quality = st.sidebar.radio("Data Quality Filter", data_quality_options)
+        
+        # Add option to set minimum completeness score
+        min_completeness = st.sidebar.slider(
+            "Minimum Data Completeness", 
+            0.0, 1.0, 0.5, 0.1,
+            help="Filter out leads with incomplete data (0=include all, 1=only perfect data)"
+        )
+        
+        # Show count of leads by quality level
+        if 'data_quality' in filtered_df.columns:
+            quality_counts = filtered_df['data_quality'].value_counts()
+            st.sidebar.markdown("### Lead Counts by Quality")
+            for quality in ['Good', 'Fair', 'Poor']:
+                if quality in quality_counts:
+                    st.sidebar.markdown(f"- **{quality}**: {quality_counts[quality]:,} leads")
+    else:
+        selected_data_quality = "All"
+        min_completeness = 0.0
+    
+    # Status filter (For conversion)
+    if 'won' in filtered_df.columns:
+        st.sidebar.subheader("Outcome Filter")
+        status_options = ["All", "Won", "Lost"]
+        selected_status = st.sidebar.selectbox("Filter by Status", status_options)
+    else:
+        selected_status = "All"
+    
+    # Date range filter
+    date_col = None
+    date_range = None
+    
+    if 'inquiry_date' in filtered_df.columns or 'event_date' in filtered_df.columns:
+        st.sidebar.subheader("Date Range")
+        
+        # Determine available date columns
+        date_options = []
+        if 'inquiry_date' in filtered_df.columns:
+            date_options.append("inquiry_date")
+        if 'event_date' in filtered_df.columns:
+            date_options.append("event_date")
+            
+        if date_options:
+            date_col = st.sidebar.selectbox(
+                "Select Date Field",
+                date_options,
+                format_func=lambda x: "Inquiry Date" if x == "inquiry_date" else "Event Date"
+            )
+            
+            # Get min and max dates
+            min_date = filtered_df[date_col].min().date()
+            max_date = filtered_df[date_col].max().date()
+            
+            # Create date range selector with those bounds
+            date_range = st.sidebar.date_input(
+                "Select Date Range",
+                [min_date, max_date],
+                min_value=min_date,
+                max_value=max_date
+            )
+            
+            # Ensure we have a complete range
+            if len(date_range) < 2:
+                date_range = [min_date, max_date]
+    
+    # State filter if available
+    selected_states = ["All"]
+    if 'state' in filtered_df.columns:
+        states = filtered_df['state'].dropna().unique().tolist()
+        if len(states) > 0:
+            st.sidebar.subheader("Geographic Filter")
+            state_options = ["All"] + sorted(states)
+            selected_states = st.sidebar.multiselect("Filter by State", state_options, default=["All"])
+            if not selected_states:  # If nothing selected, default to "All"
+                selected_states = ["All"]
+                
+    # Apply the filters
     filters = {
-        'date_range': None,
-        'status': 'All',
-        'states': ['All'],
-        'date_col': 'inquiry_date' if 'inquiry_date' in filtered_df.columns else
-                    'created' if 'created' in filtered_df.columns else
-                    'event_date' if 'event_date' in filtered_df.columns else None
+        'date_range': date_range,
+        'status': selected_status,
+        'states': selected_states,
+        'date_col': date_col,
+        'data_quality': selected_data_quality,
+        'min_completeness': min_completeness
     }
     
-    # Display a notice about filters being disabled
-    st.info("Filters are currently disabled. Dashboard shows all available data.")
+    # Apply filters to the data
+    filtered_df = apply_filters(filtered_df, filters)
+    st.sidebar.success(f"Showing {len(filtered_df):,} leads after filtering")
+    
+    # Store filtered data in session state for use in other tabs
+    st.session_state['filtered_df'] = filtered_df
     
     # Create tabs for different analysis views
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([

@@ -464,6 +464,8 @@ def apply_filters(df, filters=None):
             - status: 'All', 'Won', or 'Lost'
             - states: List of state values or ['All']
             - date_col: Column to use for date filtering
+            - data_quality: 'All', 'Good', 'Fair', 'Poor'
+            - min_completeness: Minimum completeness score (0-1) to include
     
     Returns:
         DataFrame: Filtered dataframe
@@ -498,5 +500,15 @@ def apply_filters(df, filters=None):
     # Apply state filter if provided
     if 'states' in filters and 'All' not in filters['states'] and 'state' in filtered_df.columns:
         filtered_df = filtered_df[filtered_df['state'].isin(filters['states'])]
+    
+    # Apply data quality filter if provided
+    if 'data_quality' in filters and filters['data_quality'] != 'All' and 'data_quality' in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df['data_quality'] == filters['data_quality']]
+    
+    # Apply minimum completeness score filter if provided
+    if 'min_completeness' in filters and 'data_completeness_score' in filtered_df.columns:
+        min_score = filters['min_completeness']
+        if min_score > 0:
+            filtered_df = filtered_df[filtered_df['data_completeness_score'] >= min_score]
     
     return filtered_df
