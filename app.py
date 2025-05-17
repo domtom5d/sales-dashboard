@@ -201,18 +201,22 @@ if 'processed_df' in st.session_state and st.session_state.processed_df is not N
             else:
                 return 'background-color: #f8d7da'  # Red for low completeness
         
-        # Apply styling
-        styled_df = missing_df.style.applymap(color_completeness, subset=["% Complete"])
-        
         # Display in two columns for better space usage
         col1, col2 = st.columns(2)
         
         # Split the dataframe approximately in half
         midpoint = len(missing_df) // 2
+        
+        # Apply styling and display separately for each half
         with col1:
-            st.dataframe(styled_df.iloc[:midpoint], use_container_width=True)
+            first_half = missing_df.iloc[:midpoint]
+            styled_first = first_half.style.map(color_completeness, subset=["% Complete"])
+            st.dataframe(styled_first, use_container_width=True)
+            
         with col2:
-            st.dataframe(styled_df.iloc[midpoint:], use_container_width=True)
+            second_half = missing_df.iloc[midpoint:]
+            styled_second = second_half.style.map(color_completeness, subset=["% Complete"])
+            st.dataframe(styled_second, use_container_width=True)
         
         # Quick summary of critical fields
         st.markdown("### Critical Fields Summary")
