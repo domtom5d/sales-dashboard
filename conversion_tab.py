@@ -34,11 +34,23 @@ def render_conversion_tab(df):
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("### Conversion by Booking Type")
-        if 'clean_booking_type' in df.columns and 'outcome' in df.columns:
-            plot_booking_types(df)
+        # Check if booking_type or event_type data is available
+        has_booking_data = 'clean_booking_type' in df.columns
+        has_event_data = 'event_type' in df.columns
+        
+        if has_booking_data or has_event_data:
+            if has_booking_data:
+                st.markdown("### Conversion by Booking Type")
+            elif has_event_data:
+                st.markdown("### Conversion by Event Type")
+            
+            if 'outcome' in df.columns:
+                plot_booking_types(df)
+            else:
+                st.info("Outcome data not available for conversion analysis")
         else:
-            st.info("Booking type data not available")
+            st.markdown("### Conversion by Booking Type")
+            st.info("Booking type/Event type data not available")
         
         st.markdown("### Conversion by Time Factors")
         plot_timing_factors(df)
@@ -134,23 +146,31 @@ def display_kpi_summary(df):
 def plot_booking_types(df, min_count=5):
     """Plot conversion rates by booking type or event type"""
     # First check for clean_booking_type (preferred)
-    if 'clean_booking_type' in df.columns and 'outcome' in df.columns:
+    if 'clean_booking_type' in df.columns and not df['clean_booking_type'].isna().all() and 'outcome' in df.columns:
         type_column = 'clean_booking_type'
         title = 'Booking Type'
     # Then check for event_type 
-    elif 'event_type' in df.columns and 'outcome' in df.columns:
+    elif 'event_type' in df.columns and not df['event_type'].isna().all() and 'outcome' in df.columns:
         type_column = 'event_type'
         title = 'Event Type'
     # Then check for booking_type
-    elif 'booking_type' in df.columns and 'outcome' in df.columns:
+    elif 'booking_type' in df.columns and not df['booking_type'].isna().all() and 'outcome' in df.columns:
         type_column = 'booking_type'
         title = 'Booking Type'
     else:
         st.info("No booking type or event type data available")
         return
     
+    # Remove missing values to ensure proper grouping
+    type_df = df.dropna(subset=[type_column, 'outcome'])
+    
+    # Check if we have any data after dropping NAs
+    if type_df.empty:
+        st.info(f"No valid {title.lower()} data available for analysis")
+        return
+    
     # Group by booking/event type and calculate conversion rates
-    booking_type_data = df.groupby(type_column).agg(
+    booking_type_data = type_df.groupby(type_column).agg(
         won=('outcome', 'sum'),
         total=('outcome', 'count'),
     ).reset_index()
@@ -164,50 +184,53 @@ def plot_booking_types(df, min_count=5):
     # Filter out booking types with fewer than min_count leads
     booking_type_data = booking_type_data[booking_type_data['total'] >= min_count]
     
+    # Check if we have data after filtering
+    if booking_type_data.empty:
+        st.info(f"Not enough data for {title.lower()} conversion analysis. Need at least {min_count} leads per category.")
+        return
+    
     # Sort by conversion rate and get top booking types
     top_booking_types = booking_type_data.sort_values('conversion_rate', ascending=False)
     
-    if not top_booking_types.empty:
-        # Create bar chart
-        fig, ax = plt.subplots(figsize=(10, 6))
-        
-        # Plot the data
-        sns.barplot(
-            x='conversion_rate', 
-            y='type', 
-            data=top_booking_types,
-            ax=ax
+    # Create bar chart
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Plot the data
+    sns.barplot(
+        x='conversion_rate', 
+        y='type', 
+        data=top_booking_types,
+        ax=ax
+    )
+    
+    # Customize the plot
+    ax.set_xlabel('Conversion Rate')
+    ax.set_ylabel(title)
+    ax.set_title(f'Conversion Rate by {title}')
+    
+    # Format x-axis as percentage - using matplotlib.ticker directly
+    import matplotlib.ticker as mtick
+    ax.xaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+    
+    # Add the percentage labels to the end of each bar
+    for i, row in enumerate(top_booking_types.itertuples()):
+        ax.text(
+            row.conversion_rate + 0.01, 
+            i, 
+            f'{row.conversion_rate:.1%} ({int(row.won)}/{int(row.total)})',
+            va='center'
         )
-        
-        # Customize the plot
-        ax.set_xlabel('Conversion Rate')
-        ax.set_ylabel(title)
-        ax.set_title(f'Conversion Rate by {title}')
-        
-        # Format x-axis as percentage
-        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
-        
-        # Add the percentage labels to the end of each bar
-        for i, row in enumerate(top_booking_types.itertuples()):
-            ax.text(
-                row.conversion_rate + 0.01, 
-                i, 
-                f'{row.conversion_rate:.1%} ({int(row.won)}/{int(row.total)})',
-                va='center'
-            )
-        
-        # Show the plot
-        st.pyplot(fig)
-        
-        # Show the best and worst booking types with insights
-        best_type = top_booking_types.iloc[0]
-        worst_type = top_booking_types.iloc[-1]
-        
-        st.markdown("**Insights:**")
-        st.markdown(f"- **{best_type['type']}** has the highest conversion rate at {best_type['conversion_rate']:.1%}")
-        st.markdown(f"- **{worst_type['type']}** has the lowest conversion rate at {worst_type['conversion_rate']:.1%}")
-    else:
-        st.info("Not enough booking type data available")
+    
+    # Show the plot
+    st.pyplot(fig)
+    
+    # Show the best and worst booking types with insights
+    best_type = top_booking_types.iloc[0]
+    worst_type = top_booking_types.iloc[-1]
+    
+    st.markdown("**Insights:**")
+    st.markdown(f"- **{best_type['type']}** has the highest conversion rate at {best_type['conversion_rate']:.1%}")
+    st.markdown(f"- **{worst_type['type']}** has the lowest conversion rate at {worst_type['conversion_rate']:.1%}")
 
 
 def plot_referral_sources(df, min_count=5):
