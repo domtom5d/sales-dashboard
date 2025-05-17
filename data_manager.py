@@ -175,17 +175,66 @@ def process_data(leads_df, operations_df=None):
     if leads_df is None or leads_df.empty:
         return None
     
-    # First normalize column names
-    df = normalize_column_names(leads_df)
+    # 1) Standardize column names
+    df = leads_df.copy()
+    df.columns = (
+        df.columns
+            .str.lower()
+            .str.replace(r'\W+','_', regex=True)
+    )
     
-    # Convert date columns
-    df = standardize_date_columns(df)
+    # Do the same for operations data if available
+    ops_df = None
+    if operations_df is not None and not operations_df.empty:
+        ops_df = operations_df.copy()
+        ops_df.columns = (
+            ops_df.columns
+                .str.lower()
+                .str.replace(r'\W+','_', regex=True)
+        )
     
-    # Ensure required columns exist
-    if 'status' not in df.columns:
-        df['status'] = 'unknown'  # Default value if status column is missing
+    # 2) Merge in operations fields if available
+    if ops_df is not None:
+        # Determine which columns to merge
+        merge_cols = ['box_key', 'actual_deal_value']
+        for col in ['booking_type', 'event_type', 'region']:
+            if col in ops_df.columns:
+                merge_cols.append(col)
+                
+        if 'box_key' in df.columns and 'box_key' in ops_df.columns:
+            # Perform the merge
+            try:
+                available_cols = [col for col in merge_cols if col in ops_df.columns]
+                df = df.merge(
+                    ops_df[available_cols],
+                    on='box_key',
+                    how='left'
+                )
+            except Exception as e:
+                print(f"Error merging operations data: {str(e)}")
     
-    # Use the Status column as the primary indicator of won/lost
+    # 3) Cast numeric fields
+    numeric_cols = ['actual_deal_value', 'number_of_guests', 'bartenders_needed']
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    
+    # 4) Parse dates
+    df['inquiry_date'] = pd.to_datetime(df.get('inquiry_date', df.get('created')), errors='coerce')
+    df['event_date'] = pd.to_datetime(df.get('event_date'), errors='coerce')
+    
+    # 5) Compute time-based features
+    now = pd.Timestamp.now()
+    
+    # Days until event (future planning metric)
+    if 'event_date' in df.columns:
+        df['days_until_event'] = (df['event_date'] - df['inquiry_date']).dt.days
+    
+    # Days since inquiry (lead age metric)
+    if 'inquiry_date' in df.columns:
+        df['days_since_inquiry'] = (now - df['inquiry_date']).dt.days
+    
+    # 6) Outcome flag
     if 'status' in df.columns:
         # Normalize status values
         status = df['status'].astype(str).str.strip().str.lower()
@@ -206,9 +255,6 @@ def process_data(leads_df, operations_df=None):
         
         # Convert outcome to integer
         df['outcome'] = df['outcome'].astype(int)
-    
-    # If Status is missing or we have no definitive outcomes after filtering, 
-    # fallback to Lead Trigger as a supplementary signal
     elif 'lead_trigger' in df.columns:
         # Map Lead Trigger statuses to a won/lost flag
         df['lead_trigger'] = df['lead_trigger'].astype(str)
@@ -230,86 +276,84 @@ def process_data(leads_df, operations_df=None):
         df['lost'] = False
         df['outcome'] = 0
     
-    # Convert numeric fields
-    for col in ['number_of_guests', 'days_until_event', 'days_since_inquiry', 'bartenders_needed']:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+    # 7) Derived columns and calculations
     
-    # Add clean booking type
+    # Calculate Price per Guest
+    if 'actual_deal_value' in df.columns and 'number_of_guests' in df.columns:
+        df['price_per_guest'] = df['actual_deal_value'] / df['number_of_guests'].replace(0, np.nan)
+    
+    # Calculate staff-to-guest ratio
+    if 'bartenders_needed' in df.columns and 'number_of_guests' in df.columns:
+        df['staff_ratio'] = df['bartenders_needed'] / df['number_of_guests'].replace(0, np.nan)
+    
+    # Add clean booking type from either booking_type or event_type
     if 'booking_type' in df.columns:
         df['clean_booking_type'] = df['booking_type'].apply(clean_booking_type)
+    elif 'event_type' in df.columns:
+        df['clean_booking_type'] = df['event_type'].apply(clean_booking_type)
     
-    # Define bins for guests
+    # Phone area code matching (if phone_number and state exist)
+    if 'phone_number' in df.columns and 'state' in df.columns:
+        # Extract area code and check if it matches the state
+        df['phone_match'] = (
+            df['phone_number'].astype(str).str.replace(r'\D+', '', regex=True).str[:3]
+            == df['state'].astype(str).str.replace(r'\D+', '', regex=True).str[:3]
+        )
+    
+    # 8) Create categorical bins for analysis
+    
+    # Guest count bins
     if 'number_of_guests' in df.columns:
         bins_guests = [0, 50, 100, 200, np.inf]
         labels_guests = ['0–50', '51–100', '101–200', '200+']
-        # Convert to numeric and handle NaN values
         df['guests_bin'] = pd.cut(df['number_of_guests'].fillna(-1), bins=bins_guests, labels=labels_guests)
     
-    # Define bins for days until event
+    # Days until event bins
     if 'days_until_event' in df.columns:
         bins_days = [0, 7, 30, 90, np.inf]
         labels_days = ['0–7 days', '8–30 days', '31–90 days', '91+ days']
-        # Convert to numeric and handle NaN values
         df['days_until_bin'] = pd.cut(df['days_until_event'].fillna(-1), bins=bins_days, labels=labels_days)
     
-    # Derive weekday from inquiry date
+    # Days since inquiry bins
+    if 'days_since_inquiry' in df.columns:
+        bins_inq = [0, 7, 14, 30, np.inf]
+        labels_inq = ['0–7 days', '8–14 days', '15–30 days', '30+ days'] 
+        df['dsi_bin'] = pd.cut(df['days_since_inquiry'].fillna(-1), bins=bins_inq, labels=labels_inq)
+    
+    # Price per guest bins
+    if 'price_per_guest' in df.columns:
+        bins_price = [0, 50, 100, 150, np.inf]
+        labels_price = ['$0–50', '$51–100', '$101–150', '$150+']
+        df['price_bin'] = pd.cut(df['price_per_guest'].fillna(-1), bins=bins_price, labels=labels_price)
+    
+    # 9) Extract date-related features
+    
+    # Weekday of inquiry
     if 'inquiry_date' in df.columns:
         try:
-            # Convert to datetime and get weekday
-            df['weekday'] = df['inquiry_date'].dt.day_name()
+            df['inquiry_weekday'] = df['inquiry_date'].dt.day_name()
         except:
             pass
     
-    # Merge in operations data if available
-    if operations_df is not None and not operations_df.empty:
-        ops_df = normalize_column_names(operations_df)
-        ops_df = standardize_date_columns(ops_df)
-        
-        try:
-            # Check if box_key column exists in both dataframes
-            if 'box_key' in df.columns and 'box_key' in ops_df.columns:
-                # Merge on Box Key
-                merge_cols = ['box_key', 'actual_deal_value']
-                
-                # Add event_type and booking_type if available in operations data
-                if 'event_type' in ops_df.columns:
-                    merge_cols.append('event_type')
-                if 'booking_type' in ops_df.columns:
-                    merge_cols.append('booking_type')
-                if 'region' in ops_df.columns:
-                    merge_cols.append('region')
-                
-                df = pd.merge(df, ops_df[merge_cols], 
-                          on='box_key', how='left')
-                
-                # Convert to numeric
-                if 'actual_deal_value' in df.columns:
-                    df['actual_deal_value'] = pd.to_numeric(df['actual_deal_value'], errors='coerce')
-                    
-                    # Calculate Price per Guest
-                    if 'number_of_guests' in df.columns:
-                        df['price_per_guest'] = df['actual_deal_value'] / df['number_of_guests'].replace(0, np.nan)
-        except Exception as e:
-            print(f"Error merging operations data: {str(e)}")
-    
-    # Add additional advanced features
-    
-    # 1. Corporate Flag
-    if 'event_type' in df.columns:
-        df['is_corporate'] = df['event_type'].str.lower().str.contains('corporate', na=False).astype(int)
-    
-    # 2. Seasonality (if event date is available)
+    # Month and season of event
     if 'event_date' in df.columns:
         try:
-            df['event_month'] = df['event_date'].dt.month
+            df['event_month'] = df['event_date'].dt.month_name()
             df['event_season'] = df['event_date'].dt.month.apply(
                 lambda x: 'Winter' if x in [12, 1, 2] else
-                        'Spring' if x in [3, 4, 5] else
-                        'Summer' if x in [6, 7, 8] else 'Fall'
+                         'Spring' if x in [3, 4, 5] else
+                         'Summer' if x in [6, 7, 8] else 'Fall'
             )
         except Exception as e:
             print(f"Error processing event date: {str(e)}")
+    
+    # 10) Additional calculated features
+    
+    # Corporate event flag
+    if 'event_type' in df.columns:
+        df['is_corporate'] = df['event_type'].str.lower().str.contains('corporate', na=False).astype(int)
+    elif 'booking_type' in df.columns:
+        df['is_corporate'] = df['booking_type'].str.lower().str.contains('corporate', na=False).astype(int)
     
     return df
 

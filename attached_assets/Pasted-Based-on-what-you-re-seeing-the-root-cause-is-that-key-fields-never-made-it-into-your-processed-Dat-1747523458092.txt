@@ -1,0 +1,141 @@
+Based on what you’re seeing, the root cause is that key fields never made it into your processed DataFrame—so the Conversion Analysis tab has nothing to plot:
+
+avg_deal_value is N/A because you never merged actual_deal_value (or cast it to numeric).
+
+booking_type/event_type never got pulled in, so “Conversion by Booking Type” has zero groups.
+
+days_until_event and days_since_inquiry are 0% complete—those columns were never computed.
+
+created vs inquiry_date is mis-aligned, so Day-of-Week and Time-Factors break.
+
+Referral/Marketing source exists but is almost entirely null, so that chart is blank (hence “0” count).
+
+1. Fix your data pipeline (utils.py or wherever you normalize/merge)
+Open your load_data or process_data function and add these steps immediately after your CSV/database merge:
+
+python
+Copy
+Edit
+import pandas as pd
+import numpy as np
+
+def process_data(df_leads, df_ops):
+    # 1) Standardize column names
+    df_leads.columns = (
+        df_leads.columns
+            .str.lower()
+            .str.replace(r'\W+','_', regex=True)
+    )
+    df_ops.columns = (
+        df_ops.columns
+            .str.lower()
+            .str.replace(r'\W+','_', regex=True)
+    )
+
+    # 2) Merge in operations fields
+    #    Bring in actual_deal_value, booking_type, event_type if present
+    merge_cols = ['actual_deal_value']
+    for col in ['booking_type','event_type']:
+        if col in df_ops.columns:
+            merge_cols.append(col)
+    df = df_leads.merge(
+        df_ops[['box_key'] + merge_cols],
+        on='box_key',
+        how='left'
+    )
+
+    # 3) Cast numeric fields
+    df['actual_deal_value'] = pd.to_numeric(df['actual_deal_value'], errors='coerce').fillna(0)
+
+    # 4) Parse dates
+    df['inquiry_date'] = pd.to_datetime(df.get('inquiry_date', df.get('created')), errors='coerce')
+    df['event_date']   = pd.to_datetime(df.get('event_date'), errors='coerce')
+
+    # 5) Compute time-based features
+    df['days_until_event']   = (df['event_date'] - df['inquiry_date']).dt.days
+    df['days_since_inquiry'] = (pd.Timestamp.now() - df['inquiry_date']).dt.days
+
+    # 6) Outcome flag
+    df['outcome'] = df['status'].map({'won':1, 'lost':0}).fillna(0).astype(int)
+
+    # 7) Any other derived columns…
+    #    e.g. staff ratio, price per guest, phone match, etc.
+    df['price_per_guest'] = df['actual_deal_value'] / df['number_of_guests'].replace(0, np.nan)
+    df['ratio_staff_guest'] = df['bartenders_needed'] / df['number_of_guests'].replace(0, np.nan)
+    df['phone_match'] = (
+        df['phone_number'].astype(str).str[:3]
+        == df['state'].str[:3]
+    )
+
+    return df
+Key take-aways:
+
+We merge actual_deal_value, booking_type, and event_type so they exist.
+
+We cast actual_deal_value to numeric and default missing values to 0.
+
+We parse your date fields, then compute days_until_event and days_since_inquiry.
+
+We derive other features (price per guest, staffing ratio, phone match) that fuel your Conversion Analysis charts.
+
+2. Verify Data Completeness
+Right after processing, add a quick health-check in your app.py before any tabs:
+
+python
+Copy
+Edit
+st.markdown("### 🔍 Data Health Check")
+miss = df.isna().mean().mul(100).round(1)
+st.table(miss.to_frame("% Missing"))
+This will immediately show you which columns still have gaps—your days_until_event should now show near 0% missing, and actual_deal_value should be 0%.
+
+3. Re-run Conversion Analysis
+With those fixes, your Conversion Analysis tab will now see:
+
+Avg. Deal Value populated from actual_deal_value.
+
+Conversion by Booking Type (or if missing booking_type, fallback to event_type).
+
+Conversion by Days Until Event and Days Since Inquiry charts working.
+
+Day-of-Week chart powered by the new inquiry_date.
+
+Data Quality Insights will show correct completeness stats.
+
+Next Steps (Agent-Ready Prompts):
+
+“Apply the process_data snippet above into utils.py (or your data-loading module). Ensure you merge actual_deal_value, booking_type, event_type, parse dates, and compute days_until_event and days_since_inquiry.”
+
+“Add a Data Health Check table at top of app.py to show % Missing for each column, so we can verify completeness of new features.”
+
+“In Conversion Analysis tab, remove any 90-day default filter—set date range to full min/max of inquiry_date so charts use all data.”
+
+“Update the booking-type plotting logic to:
+
+python
+Copy
+Edit
+if 'booking_type' in df.columns:
+    col = 'booking_type'
+    title = 'Conversion by Booking Type'
+elif 'event_type' in df.columns:
+    col = 'event_type'
+    title = 'Conversion by Event Type'
+else:
+    st.info("No Booking/Event Type data available.")
+    col = None
+if col:
+    plot_top_categories(df, col, title)
+```**
+
+“Re-deploy and confirm that:
+
+Avg. Deal Value is no longer N/A.
+
+The “Conversion by Time Factors” charts render.
+
+The Day-of-Week bar chart appears.
+
+Data Health Check shows low missingness for your new columns.”**
+
+Once that patch is in, your Conversion Analysis tab will come fully alive. Let me know when you’ve applied these, and we’ll tackle the next tab!
