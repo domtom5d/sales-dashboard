@@ -415,14 +415,18 @@ def visualize_clusters(df, scaled_data, feature_cols, cluster_labels, kmeans):
             
             # Get feature importances for the PCA components
             loadings = pd.DataFrame(
-                pca.components_.T, 
-                columns=['PC1', 'PC2'], 
+                data=pca.components_.T, 
                 index=feature_cols
             )
+            loadings.columns = ['PC1', 'PC2']
             
-            # Sort by absolute value
-            pc1_loadings = loadings['PC1'].abs().sort_values(ascending=False)
-            pc2_loadings = loadings['PC2'].abs().sort_values(ascending=False)
+            # Get the top features for each component
+            pc1_importance = pd.Series({col: abs(loadings.loc[col, 'PC1']) for col in feature_cols})
+            pc2_importance = pd.Series({col: abs(loadings.loc[col, 'PC2']) for col in feature_cols})
+            
+            # Sort by importance
+            pc1_loadings = pc1_importance.sort_values(ascending=False)
+            pc2_loadings = pc2_importance.sort_values(ascending=False)
             
             col1, col2 = st.columns(2)
             
@@ -430,13 +434,15 @@ def visualize_clusters(df, scaled_data, feature_cols, cluster_labels, kmeans):
                 st.markdown("**Principal Component 1 - Top Features:**")
                 for feature, value in pc1_loadings.head(3).items():
                     direction = "+" if loadings.loc[feature, 'PC1'] > 0 else "-"
-                    st.markdown(f"- {feature.replace('_', ' ').title()}: {direction} ({value:.3f})")
+                    feature_str = feature if isinstance(feature, str) else str(feature)
+                    st.markdown(f"- {feature_str.replace('_', ' ').title()}: {direction} ({value:.3f})")
             
             with col2:
                 st.markdown("**Principal Component 2 - Top Features:**")
                 for feature, value in pc2_loadings.head(3).items():
                     direction = "+" if loadings.loc[feature, 'PC2'] > 0 else "-"
-                    st.markdown(f"- {feature.replace('_', ' ').title()}: {direction} ({value:.3f})")
+                    feature_str = feature if isinstance(feature, str) else str(feature)
+                    st.markdown(f"- {feature_str.replace('_', ' ').title()}: {direction} ({value:.3f})")
     
     with viz_tab2:
         if len(feature_cols) >= 2:
@@ -465,7 +471,10 @@ def visualize_clusters(df, scaled_data, feature_cols, cluster_labels, kmeans):
             
             # Get the cluster centers and convert back to original scale
             centers = kmeans.cluster_centers_
-            centers_orig = scaler.inverse_transform(centers)
+            
+            # Get the scaler from session state if available (for cached personas)
+            current_scaler = st.session_state.get('personas_scaler', scaler)
+            centers_orig = current_scaler.inverse_transform(centers)
             
             # Get the index positions of the selected features
             x_idx = feature_cols.index(x_feature)
