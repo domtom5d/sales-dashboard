@@ -294,6 +294,14 @@ def process_data(leads_df, operations_df=None):
     # Handle null values
     df['days_since_inquiry'] = df['days_since_inquiry'].fillna(30)  # 1 month is a typical lead age
     
+    # Ensure numeric types for time-based features
+    df['days_until_event'] = pd.to_numeric(df['days_until_event'], errors='coerce')
+    df['days_since_inquiry'] = pd.to_numeric(df['days_since_inquiry'], errors='coerce')
+    
+    # Replace any infinity values with reasonable defaults
+    df['days_until_event'] = df['days_until_event'].replace([np.inf, -np.inf], 90)
+    df['days_since_inquiry'] = df['days_since_inquiry'].replace([np.inf, -np.inf], 30)
+    
     # 6) Create data completeness score
     # Identify critical fields that should be populated for quality analysis
     critical_fields = [

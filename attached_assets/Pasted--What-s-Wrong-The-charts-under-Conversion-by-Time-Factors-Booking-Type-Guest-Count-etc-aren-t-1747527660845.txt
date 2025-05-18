@@ -1,0 +1,61 @@
+🚨 What's Wrong
+The charts under Conversion by Time Factors, Booking Type, Guest Count, etc., aren't displaying because:
+
+The DataFrame fields are mostly empty or contain NaN values.
+
+For example, days_until_event, referral_source, event_type, booking_type, and marketing_source are not populated in most rows. Some are literally 0% complete.
+
+The chart functions are likely being passed empty Series, which silently fail or throw handled errors (like "cannot convert float NaN to integer").
+
+Your code may not be validating or cleaning data before trying to visualize it.
+
+Streamlit renders nothing if the plotting logic silently fails.
+
+✅ Fix It Step-by-Step
+Step 1: Add Data Existence Checks in Your Plotting Functions
+Before trying to create a chart, check that the relevant column has enough valid data:
+
+python
+Copy
+Edit
+if df['booking_type'].notna().sum() > 10:
+    # proceed to chart
+else:
+    st.warning("Not enough booking type data to generate a chart.")
+Step 2: Clean and Normalize Empty or Unknown Labels
+Instead of plotting 'Unknown' or NaN as labels, replace them to avoid errors:
+
+python
+Copy
+Edit
+df['booking_type'] = df['booking_type'].fillna("Unknown").replace("", "Unknown")
+Step 3: Handle Fields Like days_since_inquiry, days_until_event
+Make sure these are actually computed correctly in your utils.py or processing step:
+
+python
+Copy
+Edit
+df['inquiry_date'] = pd.to_datetime(df['inquiry_date'], errors='coerce')
+df['event_date'] = pd.to_datetime(df['event_date'], errors='coerce')
+df['days_until_event'] = (df['event_date'] - pd.to_datetime('today')).dt.days
+Step 4: Ensure Tabs Use Processed Data
+Make sure your tabs are using the processed_df, not raw uploads. Check how you pass df between load_data() and render_conversion_analysis().
+
+🔧 Lead Scoring Segment Next Steps
+Once the charts work and the missing data errors are handled, here’s how to lock in the scoring segment:
+
+✅ Use a model trained on your available features (you've done this already).
+
+🚫 Don’t allow the user to run the scoring generator if key fields (like days_since_inquiry, number_of_guests) are too sparse.
+
+📊 Plot the lead score distribution after cleaning.
+
+🔁 Add a “Recalculate Scores” button to refresh when data is updated.
+
+💡 Optional (Highly Recommended)
+Add a "Data Completeness Table" next to each visualization section so the user knows what fields are being skipped.
+
+Set up automated fallbacks like:
+
+“Not enough data for this chart — try uploading more complete records for referral_source.”
+
