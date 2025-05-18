@@ -554,21 +554,49 @@ def plot_geographic_insights(df):
 def show_data_quality(df):
     """Show data quality metrics and anomalies"""
     if df is None or df.empty:
+        st.info("No data available for quality analysis")
         return
     
-    st.markdown("#### Data Completeness")
+    st.markdown("### Data Health Check")
+    st.markdown("This section helps diagnose why some charts might be missing or incomplete")
     
     # Calculate completeness for key columns
     key_columns = [
-        'inquiry_date', 'event_date', 'booking_type', 'number_of_guests',
-        'days_until_event', 'city', 'state', 'referral_source'
+        'inquiry_date', 'event_date', 'booking_type', 'event_type', 'number_of_guests',
+        'days_until_event', 'days_since_inquiry', 'city', 'state', 'referral_source', 
+        'marketing_source', 'bartenders_needed', 'actual_deal_value'
     ]
     
+    # Map columns to the charts they affect
+    chart_dependencies = {
+        'inquiry_date': ['Days Since Inquiry', 'Day of Week'],
+        'event_date': ['Days Until Event', 'Event Month'],
+        'booking_type': ['Booking Type Conversion'],
+        'event_type': ['Event Type Conversion'],
+        'number_of_guests': ['Guest Count Analysis'],
+        'days_until_event': ['Days Until Event Analysis'],
+        'days_since_inquiry': ['Days Since Inquiry Analysis'],
+        'city': ['Geographic Analysis'],
+        'state': ['Geographic Analysis'],
+        'referral_source': ['Referral Source Analysis'],
+        'marketing_source': ['Marketing Source Analysis'],
+        'bartenders_needed': ['Bartender Analysis'],
+        'actual_deal_value': ['Deal Value Analysis']
+    }
+    
+    # Calculate completeness for each column
     completeness = {}
     for col in key_columns:
         if col in df.columns:
-            non_null = df[col].notna().sum()
-            completeness[col] = non_null / len(df)
+            # For numeric columns, check that values are valid numbers
+            if col in ['number_of_guests', 'days_until_event', 'days_since_inquiry', 'bartenders_needed', 'actual_deal_value']:
+                non_null = df[col].notna() & np.isfinite(df[col])
+                non_null = non_null.sum()
+            else:
+                non_null = df[col].notna().sum()
+            completeness[col] = (non_null / len(df)) * 100  # Convert to percentage
+        else:
+            completeness[col] = 0
     
     # Create a completeness dataframe
     completeness_df = pd.DataFrame({
@@ -576,42 +604,83 @@ def show_data_quality(df):
         'Completeness': list(completeness.values())
     })
     
+    # Add chart dependencies to the dataframe
+    completeness_df['Affects Charts'] = completeness_df['Column'].map(lambda col: ', '.join(chart_dependencies.get(col, [])))
+    
+    # Add status column
+    completeness_df['Status'] = 'Good'
+    completeness_df.loc[completeness_df['Completeness'] < 75, 'Status'] = 'Fair'
+    completeness_df.loc[completeness_df['Completeness'] < 50, 'Status'] = 'Poor'
+    completeness_df.loc[completeness_df['Completeness'] < 25, 'Status'] = 'Critical'
+    
     # Sort by completeness
     completeness_df = completeness_df.sort_values('Completeness', ascending=False)
     
-    # Create a bar chart
-    fig, ax = plt.subplots(figsize=(10, 6))
+    # Create a horizontal bar chart with color coding by status
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    # Define colors based on status
+    colors = {'Good': '#4CAF50', 'Fair': '#FFC107', 'Poor': '#FF9800', 'Critical': '#F44336'}
+    bar_colors = [colors[status] for status in completeness_df['Status']]
     
     # Plot the data
-    sns.barplot(
-        x='Completeness', 
-        y='Column', 
-        data=completeness_df,
-        ax=ax
-    )
+    bars = ax.barh(completeness_df['Column'], completeness_df['Completeness'], color=bar_colors)
+    
+    # Add data labels
+    for bar, value in zip(bars, completeness_df['Completeness']):
+        width = bar.get_width()
+        label_position = max(width + 1, 5)  # Place labels at least 5% away from the left edge
+        ax.text(label_position, bar.get_y() + bar.get_height()/2, f'{value:.1f}%', 
+                va='center', color='black', fontweight='bold')
     
     # Customize the plot
-    ax.set_xlabel('Data Completeness')
+    ax.set_xlabel('Data Completeness (%)')
     ax.set_ylabel('Data Field')
     ax.set_title('Data Completeness by Field')
+    ax.set_xlim(0, 105)  # Leave room for labels
     
     # Format x-axis as percentage
-    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
+    import matplotlib.ticker as mtick
+    ax.xaxis.set_major_formatter(mtick.PercentFormatter())
     
-    # Add the percentage labels to the end of each bar
-    for i, row in enumerate(completeness_df.itertuples()):
-        ax.text(
-            row.Completeness + 0.01, 
-            i, 
-            f'{row.Completeness:.1%}',
-            va='center'
-        )
+    # Add a legend
+    from matplotlib.patches import Patch
+    legend_elements = [Patch(facecolor=colors[status], label=status) 
+                      for status in ['Good', 'Fair', 'Poor', 'Critical']]
+    ax.legend(handles=legend_elements, loc='lower right')
     
     # Show the plot
     st.pyplot(fig)
     
-    # Show data insights
-    st.markdown("**Data Quality Insights:**")
+    # Data quality insights section
+    st.markdown("### Missing Data Impact on Charts")
+    
+    # Fields affecting key charts
+    critical_fields = completeness_df[completeness_df['Status'].isin(['Critical', 'Poor'])]
+    if not critical_fields.empty:
+        st.warning("⚠️ The following charts may be missing or incomplete due to data quality issues:")
+        
+        # Group by affected charts to show what's impacted
+        affected_charts = {}
+        for _, row in critical_fields.iterrows():
+            for chart in chart_dependencies.get(row['Column'], []):
+                if chart not in affected_charts:
+                    affected_charts[chart] = []
+                affected_charts[chart].append((row['Column'], row['Completeness']))
+        
+        # Display affected charts and their missing fields
+        for chart, fields in affected_charts.items():
+            st.markdown(f"**{chart}**: Missing data in {', '.join([f[0] for f in fields])}")
+        
+        # Add suggestions
+        st.markdown("### 🛠️ Suggestions to Fix")
+        st.markdown("""
+        1. **Adjust filters**: Try setting the 'Minimum Data Completeness' slider to 0 to include all leads
+        2. **Check data import**: Ensure CSV files have all required columns properly formatted
+        3. **Add data**: For testing, you can upload more complete sample data
+        """)
+    else:
+        st.success("✅ Data quality is good. All charts should display properly.")
     
     # Find columns with low completeness (< 80%)
     low_completeness = completeness_df[completeness_df['Completeness'] < 0.8]
