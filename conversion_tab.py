@@ -117,9 +117,18 @@ def display_kpi_summary(df):
     # For average deal value, ensure we have the necessary columns
     avg_deal_value = 0
     if 'actual_deal_value' in df.columns:
-        # Only consider rows with deal values
-        deal_values = df.loc[df['actual_deal_value'].notna(), 'actual_deal_value']
-        avg_deal_value = deal_values.mean() if not deal_values.empty else 0
+        # Only consider rows with deal values for won deals
+        if 'won' in df.columns:
+            won_deals = df[df['won'] == True]
+            deal_values = won_deals.loc[won_deals['actual_deal_value'].notna() & (won_deals['actual_deal_value'] > 0), 'actual_deal_value']
+            avg_deal_value = deal_values.mean() if not deal_values.empty else 0
+        else:
+            # For all deals if won status isn't available
+            deal_values = df.loc[df['actual_deal_value'].notna() & (df['actual_deal_value'] > 0), 'actual_deal_value']
+            avg_deal_value = deal_values.mean() if not deal_values.empty else 0
+        
+        # Log diagnostics for debugging
+        st.session_state['deal_value_count'] = len(deal_values) if not deal_values.empty else 0
     
     # Calculate average time to close
     avg_days_to_close = 0
@@ -169,6 +178,13 @@ def plot_booking_types(df, min_count=5):
         st.info(f"No valid {title.lower()} data available for analysis")
         return
     
+    # Check if we have sufficient category diversity
+    unique_values = type_df[type_column].nunique()
+    if unique_values <= 1:
+        st.warning(f"Not enough variety in {title.lower()} data. All records show '{type_df[type_column].iloc[0]}'.")
+        st.info("Try uploading more diverse data or adjusting the data quality filters.")
+        return
+    
     # Group by booking/event type and calculate conversion rates
     booking_type_data = type_df.groupby(type_column).agg(
         won=('outcome', 'sum'),
@@ -187,6 +203,12 @@ def plot_booking_types(df, min_count=5):
     # Check if we have data after filtering
     if booking_type_data.empty:
         st.info(f"Not enough data for {title.lower()} conversion analysis. Need at least {min_count} leads per category.")
+        return
+        
+    # Check if we still have enough category diversity after filtering
+    if booking_type_data.shape[0] <= 1:
+        st.warning(f"After filtering, only one {title.lower()} category has enough data: '{booking_type_data['type'].iloc[0]}'")
+        st.info(f"Try lowering the minimum count (currently {min_count}) or uploading more diverse data.")
         return
     
     # Sort by conversion rate and get top booking types
@@ -250,6 +272,13 @@ def plot_referral_sources(df, min_count=5):
         return
     
     try:
+        # Check for sufficient category diversity
+        unique_values = valid_data['referral_source'].nunique()
+        if unique_values <= 1:
+            st.warning(f"Not enough variety in referral source data. All records show '{valid_data['referral_source'].iloc[0]}'.")
+            st.info("Try uploading more diverse data or adjusting the data quality filters.")
+            return
+            
         # Group by referral source and calculate conversion rates
         referral_data = valid_data.groupby('referral_source').agg(
             won=('outcome', 'sum'),
@@ -265,6 +294,12 @@ def plot_referral_sources(df, min_count=5):
         # Check if we have any data after filtering
         if referral_data.empty:
             st.info(f"No referral sources with at least {min_count} leads. Try lowering the minimum count or including more data.")
+            return
+            
+        # Check if we still have enough diversity after filtering
+        if referral_data.shape[0] <= 1:
+            st.warning(f"After filtering, only one referral source has enough data: '{referral_data['referral_source'].iloc[0]}'")
+            st.info(f"Try lowering the minimum count (currently {min_count}) or uploading more diverse data.")
             return
         
         # Sort by conversion rate and get top referral sources
@@ -615,6 +650,58 @@ def show_data_quality(df):
     
     # Sort by completeness
     completeness_df = completeness_df.sort_values('Completeness', ascending=False)
+    
+    # Add an explanation section with information about data quality and what it means for visualization
+    st.subheader("Understanding Chart Display Issues")
+    
+    # Check for data category issues
+    critical_columns = completeness_df[completeness_df['Status'] == 'Critical']['Column'].tolist()
+    poor_columns = completeness_df[completeness_df['Status'] == 'Poor']['Column'].tolist()
+    
+    # Explain what's wrong with any charts that might not be showing properly
+    with st.expander("Why are some charts not displaying correctly?", expanded=True):
+        st.markdown("""
+        ### Common Dashboard Issues
+        
+        Charts in this dashboard may not display correctly for several reasons:
+        
+        1. **Missing Data**: If there are too many blank values in critical fields.
+        2. **Low Category Diversity**: When all records show the same category value (like "Uncategorized").
+        3. **Insufficient Data Volume**: Some visualizations require a minimum number of records per category.
+        """)
+        
+        # Add specific information about the current dataset
+        if critical_columns:
+            st.markdown("### Critical Data Issues Found")
+            st.markdown("The following fields have **severe data issues** (under 25% completeness):")
+            for col in critical_columns:
+                affected_charts = completeness_df.loc[completeness_df['Column'] == col, 'Affects Charts'].iloc[0]
+                st.markdown(f"- **{col}**: {affected_charts}")
+        
+        if poor_columns:
+            st.markdown("### Poor Data Quality Found")
+            st.markdown("The following fields have **poor data quality** (under 50% completeness):")
+            for col in poor_columns:
+                affected_charts = completeness_df.loc[completeness_df['Column'] == col, 'Affects Charts'].iloc[0]
+                st.markdown(f"- **{col}**: {affected_charts}")
+        
+        # Check for category diversity issues by examining key category columns
+        category_cols = ['booking_type', 'event_type', 'referral_source']
+        diversity_issues = []
+        
+        for col in category_cols:
+            if col in df.columns:
+                unique_count = df[col].nunique()
+                if unique_count <= 1:
+                    diversity_issues.append((col, df[col].iloc[0] if len(df) > 0 else "Unknown"))
+        
+        if diversity_issues:
+            st.markdown("### Category Diversity Issues")
+            st.markdown("The following fields lack diversity (all records show same value):")
+            for col, value in diversity_issues:
+                st.markdown(f"- **{col}**: All records show '{value}'")
+            
+            st.info("TIP: Try adjusting your data preprocessing to ensure more diverse category values.")
     
     # Create a horizontal bar chart with color coding by status
     fig, ax = plt.subplots(figsize=(10, 8))

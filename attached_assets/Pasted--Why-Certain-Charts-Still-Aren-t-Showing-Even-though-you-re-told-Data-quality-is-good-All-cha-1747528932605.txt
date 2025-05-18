@@ -1,0 +1,97 @@
+🔍 Why Certain Charts Still Aren't Showing
+Even though you're told:
+
+✅ Data quality is good. All charts should display properly.
+
+You're seeing:
+
+❌ Charts showing "0"
+
+❌ Identical highest/lowest conversion rates ("Uncategorized 12.2%")
+
+🔑 Root Causes:
+Data Exists, But It’s All in One Category
+
+Booking types and referral sources are not diverse enough — most values are null, "Unknown", or default categories.
+
+Hardcoded Default Labels Overwrote Real Data
+
+Code likely uses .fillna("Uncategorized") or .replace("", "Uncategorized"), causing everything to be lumped into a single label.
+
+Chart Generation Code Skips or Misuses Categories
+
+Some charts likely group by values (e.g. booking_type, referral_source) that are:
+
+Not categorized properly
+
+Not present in enough rows to justify plotting
+
+Cleaned incorrectly
+
+✅ What To Do Right Now
+1. 🔧 Fix Data Preprocessing (utils.py or wherever data is cleaned)
+Ensure you're only labeling "Uncategorized" after checking that other categories aren't accidentally dropped:
+
+python
+Copy
+Edit
+df['booking_type'] = df['booking_type'].fillna("Unknown")
+df['booking_type'] = df['booking_type'].replace("", "Unknown")
+→ Replace "Unknown" with "Venue", "Private", "Corporate", etc., wherever possible.
+
+If you have a mapping logic (like based on event_size or referral_source), apply that now.
+
+2. 🧼 Drop or Warn on 100% Null Charts in conversion_analysis.py
+Modify plotting functions to skip charts with only one category or output a helpful message:
+
+python
+Copy
+Edit
+if df['booking_type'].nunique() <= 1:
+    st.warning("Not enough diversity in booking types to show conversion by category.")
+else:
+    # proceed to chart
+3. 📊 Fix the Misleading Insights Output
+You’re currently seeing:
+
+pgsql
+Copy
+Edit
+Uncategorized has the highest conversion rate at 12.2%
+Uncategorized has the lowest conversion rate at 12.2%
+Add this sanity check:
+
+python
+Copy
+Edit
+if df['booking_type'].nunique() <= 1:
+    insights = ["Only one category found: no variation to compare."]
+else:
+    insights = generate_insights(df, 'booking_type')  # or however you're handling logic
+4. 🧠 Fix Deal Value Calculation
+You see:
+
+Avg. Deal Value: N/A
+
+Fix: Make sure a column like deal_value or total_value exists, and update summary logic:
+
+python
+Copy
+Edit
+if 'deal_value' in df.columns and df['deal_value'].notna().sum() > 10:
+    avg_deal_value = df.loc[df['outcome'] == 'Won', 'deal_value'].mean()
+    st.metric("Avg. Deal Value", f"${avg_deal_value:,.2f}")
+else:
+    st.metric("Avg. Deal Value", "N/A")
+🛠️ Optional Enhancements You Should Add
+These will unlock serious value from your clean dataset:
+
+📈 Conversion Over Time by Event Type (Weekly/Monthly Trends)
+
+📉 Drop-off Rates (Inquiry → Booked → Won)
+
+🧮 Pricing Bands: Are $500–$1k leads more likely to close than $2k–$4k?
+
+📍 State & Area Code Heatmap (For regional demand)
+
+📥 Export Filtered Segments to CSV (e.g., “High-score Corporate leads from Texas”)
