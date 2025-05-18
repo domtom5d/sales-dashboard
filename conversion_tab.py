@@ -439,23 +439,88 @@ def plot_size_factors(df):
     # Guest count analysis
     if has_guests:
         st.markdown("#### Conversion by Guest Count")
-        if 'guests_bin' in df.columns:
-            # Use the pre-binned column
-            plot_conversion_by_category(df, 'guests_bin', 'Number of Guests', sort_by='natural')
-        else:
-            # Create bins manually
-            bins = [0, 50, 100, 150, 200, 300, float('inf')]
-            labels = ['< 50', '50-100', '100-150', '150-200', '200-300', '300+']
-            df['guests_bin'] = pd.cut(df['number_of_guests'], bins=bins, labels=labels)
-            plot_conversion_by_category(df, 'guests_bin', 'Number of Guests', sort_by='natural')
+        try:
+            # Filter out any NaN or invalid guest counts
+            valid_df = df[df['number_of_guests'].notna() & (df['number_of_guests'] > 0)].copy()
+            
+            if len(valid_df) >= 5:  # Require at least 5 valid guest counts
+                if 'guests_bin' in df.columns:
+                    # Use the pre-binned column if it exists
+                    plot_conversion_by_category(valid_df, 'guests_bin', 'Number of Guests', sort_by='natural')
+                else:
+                    # Create bins manually
+                    bins = [0, 50, 100, 150, 200, 300, float('inf')]
+                    labels = ['< 50', '50-100', '100-150', '150-200', '200-300', '300+']
+                    
+                    # Ensure guests are numeric and create bins
+                    valid_df['number_of_guests'] = pd.to_numeric(valid_df['number_of_guests'], errors='coerce')
+                    valid_df = valid_df[valid_df['number_of_guests'].notna()].copy()
+                    
+                    if len(valid_df) >= 5:
+                        valid_df['guests_bin'] = pd.cut(valid_df['number_of_guests'], bins=bins, labels=labels)
+                        
+                        # Check if binning worked properly
+                        if valid_df['guests_bin'].notna().sum() >= 5:
+                            plot_conversion_by_category(valid_df, 'guests_bin', 'Number of Guests', sort_by='natural')
+                            
+                            # Add data counts for transparency
+                            guest_counts = valid_df.groupby('guests_bin').size().reset_index(name='count')
+                            st.markdown("**Guest count distribution:**")
+                            for _, row in guest_counts.iterrows():
+                                st.markdown(f"- {row['guests_bin']}: {row['count']} leads")
+                        else:
+                            st.info("Data binning failed - check that guest counts are valid numbers")
+                    else:
+                        st.info(f"Not enough valid guest counts (found {len(valid_df)})")
+            else:
+                st.info(f"Not enough valid guest counts for analysis (found {len(valid_df)})")
+        except Exception as e:
+            st.error(f"Error in guest count analysis: {str(e)}")
+            st.info("Try checking guest count data format or adjust data quality filters")
     
     # Bartender count analysis
     if has_bartenders:
         st.markdown("#### Conversion by Bartenders Needed")
-        bins = [0, 1, 2, 3, 5, float('inf')]
-        labels = ['0', '1', '2', '3-5', '5+']
-        df['bartenders_bin'] = pd.cut(df['bartenders_needed'], bins=bins, labels=labels)
-        plot_conversion_by_category(df, 'bartenders_bin', 'Bartenders Needed', sort_by='natural')
+        try:
+            # Filter out any NaN or invalid bartender counts
+            valid_df = df[df['bartenders_needed'].notna() & (df['bartenders_needed'] >= 0)].copy()
+            
+            if len(valid_df) >= 5:  # Require at least 5 valid counts
+                # Convert to numeric to be sure
+                valid_df['bartenders_needed'] = pd.to_numeric(valid_df['bartenders_needed'], errors='coerce')
+                valid_df = valid_df[valid_df['bartenders_needed'].notna()].copy()
+                
+                if len(valid_df) >= 5:
+                    # Create bins for bartenders needed
+                    bins = [0, 1, 2, 3, 5, float('inf')]
+                    labels = ['0', '1', '2', '3-5', '5+']
+                    
+                    # Create a new column with binned bartenders needed
+                    valid_df['bartenders_bin'] = pd.cut(
+                        valid_df['bartenders_needed'], 
+                        bins=bins, 
+                        labels=labels
+                    )
+                    
+                    # Check if binning worked properly
+                    if valid_df['bartenders_bin'].notna().sum() >= 5:
+                        # Plot the data
+                        plot_conversion_by_category(valid_df, 'bartenders_bin', 'Bartenders Needed', sort_by='natural')
+                        
+                        # Add data counts for transparency
+                        bartender_counts = valid_df.groupby('bartenders_bin').size().reset_index(name='count')
+                        st.markdown("**Bartender count distribution:**")
+                        for _, row in bartender_counts.iterrows():
+                            st.markdown(f"- {row['bartenders_bin']}: {row['count']} leads")
+                    else:
+                        st.info("Data binning failed - check that bartender counts are valid numbers")
+                else:
+                    st.info(f"Not enough valid bartender counts (found {len(valid_df)})")
+            else:
+                st.info(f"Not enough valid bartender count data for analysis (found {len(valid_df)})")
+        except Exception as e:
+            st.error(f"Error in bartender count analysis: {str(e)}")
+            st.info("Try checking bartender count data format or adjust data quality filters")
 
 
 def plot_geographic_insights(df):
