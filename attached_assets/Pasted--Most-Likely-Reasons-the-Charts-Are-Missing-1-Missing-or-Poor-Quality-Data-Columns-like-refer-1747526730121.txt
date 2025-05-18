@@ -1,0 +1,89 @@
+🔍 Most Likely Reasons the Charts Are Missing
+✅ 1. Missing or Poor Quality Data
+Columns like:
+
+referral_source
+
+event_date, inquiry_date
+
+guest_count, bartenders_needed
+
+state, city, phone_number
+
+Might exist in name only but be mostly empty or full of null/NaN values.
+
+For example, if referral_source is 98% missing, the groupby() and plot() logic won’t have enough categories to chart.
+
+✅ Fix: Add a data completeness check before each chart. If there are <2 valid values, skip chart but display a warning like:
+
+python
+Copy
+Edit
+st.warning("Not enough valid data in `referral_source` to generate a chart.")
+⚠️ 2. Plotting Errors Are Silently Caught
+In your code, most plots use a try-except block like:
+
+python
+Copy
+Edit
+try:
+    st.altair_chart(chart)
+except:
+    pass
+This hides errors like:
+
+Missing keys in the DataFrame
+
+Mismatched datetime formats
+
+NaN rows silently breaking Altair
+
+✅ Fix: Temporarily remove the try/except or at least add logging:
+
+python
+Copy
+Edit
+except Exception as e:
+    st.error(f"Chart failed: {e}")
+🔍 3. Key Columns Missing from Your Upload
+Even if you're passing inquiry_date, the column name might be 'Inquiry Date' (capitalized) or formatted as a string. This would break:
+
+python
+Copy
+Edit
+df['days_since_inquiry'] = (pd.to_datetime("now") - pd.to_datetime(df['inquiry_date'])).dt.days
+Which throws an error, caught silently.
+
+✅ Fix:
+
+Standardize column names to lowercase on load:
+
+python
+Copy
+Edit
+df.columns = [col.lower().strip().replace(" ", "_") for col in df.columns]
+✅ What You Should Do Right Now
+Step 1: Confirm Which Columns Exist and Are Usable
+In your app, go to the 🧪 "Debug" tab (or insert a block in your code) to show:
+
+python
+Copy
+Edit
+st.write("Columns:", df.columns.tolist())
+st.write(df[['referral_source', 'event_date', 'inquiry_date', 'state', 'city']].head(10))
+Step 2: Add Safeguards Before Every Chart
+Example for referral_source:
+
+python
+Copy
+Edit
+if 'referral_source' in df.columns and df['referral_source'].notna().sum() > 2:
+    chart = alt.Chart(df).mark_bar().encode(
+        x='referral_source',
+        y='won:Q'
+    )
+    st.altair_chart(chart)
+else:
+    st.warning("Not enough referral source data to generate chart.")
+Step 3: Check for Silent Errors in Altair
+Temporarily remove try/except and let the errors bubble up.

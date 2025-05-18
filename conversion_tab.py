@@ -235,26 +235,41 @@ def plot_booking_types(df, min_count=5):
 
 def plot_referral_sources(df, min_count=5):
     """Plot conversion rates by referral source"""
+    # Check for required columns
     if 'referral_source' not in df.columns or 'outcome' not in df.columns:
         st.info("Referral source data not available")
         return
     
-    # Group by referral source and calculate conversion rates
-    referral_data = df.groupby('referral_source').agg(
-        won=('outcome', 'sum'),
-        total=('outcome', 'count'),
-    ).reset_index()
+    # Check if we have enough valid values
+    valid_referrals = df['referral_source'].notna()
+    valid_outcomes = df['outcome'].notna()
+    valid_data = df[valid_referrals & valid_outcomes]
     
-    # Calculate conversion rate
-    referral_data['conversion_rate'] = referral_data['won'] / referral_data['total']
+    if len(valid_data) < min_count:
+        st.info(f"Not enough valid referral data (found {len(valid_data)} valid leads, need at least {min_count})")
+        return
     
-    # Filter out referral sources with fewer than min_count leads
-    referral_data = referral_data[referral_data['total'] >= min_count]
-    
-    # Sort by conversion rate and get top referral sources
-    top_referrals = referral_data.sort_values('conversion_rate', ascending=False).head(10)
-    
-    if not top_referrals.empty:
+    try:
+        # Group by referral source and calculate conversion rates
+        referral_data = valid_data.groupby('referral_source').agg(
+            won=('outcome', 'sum'),
+            total=('outcome', 'count'),
+        ).reset_index()
+        
+        # Calculate conversion rate
+        referral_data['conversion_rate'] = referral_data['won'] / referral_data['total']
+        
+        # Filter out referral sources with fewer than min_count leads
+        referral_data = referral_data[referral_data['total'] >= min_count]
+        
+        # Check if we have any data after filtering
+        if referral_data.empty:
+            st.info(f"No referral sources with at least {min_count} leads. Try lowering the minimum count or including more data.")
+            return
+        
+        # Sort by conversion rate and get top referral sources
+        top_referrals = referral_data.sort_values('conversion_rate', ascending=False).head(10)
+        
         # Create bar chart
         fig, ax = plt.subplots(figsize=(10, 6))
         
@@ -271,8 +286,9 @@ def plot_referral_sources(df, min_count=5):
         ax.set_ylabel('Referral Source')
         ax.set_title('Conversion Rate by Referral Source')
         
-        # Format x-axis as percentage
-        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
+        # Format x-axis as percentage - using matplotlib directly
+        import matplotlib.ticker as mtick
+        ax.xaxis.set_major_formatter(mtick.PercentFormatter(1.0))
         
         # Add the percentage labels to the end of each bar
         for i, row in enumerate(top_referrals.itertuples()):
@@ -293,13 +309,15 @@ def plot_referral_sources(df, min_count=5):
         st.markdown("**Insights:**")
         st.markdown(f"- **{best_referral['referral_source']}** has the highest conversion rate at {best_referral['conversion_rate']:.1%}")
         st.markdown(f"- **{worst_referral['referral_source']}** has the lowest conversion rate at {worst_referral['conversion_rate']:.1%}")
-    else:
-        st.info("Not enough referral source data available")
+    except Exception as e:
+        st.error(f"Error processing referral source data: {str(e)}")
+        st.info("Try adjusting data quality filters or check for data format issues")
 
 
 def plot_timing_factors(df):
     """Plot conversion rates by various timing factors"""
     if df is None or df.empty:
+        st.info("No data available for timing analysis")
         return
     
     # Check if we have the necessary columns
@@ -308,8 +326,25 @@ def plot_timing_factors(df):
     has_weekday = 'inquiry_date' in df.columns and 'outcome' in df.columns
     
     if not (has_days_until or has_days_since or has_weekday):
-        st.info("Timing data not available")
+        st.info("Timing data not available. Missing days_until_event, days_since_inquiry, or inquiry_date columns.")
         return
+        
+    # Count valid entries for each time factor
+    valid_counts = {}
+    if has_days_until:
+        valid_counts['days_until'] = df[df['days_until_event'].notna() & np.isfinite(df['days_until_event'])].shape[0]
+    if has_days_since:
+        valid_counts['days_since'] = df[df['days_since_inquiry'].notna() & np.isfinite(df['days_since_inquiry'])].shape[0]
+    if has_weekday:
+        valid_counts['weekday'] = df[df['inquiry_date'].notna()].shape[0]
+    
+    # Show overview of available data
+    st.markdown("**Available Time Factor Data:**")
+    for factor, count in valid_counts.items():
+        st.markdown(f"- {factor}: {count} valid entries")
+    
+    # Require at least 5 valid entries for meaningful analysis
+    min_required = 5
     
     # Days until event analysis
     if has_days_until:
