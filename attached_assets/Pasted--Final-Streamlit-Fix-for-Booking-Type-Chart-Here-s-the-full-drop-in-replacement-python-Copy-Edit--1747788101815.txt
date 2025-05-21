@@ -1,0 +1,83 @@
+✅ Final Streamlit Fix for Booking Type Chart
+Here’s the full drop-in replacement:
+
+python
+Copy
+Edit
+import streamlit as st
+import pandas as pd
+import altair as alt
+
+def plot_conversion_by_booking_type(df):
+    st.subheader("Conversion by Booking Type")
+
+    # Step 1: Sanitize missing values
+    if 'booking_type' not in df.columns:
+        st.warning("Booking type column not found.")
+        return
+
+    df['booking_type'] = df['booking_type'].fillna("Unknown")
+    df['booking_type'] = df['booking_type'].replace("", "Unknown")
+
+    # Step 2: Only proceed if there’s more than one type
+    unique_booking_types = df['booking_type'].nunique()
+    if unique_booking_types <= 1:
+        st.info("Not enough booking type variation to display chart.")
+        return
+
+    # Step 3: Compute conversion rate by booking type
+    summary = (
+        df.groupby('booking_type')['outcome']
+        .value_counts(normalize=False)
+        .unstack(fill_value=0)
+        .reset_index()
+    )
+
+    if 'Won' not in summary.columns:
+        summary['Won'] = 0
+    if 'Lost' not in summary.columns:
+        summary['Lost'] = 0
+
+    summary['Total'] = summary['Won'] + summary['Lost']
+    summary['Conversion Rate'] = summary['Won'] / summary['Total']
+
+    # Step 4: Plot using Altair
+    chart = alt.Chart(summary).mark_bar().encode(
+        x=alt.X('booking_type:N', title='Booking Type'),
+        y=alt.Y('Conversion Rate:Q', title='Conversion Rate'),
+        tooltip=['booking_type', 'Conversion Rate']
+    ).properties(
+        width=600,
+        height=400
+    )
+
+    st.altair_chart(chart, use_container_width=True)
+
+    # Step 5: Show top insights
+    if summary['Conversion Rate'].nunique() > 1:
+        best = summary.sort_values('Conversion Rate', ascending=False).iloc[0]
+        worst = summary.sort_values('Conversion Rate', ascending=True).iloc[0]
+        delta = best['Conversion Rate'] - worst['Conversion Rate']
+        st.markdown(
+            f"**{best['booking_type']}** has the highest conversion rate at **{best['Conversion Rate']:.1%}**, "
+            f"compared to **{worst['booking_type']}** at **{worst['Conversion Rate']:.1%}** "
+            f"(**{delta:.1%}** difference)."
+        )
+📌 How to Use
+Drop this function into conversion_analysis.py or utils.py
+
+Call it in your Conversion Analysis tab like this:
+
+python
+Copy
+Edit
+plot_conversion_by_booking_type(leads_df)
+✅ What It Fixes
+No more 0 values when categories are missing
+
+No more “Uncategorized 12.2% vs. Uncategorized 12.2%”
+
+Only shows chart if real data exists
+
+Better insights text
+
