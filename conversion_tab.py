@@ -161,14 +161,52 @@ def display_kpi_summary(df):
 
 def plot_booking_types(df, min_count=5):
     """Plot conversion rates by booking type or event type using an interactive Altair chart"""
-    # Use our new improved visualization with better error handling and interactivity
-    plot_conversion_by_booking_type(df)
+    from improved_visualizations import plot_conversion_by_booking_type
+    
+    # Create a clean copy to work with
+    clean_df = df.copy()
+    
+    # Clean null values
+    if 'booking_type' in clean_df.columns:
+        clean_df = clean_df.dropna(subset=['booking_type', 'outcome'])
+        
+        # Group sparse categories (fewer than 20 leads)
+        counts = clean_df['booking_type'].value_counts()
+        sparse_categories = counts[counts < 20].index.tolist()
+        if sparse_categories:
+            clean_df['booking_type'] = clean_df['booking_type'].apply(
+                lambda x: 'Other Types' if x in sparse_categories else x
+            )
+        
+        # Use our improved visualization with better error handling
+        plot_conversion_by_booking_type(clean_df)
+    else:
+        st.warning("Booking type data not available")
 
 
 def plot_referral_sources(df, min_count=5):
     """Plot conversion rates by referral source using an interactive Altair chart"""
-    # Use our new improved visualization with better error handling and interactivity
-    plot_conversion_by_referral_source(df)
+    from improved_visualizations import plot_conversion_by_referral_source
+    
+    # Create a clean copy to work with
+    clean_df = df.copy()
+    
+    # Clean null values
+    if 'referral_source' in clean_df.columns:
+        clean_df = clean_df.dropna(subset=['referral_source', 'outcome'])
+        
+        # Group sparse categories (fewer than 20 leads)
+        counts = clean_df['referral_source'].value_counts()
+        sparse_categories = counts[counts < 20].index.tolist()
+        if sparse_categories:
+            clean_df['referral_source'] = clean_df['referral_source'].apply(
+                lambda x: 'Other Sources' if x in sparse_categories else x
+            )
+        
+        # Use our improved visualization with better error handling
+        plot_conversion_by_referral_source(clean_df)
+    else:
+        st.warning("Referral source data not available")
 
 
 def plot_timing_factors(df):
