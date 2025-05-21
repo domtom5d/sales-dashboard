@@ -182,42 +182,60 @@ def render_enhanced_lead_scoring_tab(df):
     st.markdown("### Key Conversion Drivers")
     st.markdown("These factors have the strongest influence on predicting won deals.")
     
-    # Sort by absolute weight
-    feature_weights = feature_weights.sort_values(by='weight', key=abs, ascending=False)
-    
-    # Create horizontal bar chart with enhanced styling
-    fig, ax = plt.subplots(figsize=(10, 8))
-    
-    # Create color map (blue for positive, red for negative)
-    colors = ['#1E88E5' if w >= 0 else '#f44336' for w in feature_weights['weight']]
-    
-    # Limit to top 15 features for readability
-    display_weights = feature_weights.head(15)
-    
-    # Plot data
-    y_pos = np.arange(len(display_weights))
-    ax.barh(y_pos, display_weights['weight'], color=colors)
-    
-    # Customize plot
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(display_weights['feature'])
-    ax.set_xlabel('Weight (positive = increases win probability)')
-    ax.set_title('Top Factors in Lead Scoring Model', fontsize=14, fontweight='bold')
-    ax.grid(axis='x', linestyle='--', alpha=0.7)
-    
-    # Add labels with the actual weight values
-    for i, v in enumerate(display_weights['weight']):
-        label_color = 'black'
-        direction = '+' if v >= 0 else ''  # Add plus sign for positive values for clarity
-        ax.text(v + (0.01 if v >= 0 else -0.01) * max(abs(display_weights['weight'])), 
-                i, 
-                f"{direction}{v:.2f}", 
-                va='center', 
-                ha='left' if v >= 0 else 'right',
-                fontweight='bold',
-                color=label_color)
-    
-    st.pyplot(fig)
+    # Check if feature_weights is a DataFrame with the expected structure
+    if isinstance(feature_weights, pd.DataFrame) and 'weight' in feature_weights.columns and 'feature' in feature_weights.columns:
+        # Sort by absolute weight
+        feature_weights = feature_weights.sort_values(by='weight', key=abs, ascending=False)
+        
+        # Create horizontal bar chart with enhanced styling
+        fig, ax = plt.subplots(figsize=(10, 8))
+        
+        # Limit to top 15 features for readability
+        display_weights = feature_weights.head(15)
+        
+        if not display_weights.empty:
+            # Create color map (blue for positive, red for negative)
+            colors = ['#1E88E5' if w >= 0 else '#f44336' for w in display_weights['weight']]
+            
+            # Plot data
+            y_pos = np.arange(len(display_weights))
+            ax.barh(y_pos, display_weights['weight'], color=colors)
+            
+            # Customize plot
+            ax.set_yticks(y_pos)
+            ax.set_yticklabels(display_weights['feature'])
+            ax.set_xlabel('Weight (positive = increases win probability)')
+            ax.set_title('Top Factors in Lead Scoring Model', fontsize=14, fontweight='bold')
+            ax.grid(axis='x', linestyle='--', alpha=0.7)
+            
+            # Check if there are weights to plot
+            if not display_weights['weight'].empty and max(abs(display_weights['weight'])) > 0:
+                # Add labels with the actual weight values
+                for i, v in enumerate(display_weights['weight']):
+                    label_color = 'black'
+                    direction = '+' if v >= 0 else ''  # Add plus sign for positive values for clarity
+                    ax.text(v + (0.01 if v >= 0 else -0.01) * max(abs(display_weights['weight'])), 
+                            i, 
+                            f"{direction}{v:.2f}", 
+                            va='center', 
+                            ha='left' if v >= 0 else 'right',
+                            fontweight='bold',
+                            color=label_color)
+            
+            st.pyplot(fig)
+        else:
+            st.warning("No feature importance data available to display.")
+    elif isinstance(feature_weights, pd.Series):
+        # Convert series to dataframe for display
+        df_weights = pd.DataFrame({
+            'feature': feature_weights.index,
+            'importance': feature_weights.values
+        }).sort_values(by='importance', ascending=False)
+        
+        st.subheader("Top Features Driving Conversions")
+        st.dataframe(df_weights.head(10), use_container_width=True)
+    else:
+        st.warning("Feature importance data not in expected format. Please regenerate the model.")
     
     # Score distribution plot
     if metrics is not None:
@@ -225,21 +243,32 @@ def render_enhanced_lead_scoring_tab(df):
         st.markdown("This shows how your won and lost leads score in the model, and where the thresholds are set.")
         
         try:
-            # Use our enhanced visualization
-            fig = plot_enhanced_lead_score_visualization(metrics, "Lead Score Distribution by Outcome")
-            st.pyplot(fig)
-            
-            # Add explanation of categories
-            st.markdown("""
-            ### Lead Categories Explanation
-            
-            - **Hot Leads** (Red zone): High probability to close. These leads should be your top priority.
-            - **Warm Leads** (Orange zone): Good potential but need attention. Follow up soon to convert.
-            - **Cool Leads** (Cyan zone): Limited potential but still possible. Worth a follow-up if time permits.
-            - **Cold Leads** (Blue zone): Very unlikely to convert. Consider these low priority.
-            """)
+            # Check if we have the required data for visualization
+            if 'won_scores' not in metrics or 'lost_scores' not in metrics:
+                st.warning("Missing won/lost scores data required for visualization.")
+                # Debug info
+                st.write("Available metrics keys:", list(metrics.keys()))
+            elif len(metrics['won_scores']) == 0 and len(metrics['lost_scores']) == 0:
+                st.warning("Not enough data to plot score distribution. Need more won and lost leads.")
+            else:
+                # Use our enhanced visualization
+                fig = plot_enhanced_lead_score_visualization(metrics, "Lead Score Distribution by Outcome")
+                st.pyplot(fig)
+                
+                # Add explanation of categories
+                st.markdown("""
+                ### Lead Categories Explanation
+                
+                - **Hot Leads** (Red zone): High probability to close. These leads should be your top priority.
+                - **Warm Leads** (Orange zone): Good potential but need attention. Follow up soon to convert.
+                - **Cool Leads** (Cyan zone): Limited potential but still possible. Worth a follow-up if time permits.
+                - **Cold Leads** (Blue zone): Very unlikely to convert. Consider these low priority.
+                """)
         except Exception as e:
             st.error(f"Error plotting score distributions: {str(e)}")
+            # Show stack trace for debugging
+            import traceback
+            st.text(traceback.format_exc())
     
     # Enhanced lead scoring calculator
     st.markdown("### Lead Scoring Calculator")
