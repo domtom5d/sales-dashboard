@@ -14,105 +14,195 @@ import seaborn as sns
 
 def plot_conversion_by_booking_type(df):
     """
-    Plot conversion rates by booking type with enhanced error handling
+    Plot conversion rates by booking type with comprehensive error handling and data cleaning
     
     Args:
         df (DataFrame): Processed dataframe with outcome data
     """
     st.subheader("Conversion by Booking Type")
 
-    # Step 1: Sanitize missing values
-    if 'booking_type' not in df.columns:
-        st.warning("Booking type column not found.")
+    # Step 1: Check for booking_type or event_type columns
+    booking_col = None
+    if 'booking_type' in df.columns:
+        booking_col = 'booking_type'
+    elif 'event_type' in df.columns:
+        booking_col = 'event_type'
+    elif 'clean_booking_type' in df.columns:
+        booking_col = 'clean_booking_type'
+    
+    if booking_col is None:
+        st.warning("No booking type or event type column found in the data.")
         return
 
-    df = df.copy()
-    df = df.dropna(subset=['outcome'])  # Ensure we only use rows with valid outcome
-    df['booking_type'] = df['booking_type'].fillna("Unknown")
-    df['booking_type'] = df['booking_type'].replace("", "Unknown")
-
-    # Step 2: Only proceed if there's more than one type
-    unique_booking_types = df['booking_type'].nunique()
+    # Create a clean copy of the DataFrame
+    clean_df = df.copy()
+    
+    # Ensure we only use rows with valid outcome
+    clean_df = clean_df.dropna(subset=['outcome'])
+    
+    # Fill missing booking types with "Unknown"
+    clean_df[booking_col] = clean_df[booking_col].fillna("Unknown")
+    clean_df[booking_col] = clean_df[booking_col].replace("", "Unknown")
+    
+    # Check if we have enough variation to display
+    unique_booking_types = clean_df[booking_col].nunique()
     if unique_booking_types <= 1:
-        st.info("Not enough booking type variation to display chart.")
+        st.info(f"Not enough {booking_col} variation to display chart.")
         return
 
-    # Step 3: Group low-frequency booking types into "Other"
-    type_counts = df['booking_type'].value_counts()
-    min_count_for_own_category = 3
+    # Group low-frequency booking types into "Other"
+    type_counts = clean_df[booking_col].value_counts()
+    min_count_for_own_category = 5  # Increased threshold for cleaner chart
     low_freq_types = type_counts[type_counts < min_count_for_own_category].index.tolist()
     
+    # Apply grouping to create cleaner visualization
     if low_freq_types:
-        df['booking_type'] = df['booking_type'].apply(
-            lambda x: "Other (Low Volume Types)" if x in low_freq_types else x
+        clean_df[booking_col] = clean_df[booking_col].apply(
+            lambda x: "Other Types" if x in low_freq_types else x
         )
 
-    # Step 4: Compute conversion rate by booking type
+    # Compute conversion rates by booking type
     try:
-        summary = (
-            df.groupby('booking_type', observed=True)['outcome']
-            .value_counts(normalize=False)
-            .unstack(fill_value=0)
-            .reset_index()
-        )
-
-        if 'Won' not in summary.columns:
-            summary['Won'] = 0
-        if 'Lost' not in summary.columns:
-            summary['Lost'] = 0
-
-        summary['Total'] = summary['Won'] + summary['Lost']
+        # Check if we have boolean outcome or string outcome
+        is_bool_outcome = clean_df['outcome'].dtype == bool
+        
+        if is_bool_outcome:
+            # Process with boolean outcome (True/False)
+            summary = (
+                clean_df.groupby(booking_col)['outcome']
+                .agg(['sum', 'count'])
+                .reset_index()
+            )
+            summary.columns = [booking_col, 'Won', 'Total']
+            summary['Lost'] = summary['Total'] - summary['Won']
+        else:
+            # Process with string outcome (Won/Lost)
+            # Handle case-insensitive by converting to lowercase first
+            clean_df['outcome_str'] = clean_df['outcome'].astype(str).str.lower()
+            
+            # Count by outcome value
+            summary = clean_df.groupby(booking_col)['outcome_str'].value_counts().unstack(fill_value=0)
+            
+            # Reset index to make it a regular DataFrame
+            summary = summary.reset_index()
+            
+            # Ensure we have 'won' and 'lost' columns
+            for outcome_value in ['won', 'lost', 'true', 'false', '1', '0']:
+                if outcome_value in summary.columns:
+                    if outcome_value in ['won', 'true', '1']:
+                        summary['Won'] = summary[outcome_value]
+                    elif outcome_value in ['lost', 'false', '0']:
+                        summary['Lost'] = summary[outcome_value]
+            
+            # If 'Won' or 'Lost' columns still don't exist, create them
+            if 'Won' not in summary.columns:
+                summary['Won'] = 0
+            if 'Lost' not in summary.columns:
+                summary['Lost'] = 0
+            
+            # Calculate total
+            summary['Total'] = summary['Won'] + summary['Lost']
+        
+        # Calculate conversion rate
         summary['Conversion Rate'] = summary['Won'] / summary['Total']
         
         # Filter booking types with too few leads
-        min_count = 3  # Minimum leads per category
-        summary = summary[summary['Total'] >= min_count]
+        min_count_for_display = 5  # Minimum leads per category to display
+        summary = summary[summary['Total'] >= min_count_for_display]
         
+        # Check if we have enough data after filtering
         if summary.empty or summary['Conversion Rate'].nunique() <= 1:
-            st.info("Not enough data per booking type to display meaningful comparisons.")
+            st.info(f"Not enough data per {booking_col} to display meaningful comparisons.")
             return
 
-        # Step 5: Plot using Altair
-        chart = alt.Chart(summary).mark_bar().encode(
-            x=alt.X('booking_type:N', title='Booking Type', sort='-y'),
+        # Create Altair chart
+        chart_data = pd.DataFrame({
+            'Booking Type': summary[booking_col],
+            'Conversion Rate': summary['Conversion Rate'],
+            'Total Leads': summary['Total'],
+            'Won Deals': summary['Won'],
+            'Lost Deals': summary['Lost']
+        })
+        
+        # Sort by conversion rate for better visualization
+        chart_data = chart_data.sort_values('Conversion Rate', ascending=False)
+        
+        # Create color scale based on conversion rate
+        color_scale = alt.Scale(
+            domain=[0, chart_data['Conversion Rate'].max()],
+            range=['#a1c9f4', '#ff9f9b']  # Light blue to light red
+        )
+        
+        # Create the chart with enhanced aesthetics
+        chart = alt.Chart(chart_data).mark_bar().encode(
+            x=alt.X('Booking Type:N', title=f'{booking_col.replace("_", " ").title()}', sort='-y'),
             y=alt.Y('Conversion Rate:Q', title='Conversion Rate', axis=alt.Axis(format='.0%')),
-            tooltip=['booking_type', alt.Tooltip('Conversion Rate:Q', format='.1%'), 'Total']
+            color=alt.Color('Conversion Rate:Q', scale=color_scale),
+            tooltip=[
+                'Booking Type',
+                alt.Tooltip('Conversion Rate:Q', format='.1%', title='Conversion Rate'),
+                alt.Tooltip('Total Leads:Q', title='Total Leads'),
+                alt.Tooltip('Won Deals:Q', title='Won Deals'),
+                alt.Tooltip('Lost Deals:Q', title='Lost Deals')
+            ]
         ).properties(
             width=600,
             height=400
         )
-
+        
+        # Display the chart
         st.altair_chart(chart, use_container_width=True)
 
-        # Step 6: Show top insights - exclude Unknown from highlights unless it's >20% of data
+        # Show insights about best and worst performers
         if summary['Conversion Rate'].nunique() > 1:
-            # Filter out "Unknown" for best/worst calculations unless it's >20% of data
-            summary_for_insights = summary.copy()
-            unknown_row = summary_for_insights[summary_for_insights['booking_type'] == "Unknown"]
-            if not unknown_row.empty and unknown_row.iloc[0]['Total'] < (summary_for_insights['Total'].sum() * 0.2):
-                summary_for_insights = summary_for_insights[summary_for_insights['booking_type'] != "Unknown"]
+            # Filter out "Unknown" for insights unless it's >20% of data
+            insights_data = summary.copy()
+            unknown_row = insights_data[insights_data[booking_col] == "Unknown"]
+            if not unknown_row.empty and unknown_row.iloc[0]['Total'] < (insights_data['Total'].sum() * 0.2):
+                insights_data = insights_data[insights_data[booking_col] != "Unknown"]
             
-            if not summary_for_insights.empty:
-                best = summary_for_insights.sort_values('Conversion Rate', ascending=False).iloc[0]
-                worst = summary_for_insights.sort_values('Conversion Rate', ascending=True).iloc[0]
+            # Also filter out "Other Types" for cleaner insights
+            insights_data = insights_data[insights_data[booking_col] != "Other Types"]
+            
+            if not insights_data.empty:
+                # Find best and worst performers
+                best = insights_data.sort_values('Conversion Rate', ascending=False).iloc[0]
+                worst = insights_data.sort_values('Conversion Rate', ascending=True).iloc[0]
+                
+                # Calculate average conversion rate
                 avg_rate = summary['Won'].sum() / summary['Total'].sum()
                 
-                # Calculate multiples vs average
+                # Calculate performance relative to average
                 best_multiple = best['Conversion Rate'] / avg_rate if avg_rate > 0 else 0
+                worst_multiple = worst['Conversion Rate'] / avg_rate if avg_rate > 0 else 0
                 
-                if best['booking_type'] != "Unknown":
+                # Display insights with better formatting
+                st.markdown("### Key Insights")
+                
+                # Best performer insight
+                st.markdown(
+                    f"**Top Performer:** {best[booking_col]} converts at **{best['Conversion Rate']:.1%}** "
+                    f"({best_multiple:.1f}x better than average)"
+                )
+                
+                # Worst performer insight (only if different from best)
+                if best[booking_col] != worst[booking_col]:
                     st.markdown(
-                        f"Booking type **{best['booking_type']}** converts at **{best['Conversion Rate']:.1%}**, "
-                        f"**{best_multiple:.1f}x** better than the average (**{avg_rate:.1%}**)."
+                        f"**Lowest Performer:** {worst[booking_col]} converts at **{worst['Conversion Rate']:.1%}** "
+                        f"({worst_multiple:.1f}x the average)"
                     )
                 
-                if best['booking_type'] != worst['booking_type'] and worst['booking_type'] != "Unknown":
+                # Add recommendation if there's a significant difference
+                if best_multiple > 1.5:
                     st.markdown(
-                        f"Booking type **{worst['booking_type']}** has the lowest conversion at only **{worst['Conversion Rate']:.1%}**."
+                        f"**Recommendation:** Consider focusing more resources on {best[booking_col]} events "
+                        f"as they convert {best_multiple:.1f}x better than average."
                     )
         
     except Exception as e:
         st.error(f"Error generating booking type chart: {str(e)}")
+        import traceback
+        st.text(traceback.format_exc())
 
 
 def plot_conversion_by_referral_source(df):
