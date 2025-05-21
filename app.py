@@ -16,6 +16,8 @@ from database import import_leads_data, import_operations_data, initialize_db_if
 from data_manager import load_data, apply_filters
 from utils import calculate_conversion_rates, calculate_correlations
 from derive_scorecard import generate_lead_scorecard, score_lead
+from enhanced_lead_scoring import train_enhanced_lead_scoring_model, score_lead_enhanced
+from enhanced_lead_scoring_tab import render_enhanced_lead_scoring_tab
 from conversion import analyze_phone_matches, analyze_time_to_conversion
 from evaluate import (
     calculate_model_metrics, 
@@ -342,10 +344,11 @@ if 'processed_df' in st.session_state and st.session_state.processed_df is not N
     st.session_state['filtered_df'] = filtered_df
     
     # Create tabs for different analysis views
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+    tab1, tab2, tab3, tab3b, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
         "📊 Conversion Analysis", 
         "🔍 Feature Correlation", 
         "🤖 Lead Scoring", 
+        "🔥 Enhanced Scoring",
         "🗃️ Raw Data",
         "📈 Key Findings",
         "🛈 Explanations",
@@ -410,6 +413,17 @@ if 'processed_df' in st.session_state and st.session_state.processed_df is not N
             
         except Exception as e:
             st.error(f"Error in Lead Scoring tab: {str(e)}")
+            import traceback
+            st.text(traceback.format_exc())
+    
+    # Tab 3b: Enhanced Lead Scoring
+    with tab3b:
+        try:
+            # Call the enhanced lead scoring implementation
+            render_enhanced_lead_scoring_tab(filtered_df)
+            
+        except Exception as e:
+            st.error(f"Error in Enhanced Lead Scoring tab: {str(e)}")
             import traceback
             st.text(traceback.format_exc())
 
