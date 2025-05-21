@@ -215,28 +215,45 @@ def plot_timing_factors(df):
         st.info("No data available for timing analysis")
         return
     
+    # Create a clean copy to work with
+    clean_df = df.copy()
+    
     # Check if we have the necessary columns
-    has_days_until = 'days_until_event' in df.columns and 'outcome' in df.columns
-    has_days_since = 'days_since_inquiry' in df.columns and 'outcome' in df.columns
-    has_weekday = 'inquiry_date' in df.columns and 'outcome' in df.columns
+    # Support multiple column name variations
+    has_days_until = (('days_until_event' in clean_df.columns or 'days_until' in clean_df.columns) 
+                      and 'outcome' in clean_df.columns)
+    has_days_since = (('days_since_inquiry' in clean_df.columns or 'days_since' in clean_df.columns) 
+                       and 'outcome' in clean_df.columns)
+    has_weekday = 'inquiry_date' in clean_df.columns and 'outcome' in clean_df.columns
     
     if not (has_days_until or has_days_since or has_weekday):
-        st.info("Timing data not available. Missing days_until_event, days_since_inquiry, or inquiry_date columns.")
+        st.info("Timing data not available. Missing days until event, days since inquiry, or inquiry date columns.")
         return
-        
+    
+    # Standardize column names for consistency
+    if 'days_until' in clean_df.columns and 'days_until_event' not in clean_df.columns:
+        clean_df['days_until_event'] = clean_df['days_until']
+    if 'days_since' in clean_df.columns and 'days_since_inquiry' not in clean_df.columns:
+        clean_df['days_since_inquiry'] = clean_df['days_since']
+    
     # Count valid entries for each time factor
     valid_counts = {}
     if has_days_until:
-        valid_counts['days_until'] = df[df['days_until_event'].notna() & np.isfinite(df['days_until_event'])].shape[0]
+        days_until_col = 'days_until_event' if 'days_until_event' in clean_df.columns else 'days_until'
+        valid_counts['days_until'] = clean_df[clean_df[days_until_col].notna() & 
+                                            np.isfinite(clean_df[days_until_col])].shape[0]
     if has_days_since:
-        valid_counts['days_since'] = df[df['days_since_inquiry'].notna() & np.isfinite(df['days_since_inquiry'])].shape[0]
+        days_since_col = 'days_since_inquiry' if 'days_since_inquiry' in clean_df.columns else 'days_since'
+        valid_counts['days_since'] = clean_df[clean_df[days_since_col].notna() & 
+                                            np.isfinite(clean_df[days_since_col])].shape[0]
     if has_weekday:
-        valid_counts['weekday'] = df[df['inquiry_date'].notna()].shape[0]
-    
-    # Show overview of available data
-    st.markdown("**Available Time Factor Data:**")
-    for factor, count in valid_counts.items():
-        st.markdown(f"- {factor}: {count} valid entries")
+        valid_counts['weekday'] = clean_df[clean_df['inquiry_date'].notna()].shape[0]
+        
+    # Show overview of available data (only if we have data to show)
+    if valid_counts:
+        st.markdown("**Available Time Factor Data:**")
+        for factor, count in valid_counts.items():
+            st.markdown(f"- {factor}: {count} valid entries")
     
     # Require at least 5 valid entries for meaningful analysis
     min_required = 5
