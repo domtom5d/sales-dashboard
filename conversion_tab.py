@@ -265,77 +265,102 @@ def plot_timing_factors(df):
     # Create two columns layout for better organization
     col1, col2 = st.columns(2)
     
-    # Days until event analysis
-    if has_days_until:
-        st.markdown("#### Conversion by Days Until Event")
-        try:
-            # Make a copy and filter out NaN/Inf values
-            valid_df = df[df['days_until_event'].notna() & np.isfinite(df['days_until_event'])].copy()
-            
-            if len(valid_df) > 0:
-                if 'days_until_bin' in df.columns:
-                    # Use the pre-binned column
-                    plot_conversion_by_category(valid_df, 'days_until_bin', 'Days Until Event', sort_by='natural')
-                else:
-                    # Create bins manually
-                    bins = [0, 30, 90, 180, 365, float('inf')]
-                    labels = ['< 30 days', '30-90 days', '90-180 days', '180-365 days', '365+ days']
-                    valid_df['days_until_bin'] = pd.cut(valid_df['days_until_event'], bins=bins, labels=labels)
-                    
-                    # Additional check to ensure no NaN values in the binned column
-                    valid_df = valid_df.dropna(subset=['days_until_bin'])
-                    if len(valid_df) > 0:
-                        plot_conversion_by_category(valid_df, 'days_until_bin', 'Days Until Event', sort_by='natural')
-                    else:
-                        st.info("Not enough valid data for days until event analysis")
-            else:
-                st.info("Not enough valid data for days until event analysis")
-        except Exception as e:
-            st.error(f"Error in days until event analysis: {str(e)}")
+    # Days until event analysis - using improved visualization module
+    with col1:
+        if has_days_until:
+            # Use the improved visualization function with better error handling and insights
+            from improved_visualizations import plot_conversion_by_days_until_event
+            plot_conversion_by_days_until_event(clean_df)
     
-    # Days since inquiry analysis
-    if has_days_since:
-        st.markdown("#### Conversion by Days Since Inquiry")
-        try:
-            # Filter out any NaN or infinite values
-            valid_df = df[df['days_since_inquiry'].notna() & np.isfinite(df['days_since_inquiry'])].copy()
-            
-            if len(valid_df) > 0:
-                bins = [0, 7, 14, 30, 60, float('inf')]
-                labels = ['< 7 days', '7-14 days', '14-30 days', '30-60 days', '60+ days']
-                valid_df['days_since_bin'] = pd.cut(valid_df['days_since_inquiry'], bins=bins, labels=labels)
-                
-                # Additional check to ensure no NaN values in the binned column
-                valid_df = valid_df.dropna(subset=['days_since_bin'])
-                if len(valid_df) > 0:
-                    plot_conversion_by_category(valid_df, 'days_since_bin', 'Days Since Inquiry', sort_by='natural')
-                else:
-                    st.info("Not enough valid data for days since inquiry analysis")
-            else:
-                st.info("Not enough valid data for days since inquiry analysis")
-        except Exception as e:
-            st.error(f"Error in days since inquiry analysis: {str(e)}")
-            import traceback
-            st.text(traceback.format_exc())
+    # Days since inquiry analysis - using improved visualization module
+    with col2:
+        if has_days_since:
+            # Use the improved visualization function with better error handling and insights
+            from improved_visualizations import plot_conversion_by_days_since_inquiry
+            plot_conversion_by_days_since_inquiry(clean_df)
     
-    # Weekday analysis
+    # Weekday analysis with improved visualization
     if has_weekday:
-        st.markdown("#### Conversion by Day of Week")
+        st.markdown("### Conversion by Day of Week")
         try:
-            # Filter out any NaN values in inquiry_date
-            valid_df = df.dropna(subset=['inquiry_date']).copy()
+            # Clean data for weekday analysis
+            weekday_df = clean_df.dropna(subset=['inquiry_date', 'outcome']).copy()
             
-            if len(valid_df) > 0:
-                valid_df['weekday'] = valid_df['inquiry_date'].dt.day_name()
-                weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            # Ensure inquiry_date is datetime
+            if not pd.api.types.is_datetime64_any_dtype(weekday_df['inquiry_date']):
+                weekday_df['inquiry_date'] = pd.to_datetime(weekday_df['inquiry_date'], errors='coerce')
+                weekday_df = weekday_df.dropna(subset=['inquiry_date'])  # Remove rows where conversion failed
+            
+            if len(weekday_df) >= 5:  # Minimum required for analysis
+                # Extract weekday
+                weekday_df['weekday'] = weekday_df['inquiry_date'].dt.day_name()
                 
-                # Check if any weekday values were created
-                if valid_df['weekday'].notna().any():
-                    plot_conversion_by_category(valid_df, 'weekday', 'Day of Week', sort_by='custom', custom_order=weekday_order)
+                # Group and calculate conversion rates
+                grouped = weekday_df.groupby('weekday')['outcome'].value_counts(normalize=False).unstack(fill_value=0)
+                
+                # Ensure columns exist
+                if 'Won' not in grouped.columns:
+                    grouped['Won'] = 0
+                if 'Lost' not in grouped.columns:
+                    grouped['Lost'] = 0
+                
+                grouped['Total'] = grouped['Won'] + grouped['Lost']
+                grouped['Conversion Rate'] = grouped['Won'] / grouped['Total'].replace(0, float('nan'))
+                
+                # Re-order based on day of week
+                days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                
+                # Prepare data for chart
+                chart_data = pd.DataFrame({
+                    'Day of Week': grouped.index,
+                    'Conversion Rate': grouped['Conversion Rate'].values,
+                    'Total Leads': grouped['Total'].values,
+                    'Won Deals': grouped['Won'].values
+                })
+                
+                # Create Altair chart
+                chart = alt.Chart(chart_data).mark_bar().encode(
+                    x=alt.X('Day of Week:N', title='Day of Week', sort=days_order),
+                    y=alt.Y('Conversion Rate:Q', title='Conversion Rate', axis=alt.Axis(format='.0%')),
+                    tooltip=[
+                        'Day of Week',
+                        alt.Tooltip('Conversion Rate:Q', format='.1%'),
+                        'Total Leads',
+                        'Won Deals'
+                    ]
+                ).properties(height=400)
+                
+                st.altair_chart(chart, use_container_width=True)
+                
+                # Show best/worst with improved formatting
+                if not grouped['Conversion Rate'].isna().all():
+                    # Filter out days with insufficient data (less than 5 leads)
+                    valid_days = grouped[grouped['Total'] >= 5]
+                    valid_days = valid_days.dropna(subset=['Conversion Rate'])
+                    
+                    if not valid_days.empty:
+                        best_idx = valid_days['Conversion Rate'].idxmax()
+                        worst_idx = valid_days['Conversion Rate'].idxmin()
+                        
+                        best_rate = valid_days.loc[best_idx, 'Conversion Rate']
+                        worst_rate = valid_days.loc[worst_idx, 'Conversion Rate']
+                        
+                        # Calculate average conversion rate
+                        avg_rate = valid_days['Won'].sum() / valid_days['Total'].sum()
+                        
+                        # Format insights clearly (avoid showing "Unknown" categories)
+                        if best_idx != "Unknown":
+                            st.markdown(f"**Top Day:** {best_idx} ({best_rate:.1%} conversion)")
+                        
+                        if worst_idx != "Unknown" and worst_idx != best_idx:
+                            st.markdown(f"**Lowest Day:** {worst_idx} ({worst_rate:.1%} conversion)")
+                        
+                        # Add comparison to average
+                        st.markdown(f"**Average:** {avg_rate:.1%} conversion across all days")
                 else:
-                    st.info("Could not determine weekdays from inquiry dates")
+                    st.info("Not enough data to calculate meaningful conversion rates by day of week.")
             else:
-                st.info("Not enough valid inquiry dates for weekday analysis")
+                st.info("Not enough valid dates to analyze day of week.")
         except Exception as e:
             st.error(f"Error in weekday analysis: {str(e)}")
             import traceback
