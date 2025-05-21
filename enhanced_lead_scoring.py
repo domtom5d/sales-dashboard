@@ -682,8 +682,18 @@ def plot_enhanced_lead_score_visualization(metrics, title="Lead Score Distributi
     # Create figure and axes
     fig, ax = plt.subplots(figsize=(10, 6))
     
-    # Get thresholds
-    thresholds = metrics.get('thresholds', {'hot': 0.7, 'warm': 0.5, 'cool': 0.3})
+    # Get thresholds - ensure we have a proper dictionary with required keys
+    default_thresholds = {'hot': 0.7, 'warm': 0.5, 'cool': 0.3}
+    thresholds = metrics.get('thresholds', default_thresholds)
+    
+    # Check if thresholds is not a dictionary or missing required keys
+    if not isinstance(thresholds, dict):
+        thresholds = default_thresholds
+    
+    # Ensure all required threshold keys exist
+    for key in ['hot', 'warm', 'cool']:
+        if key not in thresholds:
+            thresholds[key] = default_thresholds[key]
     
     # Plot distributions
     bins = np.linspace(0, 1, 20)
