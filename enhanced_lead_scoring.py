@@ -331,8 +331,22 @@ def train_enhanced_lead_scoring_model(df):
     X = df_copy[available_features].copy()
     y = df_copy['outcome']
     
-    # Fill missing values
-    X = X.fillna(X.median())
+    # Handle categorical columns and fill missing values properly
+    for col in X.columns:
+        # Check if column contains non-numeric data
+        if X[col].dtype == 'object' or pd.api.types.is_categorical_dtype(X[col]):
+            # For categorical data, fill with most frequent value
+            most_frequent = X[col].mode()[0] if not X[col].mode().empty else "Unknown"
+            X[col] = X[col].fillna(most_frequent)
+            
+            # Convert categorical features to numeric using one-hot encoding
+            if X[col].nunique() <= 10:  # Only encode if reasonable number of categories
+                # Create dummy variables and drop the original column
+                dummies = pd.get_dummies(X[col], prefix=col, drop_first=True)
+                X = pd.concat([X.drop(col, axis=1), dummies], axis=1)
+        else:
+            # For numeric columns, fill with median
+            X[col] = X[col].fillna(X[col].median())
     
     # Standardize features
     scaler = StandardScaler()
