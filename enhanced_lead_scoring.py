@@ -333,8 +333,59 @@ def train_enhanced_lead_scoring_model(df):
     
     # Handle categorical columns and fill missing values properly
     for col in X.columns:
-        # Check if column contains non-numeric data
-        if X[col].dtype == 'object' or pd.api.types.is_categorical_dtype(X[col]):
+        # Special handling for month names if present
+        if col in ['event_month', 'EventMonth'] and X[col].dtype == 'object':
+            # Convert month names to numeric values
+            month_mapping = {
+                'January': 1, 'February': 2, 'March': 3, 'April': 4,
+                'May': 5, 'June': 6, 'July': 7, 'August': 8,
+                'September': 9, 'October': 10, 'November': 11, 'December': 12
+            }
+            # Apply the mapping, preserving NaN values
+            X[col] = X[col].map(lambda x: month_mapping.get(x, x) if pd.notna(x) else x)
+            
+            # For any remaining non-numeric values, use one-hot encoding
+            if X[col].dtype == 'object':
+                # Fill missing values with median or most common value
+                if X[col].mode().size > 0:
+                    mode_value = X[col].mode()[0]
+                    X[col] = X[col].fillna(mode_value)
+                    # Create dummy variables if needed (less than 10 unique values)
+                    if X[col].nunique() <= 10:
+                        dummies = pd.get_dummies(X[col], prefix=col, drop_first=True)
+                        X = pd.concat([X.drop(col, axis=1), dummies], axis=1)
+                else:
+                    # If no mode, use 6 (middle of year) as default
+                    X[col] = X[col].fillna(6)
+            else:
+                # Now it's numeric, fill missing with median
+                X[col] = pd.to_numeric(X[col], errors='coerce')
+                X[col] = X[col].fillna(X[col].median())
+        
+        # Special handling for seasons if present
+        elif col in ['event_season', 'EventSeason'] and X[col].dtype == 'object':
+            # Convert season names to numeric
+            season_mapping = {
+                'Winter': 1, 'Spring': 2, 'Summer': 3, 'Fall': 4, 'Autumn': 4
+            }
+            # Apply the mapping, preserving NaN values
+            X[col] = X[col].map(lambda x: season_mapping.get(x, x) if pd.notna(x) else x)
+            
+            # Handle remaining non-numeric values
+            if X[col].dtype == 'object':
+                # Fill missing and use one-hot encoding if needed
+                most_frequent = X[col].mode()[0] if not X[col].mode().empty else "Unknown"
+                X[col] = X[col].fillna(most_frequent)
+                if X[col].nunique() <= 10:
+                    dummies = pd.get_dummies(X[col], prefix=col, drop_first=True)
+                    X = pd.concat([X.drop(col, axis=1), dummies], axis=1)
+            else:
+                # Now it's numeric, fill missing with median
+                X[col] = pd.to_numeric(X[col], errors='coerce')
+                X[col] = X[col].fillna(X[col].median())
+                
+        # Standard handling for other categorical columns
+        elif X[col].dtype == 'object' or pd.api.types.is_categorical_dtype(X[col]):
             # For categorical data, fill with most frequent value
             most_frequent = X[col].mode()[0] if not X[col].mode().empty else "Unknown"
             X[col] = X[col].fillna(most_frequent)
