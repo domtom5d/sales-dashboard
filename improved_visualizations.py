@@ -27,6 +27,7 @@ def plot_conversion_by_booking_type(df):
         return
 
     df = df.copy()
+    df = df.dropna(subset=['outcome'])  # Ensure we only use rows with valid outcome
     df['booking_type'] = df['booking_type'].fillna("Unknown")
     df['booking_type'] = df['booking_type'].replace("", "Unknown")
 
@@ -36,10 +37,20 @@ def plot_conversion_by_booking_type(df):
         st.info("Not enough booking type variation to display chart.")
         return
 
-    # Step 3: Compute conversion rate by booking type
+    # Step 3: Group low-frequency booking types into "Other"
+    type_counts = df['booking_type'].value_counts()
+    min_count_for_own_category = 3
+    low_freq_types = type_counts[type_counts < min_count_for_own_category].index.tolist()
+    
+    if low_freq_types:
+        df['booking_type'] = df['booking_type'].apply(
+            lambda x: "Other (Low Volume Types)" if x in low_freq_types else x
+        )
+
+    # Step 4: Compute conversion rate by booking type
     try:
         summary = (
-            df.groupby('booking_type')['outcome']
+            df.groupby('booking_type', observed=True)['outcome']
             .value_counts(normalize=False)
             .unstack(fill_value=0)
             .reset_index()
@@ -61,9 +72,9 @@ def plot_conversion_by_booking_type(df):
             st.info("Not enough data per booking type to display meaningful comparisons.")
             return
 
-        # Step 4: Plot using Altair
+        # Step 5: Plot using Altair
         chart = alt.Chart(summary).mark_bar().encode(
-            x=alt.X('booking_type:N', title='Booking Type'),
+            x=alt.X('booking_type:N', title='Booking Type', sort='-y'),
             y=alt.Y('Conversion Rate:Q', title='Conversion Rate', axis=alt.Axis(format='.0%')),
             tooltip=['booking_type', alt.Tooltip('Conversion Rate:Q', format='.1%'), 'Total']
         ).properties(
@@ -73,16 +84,32 @@ def plot_conversion_by_booking_type(df):
 
         st.altair_chart(chart, use_container_width=True)
 
-        # Step 5: Show top insights
+        # Step 6: Show top insights - exclude Unknown from highlights unless it's >20% of data
         if summary['Conversion Rate'].nunique() > 1:
-            best = summary.sort_values('Conversion Rate', ascending=False).iloc[0]
-            worst = summary.sort_values('Conversion Rate', ascending=True).iloc[0]
-            delta = best['Conversion Rate'] - worst['Conversion Rate']
-            st.markdown(
-                f"**{best['booking_type']}** has the highest conversion rate at **{best['Conversion Rate']:.1%}**, "
-                f"compared to **{worst['booking_type']}** at **{worst['Conversion Rate']:.1%}** "
-                f"(**{delta:.1%}** difference)."
-            )
+            # Filter out "Unknown" for best/worst calculations unless it's >20% of data
+            summary_for_insights = summary.copy()
+            unknown_row = summary_for_insights[summary_for_insights['booking_type'] == "Unknown"]
+            if not unknown_row.empty and unknown_row.iloc[0]['Total'] < (summary_for_insights['Total'].sum() * 0.2):
+                summary_for_insights = summary_for_insights[summary_for_insights['booking_type'] != "Unknown"]
+            
+            if not summary_for_insights.empty:
+                best = summary_for_insights.sort_values('Conversion Rate', ascending=False).iloc[0]
+                worst = summary_for_insights.sort_values('Conversion Rate', ascending=True).iloc[0]
+                avg_rate = summary['Won'].sum() / summary['Total'].sum()
+                
+                # Calculate multiples vs average
+                best_multiple = best['Conversion Rate'] / avg_rate if avg_rate > 0 else 0
+                
+                if best['booking_type'] != "Unknown":
+                    st.markdown(
+                        f"Booking type **{best['booking_type']}** converts at **{best['Conversion Rate']:.1%}**, "
+                        f"**{best_multiple:.1f}x** better than the average (**{avg_rate:.1%}**)."
+                    )
+                
+                if best['booking_type'] != worst['booking_type'] and worst['booking_type'] != "Unknown":
+                    st.markdown(
+                        f"Booking type **{worst['booking_type']}** has the lowest conversion at only **{worst['Conversion Rate']:.1%}**."
+                    )
         
     except Exception as e:
         st.error(f"Error generating booking type chart: {str(e)}")
@@ -102,13 +129,25 @@ def plot_conversion_by_referral_source(df):
         return
 
     df = df.copy()
+    df = df.dropna(subset=['outcome'])  # Ensure we only use rows with valid outcome
     df['referral_source'] = df['referral_source'].fillna("Unknown").replace("", "Unknown")
+    
     if df['referral_source'].nunique() <= 1:
         st.info("Not enough referral source variation to display chart.")
         return
+    
+    # Group low-frequency referral sources into "Other"
+    source_counts = df['referral_source'].value_counts()
+    min_count_for_own_category = 5  # Higher threshold for referral sources as they tend to be more numerous
+    low_freq_sources = source_counts[source_counts < min_count_for_own_category].index.tolist()
+    
+    if low_freq_sources:
+        df['referral_source'] = df['referral_source'].apply(
+            lambda x: "Other Sources" if x in low_freq_sources else x
+        )
 
     try:
-        summary = df.groupby('referral_source')['outcome'].value_counts().unstack(fill_value=0).reset_index()
+        summary = df.groupby('referral_source', observed=True)['outcome'].value_counts().unstack(fill_value=0).reset_index()
 
         # Handle cases where won/lost might not exist
         if 'Won' not in summary.columns:
@@ -127,6 +166,7 @@ def plot_conversion_by_referral_source(df):
             st.info("Not enough data per referral source to display meaningful comparisons.")
             return
 
+        # Sort by conversion rate for better visualization
         chart = alt.Chart(summary).mark_bar().encode(
             x=alt.X('referral_source:N', title='Referral Source', sort='-y'),
             y=alt.Y('Conversion Rate:Q', title='Conversion Rate', axis=alt.Axis(format='.0%')),
@@ -135,11 +175,34 @@ def plot_conversion_by_referral_source(df):
 
         st.altair_chart(chart, use_container_width=True)
 
+        # Show top insights - exclude Unknown from highlights unless it's >20% of data
         if summary['Conversion Rate'].nunique() > 1:
-            best = summary.sort_values('Conversion Rate', ascending=False).iloc[0]
-            worst = summary.sort_values('Conversion Rate', ascending=True).iloc[0]
-            st.markdown(f"**{best['referral_source']}** has the highest conversion rate at **{best['Conversion Rate']:.1%}**, "
-                      f"while **{worst['referral_source']}** has the lowest at **{worst['Conversion Rate']:.1%}**.")
+            # Filter out "Unknown" for best/worst calculations unless it's >20% of data
+            summary_for_insights = summary.copy()
+            unknown_row = summary_for_insights[summary_for_insights['referral_source'] == "Unknown"]
+            if not unknown_row.empty and unknown_row.iloc[0]['Total'] < (summary_for_insights['Total'].sum() * 0.2):
+                summary_for_insights = summary_for_insights[summary_for_insights['referral_source'] != "Unknown"]
+            
+            if not summary_for_insights.empty:
+                best = summary_for_insights.sort_values('Conversion Rate', ascending=False).iloc[0]
+                worst = summary_for_insights.sort_values('Conversion Rate', ascending=True).iloc[0]
+                avg_rate = summary['Won'].sum() / summary['Total'].sum()
+                
+                # Calculate multiples vs average
+                best_multiple = best['Conversion Rate'] / avg_rate if avg_rate > 0 else 0
+                
+                if best['referral_source'] != "Unknown" and best['referral_source'] != "Other Sources":
+                    st.markdown(
+                        f"Referral source **{best['referral_source']}** converts at **{best['Conversion Rate']:.1%}**, "
+                        f"**{best_multiple:.1f}x** better than the average (**{avg_rate:.1%}**)."
+                    )
+                
+                if (best['referral_source'] != worst['referral_source'] 
+                    and worst['referral_source'] != "Unknown" 
+                    and worst['referral_source'] != "Other Sources"):
+                    st.markdown(
+                        f"Referral source **{worst['referral_source']}** has the lowest conversion at only **{worst['Conversion Rate']:.1%}**."
+                    )
     except Exception as e:
         st.error(f"Error generating referral source chart: {str(e)}")
 
@@ -158,13 +221,25 @@ def plot_conversion_by_event_type(df):
         return
 
     df = df.copy()
+    df = df.dropna(subset=['outcome'])  # Ensure we only use rows with valid outcome
     df['event_type'] = df['event_type'].fillna("Unknown").replace("", "Unknown")
+    
     if df['event_type'].nunique() <= 1:
         st.info("Not enough event type variation to display chart.")
         return
+    
+    # Group low-frequency event types into "Other"
+    type_counts = df['event_type'].value_counts()
+    min_count_for_own_category = 4
+    low_freq_types = type_counts[type_counts < min_count_for_own_category].index.tolist()
+    
+    if low_freq_types:
+        df['event_type'] = df['event_type'].apply(
+            lambda x: "Other Event Types" if x in low_freq_types else x
+        )
 
     try:
-        summary = df.groupby('event_type')['outcome'].value_counts().unstack(fill_value=0).reset_index()
+        summary = df.groupby('event_type', observed=True)['outcome'].value_counts().unstack(fill_value=0).reset_index()
         
         if 'Won' not in summary.columns:
             summary['Won'] = 0
@@ -190,11 +265,35 @@ def plot_conversion_by_event_type(df):
 
         st.altair_chart(chart, use_container_width=True)
 
+        # Show top insights - exclude Unknown from highlights unless it's >20% of data
         if summary['Conversion Rate'].nunique() > 1:
-            best = summary.sort_values('Conversion Rate', ascending=False).iloc[0]
-            worst = summary.sort_values('Conversion Rate', ascending=True).iloc[0]
-            st.markdown(f"**{best['event_type']}** has the highest conversion rate at **{best['Conversion Rate']:.1%}**, "
-                      f"while **{worst['event_type']}** has the lowest at **{worst['Conversion Rate']:.1%}**.")
+            # Filter out "Unknown" for best/worst calculations unless it's >20% of data
+            summary_for_insights = summary.copy()
+            unknown_row = summary_for_insights[summary_for_insights['event_type'] == "Unknown"]
+            if not unknown_row.empty and unknown_row.iloc[0]['Total'] < (summary_for_insights['Total'].sum() * 0.2):
+                summary_for_insights = summary_for_insights[summary_for_insights['event_type'] != "Unknown"]
+            
+            # Also filter out the "Other" category for insights
+            summary_for_insights = summary_for_insights[summary_for_insights['event_type'] != "Other Event Types"]
+            
+            if not summary_for_insights.empty:
+                best = summary_for_insights.sort_values('Conversion Rate', ascending=False).iloc[0]
+                worst = summary_for_insights.sort_values('Conversion Rate', ascending=True).iloc[0]
+                avg_rate = summary['Won'].sum() / summary['Total'].sum()
+                
+                # Calculate multiples vs average
+                best_multiple = best['Conversion Rate'] / avg_rate if avg_rate > 0 else 0
+                
+                if best['event_type'] != "Unknown":
+                    st.markdown(
+                        f"Event type **{best['event_type']}** converts at **{best['Conversion Rate']:.1%}**, "
+                        f"**{best_multiple:.1f}x** better than the average (**{avg_rate:.1%}**)."
+                    )
+                
+                if best['event_type'] != worst['event_type'] and worst['event_type'] != "Unknown":
+                    st.markdown(
+                        f"Event type **{worst['event_type']}** has the lowest conversion at only **{worst['Conversion Rate']:.1%}**."
+                    )
     except Exception as e:
         st.error(f"Error generating event type chart: {str(e)}")
 
@@ -208,21 +307,28 @@ def plot_conversion_by_days_until_event(df):
     """
     st.subheader("Conversion by Days Until Event")
 
-    if 'days_until_event' not in df.columns:
-        st.warning("Column 'days_until_event' not found.")
+    # Check for column name variations: days_until or days_until_event
+    days_column = None
+    if 'days_until_event' in df.columns:
+        days_column = 'days_until_event'
+    elif 'days_until' in df.columns:
+        days_column = 'days_until'
+    
+    if days_column is None:
+        st.warning("Column for 'days until event' not found. Please ensure your data contains 'days_until_event' or 'days_until'.")
         return
 
-    valid_df = df.dropna(subset=['days_until_event', 'outcome'])
+    valid_df = df.dropna(subset=[days_column, 'outcome'])
     if valid_df.empty:
         st.info("Not enough valid data to display chart.")
         return
 
     try:
-        valid_df['days_until_bin'] = pd.cut(valid_df['days_until_event'], 
+        valid_df['days_until_bin'] = pd.cut(valid_df[days_column], 
                                           bins=[-1, 0, 7, 30, 90, 180, 365, 10000],
                                           labels=['Past/0', '0-7d', '8-30d', '31-90d', '91-180d', '181-365d', '1yr+'])
 
-        summary = valid_df.groupby('days_until_bin')['outcome'].value_counts().unstack(fill_value=0).reset_index()
+        summary = valid_df.groupby('days_until_bin', observed=True)['outcome'].value_counts().unstack(fill_value=0).reset_index()
         
         if 'Won' not in summary.columns:
             summary['Won'] = 0
@@ -250,8 +356,13 @@ def plot_conversion_by_days_until_event(df):
         
         if summary['Conversion Rate'].nunique() > 1:
             best_bin = summary.sort_values('Conversion Rate', ascending=False).iloc[0]
-            worst_bin = summary.sort_values('Conversion Rate', ascending=True).iloc[0]
-            st.markdown(f"Events **{best_bin['days_until_bin']}** away have the highest conversion rate at **{best_bin['Conversion Rate']:.1%}**")
+            avg_rate = summary['Won'].sum() / summary['Total'].sum()
+            best_multiple = best_bin['Conversion Rate'] / avg_rate if avg_rate > 0 else 0
+            
+            st.markdown(
+                f"Events **{best_bin['days_until_bin']}** away have the highest conversion rate at **{best_bin['Conversion Rate']:.1%}** "
+                f"(**{best_multiple:.1f}x** better than average)."
+            )
     except Exception as e:
         st.error(f"Error generating days until event chart: {str(e)}")
 
@@ -265,21 +376,28 @@ def plot_conversion_by_days_since_inquiry(df):
     """
     st.subheader("Conversion by Days Since Inquiry")
 
-    if 'days_since_inquiry' not in df.columns:
-        st.warning("Column 'days_since_inquiry' not found.")
+    # Check for column name variations: days_since or days_since_inquiry
+    days_column = None
+    if 'days_since_inquiry' in df.columns:
+        days_column = 'days_since_inquiry'
+    elif 'days_since' in df.columns:
+        days_column = 'days_since'
+    
+    if days_column is None:
+        st.warning("Column for 'days since inquiry' not found. Please ensure your data contains 'days_since_inquiry' or 'days_since'.")
         return
 
-    valid_df = df.dropna(subset=['days_since_inquiry', 'outcome'])
+    valid_df = df.dropna(subset=[days_column, 'outcome'])
     if valid_df.empty:
         st.info("Not enough valid data to display chart.")
         return
 
     try:
-        valid_df['days_since_bin'] = pd.cut(valid_df['days_since_inquiry'], 
+        valid_df['days_since_bin'] = pd.cut(valid_df[days_column], 
                                           bins=[-1, 1, 7, 30, 90, 180, 365, 10000],
                                           labels=['<1d', '1-7d', '8-30d', '31-90d', '91-180d', '181-365d', '1yr+'])
 
-        summary = valid_df.groupby('days_since_bin')['outcome'].value_counts().unstack(fill_value=0).reset_index()
+        summary = valid_df.groupby('days_since_bin', observed=True)['outcome'].value_counts().unstack(fill_value=0).reset_index()
         
         if 'Won' not in summary.columns:
             summary['Won'] = 0
@@ -289,6 +407,14 @@ def plot_conversion_by_days_since_inquiry(df):
         summary['Total'] = summary['Won'] + summary['Lost']
         summary['Conversion Rate'] = summary['Won'] / summary['Total']
 
+        # Filter out bins with too few data points
+        min_count = 2
+        summary = summary[summary['Total'] >= min_count]
+        
+        if summary.empty:
+            st.info("Not enough data in each time period to display days since inquiry analysis.")
+            return
+
         chart = alt.Chart(summary).mark_bar().encode(
             x=alt.X('days_since_bin:N', title='Days Since Inquiry'),
             y=alt.Y('Conversion Rate:Q', title='Conversion Rate', axis=alt.Axis(format='.0%')),
@@ -296,6 +422,16 @@ def plot_conversion_by_days_since_inquiry(df):
         ).properties(width=600)
 
         st.altair_chart(chart, use_container_width=True)
+        
+        if summary['Conversion Rate'].nunique() > 1:
+            best_bin = summary.sort_values('Conversion Rate', ascending=False).iloc[0]
+            avg_rate = summary['Won'].sum() / summary['Total'].sum()
+            best_multiple = best_bin['Conversion Rate'] / avg_rate if avg_rate > 0 else 0
+            
+            st.markdown(
+                f"Inquiries from **{best_bin['days_since_bin']}** ago have the highest conversion rate at **{best_bin['Conversion Rate']:.1%}** "
+                f"(**{best_multiple:.1f}x** better than average)."
+            )
     except Exception as e:
         st.error(f"Error generating days since inquiry chart: {str(e)}")
 
@@ -309,21 +445,28 @@ def plot_conversion_by_guest_count(df):
     """
     st.subheader("Conversion by Guest Count")
 
-    if 'number_of_guests' not in df.columns:
-        st.warning("Column 'number_of_guests' not found.")
+    # Check for column name variations
+    guest_column = None
+    if 'number_of_guests' in df.columns:
+        guest_column = 'number_of_guests'
+    elif 'guest_count' in df.columns:
+        guest_column = 'guest_count'
+    
+    if guest_column is None:
+        st.warning("Column for guest count not found. Please ensure your data contains 'number_of_guests' or 'guest_count'.")
         return
 
-    valid_df = df.dropna(subset=['number_of_guests', 'outcome'])
+    valid_df = df.dropna(subset=[guest_column, 'outcome'])
     if valid_df.empty:
         st.info("Not enough valid data to display chart.")
         return
 
     try:
-        valid_df['guest_bin'] = pd.cut(valid_df['number_of_guests'], 
+        valid_df['guest_bin'] = pd.cut(valid_df[guest_column], 
                                      bins=[0, 50, 100, 200, 500, 1000, 99999],
                                      labels=['0-50', '51-100', '101-200', '201-500', '501-1000', '1000+'])
 
-        summary = valid_df.groupby('guest_bin')['outcome'].value_counts().unstack(fill_value=0).reset_index()
+        summary = valid_df.groupby('guest_bin', observed=True)['outcome'].value_counts().unstack(fill_value=0).reset_index()
         
         if 'Won' not in summary.columns:
             summary['Won'] = 0
@@ -348,6 +491,16 @@ def plot_conversion_by_guest_count(df):
         ).properties(width=600)
 
         st.altair_chart(chart, use_container_width=True)
+        
+        if summary['Conversion Rate'].nunique() > 1:
+            best_bin = summary.sort_values('Conversion Rate', ascending=False).iloc[0]
+            avg_rate = summary['Won'].sum() / summary['Total'].sum()
+            best_multiple = best_bin['Conversion Rate'] / avg_rate if avg_rate > 0 else 0
+            
+            st.markdown(
+                f"Events with **{best_bin['guest_bin']}** guests have the highest conversion rate at **{best_bin['Conversion Rate']:.1%}** "
+                f"(**{best_multiple:.1f}x** better than average)."
+            )
     except Exception as e:
         st.error(f"Error generating guest count chart: {str(e)}")
 
@@ -361,21 +514,28 @@ def plot_conversion_by_bartenders(df):
     """
     st.subheader("Conversion by Bartenders Needed")
 
-    if 'bartenders_needed' not in df.columns:
-        st.warning("Column 'bartenders_needed' not found.")
+    # Check for column name variations
+    bartender_column = None
+    if 'bartenders_needed' in df.columns:
+        bartender_column = 'bartenders_needed'
+    elif 'bartenders' in df.columns:
+        bartender_column = 'bartenders'
+    
+    if bartender_column is None:
+        st.warning("Column for bartenders not found. Please ensure your data contains 'bartenders_needed' or 'bartenders'.")
         return
 
-    valid_df = df.dropna(subset=['bartenders_needed', 'outcome'])
+    valid_df = df.dropna(subset=[bartender_column, 'outcome'])
     if valid_df.empty:
         st.info("Not enough valid data to display chart.")
         return
 
     try:
-        valid_df['bartender_bin'] = pd.cut(valid_df['bartenders_needed'],
+        valid_df['bartender_bin'] = pd.cut(valid_df[bartender_column],
                                         bins=[-1, 0, 1, 2, 3, 5, 999],
                                         labels=['0', '1', '2', '3', '4-5', '6+'])
 
-        summary = valid_df.groupby('bartender_bin')['outcome'].value_counts().unstack(fill_value=0).reset_index()
+        summary = valid_df.groupby('bartender_bin', observed=True)['outcome'].value_counts().unstack(fill_value=0).reset_index()
         
         if 'Won' not in summary.columns:
             summary['Won'] = 0
@@ -385,6 +545,14 @@ def plot_conversion_by_bartenders(df):
         summary['Total'] = summary['Won'] + summary['Lost']
         summary['Conversion Rate'] = summary['Won'] / summary['Total']
 
+        # Filter bins with too few data points
+        min_count = 2
+        summary = summary[summary['Total'] >= min_count]
+        
+        if summary.empty:
+            st.info("Not enough data in each bartender count range to display analysis.")
+            return
+
         chart = alt.Chart(summary).mark_bar().encode(
             x=alt.X('bartender_bin:N', title='Bartenders Needed'),
             y=alt.Y('Conversion Rate:Q', title='Conversion Rate', axis=alt.Axis(format='.0%')),
@@ -392,6 +560,16 @@ def plot_conversion_by_bartenders(df):
         ).properties(width=600)
 
         st.altair_chart(chart, use_container_width=True)
+        
+        if summary['Conversion Rate'].nunique() > 1:
+            best_bin = summary.sort_values('Conversion Rate', ascending=False).iloc[0]
+            avg_rate = summary['Won'].sum() / summary['Total'].sum()
+            best_multiple = best_bin['Conversion Rate'] / avg_rate if avg_rate > 0 else 0
+            
+            st.markdown(
+                f"Events requiring **{best_bin['bartender_bin']}** bartenders have the highest conversion rate at **{best_bin['Conversion Rate']:.1%}** "
+                f"(**{best_multiple:.1f}x** better than average)."
+            )
     except Exception as e:
         st.error(f"Error generating bartenders chart: {str(e)}")
 
