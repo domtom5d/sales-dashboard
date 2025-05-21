@@ -409,20 +409,13 @@ def plot_geographic_insights(df):
 
 
 def show_data_quality(df):
-    """Show data quality metrics and anomalies"""
+    """Show data quality metrics and anomalies using interactive visualizations"""
     if df is None or df.empty:
         st.info("No data available for quality analysis")
         return
     
     st.markdown("### Data Health Check")
     st.markdown("This section helps diagnose why some charts might be missing or incomplete")
-    
-    # Calculate completeness for key columns
-    key_columns = [
-        'inquiry_date', 'event_date', 'booking_type', 'event_type', 'number_of_guests',
-        'days_until_event', 'days_since_inquiry', 'city', 'state', 'referral_source', 
-        'marketing_source', 'bartenders_needed', 'actual_deal_value'
-    ]
     
     # Map columns to the charts they affect
     chart_dependencies = {
@@ -441,127 +434,12 @@ def show_data_quality(df):
         'actual_deal_value': ['Deal Value Analysis']
     }
     
-    # Calculate completeness for each column
-    completeness = {}
-    for col in key_columns:
-        if col in df.columns:
-            # For numeric columns, check that values are valid numbers
-            if col in ['number_of_guests', 'days_until_event', 'days_since_inquiry', 'bartenders_needed', 'actual_deal_value']:
-                non_null = df[col].notna() & np.isfinite(df[col])
-                non_null = non_null.sum()
-            else:
-                non_null = df[col].notna().sum()
-            completeness[col] = (non_null / len(df)) * 100  # Convert to percentage
-        else:
-            completeness[col] = 0
+    # Use our improved Altair-based data completeness visualization
+    completeness_df = plot_data_completeness(df, chart_dependencies)
     
-    # Create a completeness dataframe
-    completeness_df = pd.DataFrame({
-        'Column': list(completeness.keys()),
-        'Completeness': list(completeness.values())
-    })
+    # The plot_data_completeness function handles the visualization and explanation of data quality issues
     
-    # Add chart dependencies to the dataframe
-    completeness_df['Affects Charts'] = completeness_df['Column'].map(lambda col: ', '.join(chart_dependencies.get(col, [])))
-    
-    # Add status column
-    completeness_df['Status'] = 'Good'
-    completeness_df.loc[completeness_df['Completeness'] < 75, 'Status'] = 'Fair'
-    completeness_df.loc[completeness_df['Completeness'] < 50, 'Status'] = 'Poor'
-    completeness_df.loc[completeness_df['Completeness'] < 25, 'Status'] = 'Critical'
-    
-    # Sort by completeness
-    completeness_df = completeness_df.sort_values('Completeness', ascending=False)
-    
-    # Add an explanation section with information about data quality and what it means for visualization
-    st.subheader("Understanding Chart Display Issues")
-    
-    # Check for data category issues
-    critical_columns = completeness_df[completeness_df['Status'] == 'Critical']['Column'].tolist()
-    poor_columns = completeness_df[completeness_df['Status'] == 'Poor']['Column'].tolist()
-    
-    # Explain what's wrong with any charts that might not be showing properly
-    with st.expander("Why are some charts not displaying correctly?", expanded=True):
-        st.markdown("""
-        ### Common Dashboard Issues
-        
-        Charts in this dashboard may not display correctly for several reasons:
-        
-        1. **Missing Data**: If there are too many blank values in critical fields.
-        2. **Low Category Diversity**: When all records show the same category value (like "Uncategorized").
-        3. **Insufficient Data Volume**: Some visualizations require a minimum number of records per category.
-        """)
-        
-        # Add specific information about the current dataset
-        if critical_columns:
-            st.markdown("### Critical Data Issues Found")
-            st.markdown("The following fields have **severe data issues** (under 25% completeness):")
-            for col in critical_columns:
-                affected_charts = completeness_df.loc[completeness_df['Column'] == col, 'Affects Charts'].iloc[0]
-                st.markdown(f"- **{col}**: {affected_charts}")
-        
-        if poor_columns:
-            st.markdown("### Poor Data Quality Found")
-            st.markdown("The following fields have **poor data quality** (under 50% completeness):")
-            for col in poor_columns:
-                affected_charts = completeness_df.loc[completeness_df['Column'] == col, 'Affects Charts'].iloc[0]
-                st.markdown(f"- **{col}**: {affected_charts}")
-        
-        # Check for category diversity issues by examining key category columns
-        category_cols = ['booking_type', 'event_type', 'referral_source']
-        diversity_issues = []
-        
-        for col in category_cols:
-            if col in df.columns:
-                unique_count = df[col].nunique()
-                if unique_count <= 1:
-                    diversity_issues.append((col, df[col].iloc[0] if len(df) > 0 else "Unknown"))
-        
-        if diversity_issues:
-            st.markdown("### Category Diversity Issues")
-            st.markdown("The following fields lack diversity (all records show same value):")
-            for col, value in diversity_issues:
-                st.markdown(f"- **{col}**: All records show '{value}'")
-            
-            st.info("TIP: Try adjusting your data preprocessing to ensure more diverse category values.")
-    
-    # Create a horizontal bar chart with color coding by status
-    fig, ax = plt.subplots(figsize=(10, 8))
-    
-    # Define colors based on status
-    colors = {'Good': '#4CAF50', 'Fair': '#FFC107', 'Poor': '#FF9800', 'Critical': '#F44336'}
-    bar_colors = [colors[status] for status in completeness_df['Status']]
-    
-    # Plot the data
-    bars = ax.barh(completeness_df['Column'], completeness_df['Completeness'], color=bar_colors)
-    
-    # Add data labels
-    for bar, value in zip(bars, completeness_df['Completeness']):
-        width = bar.get_width()
-        label_position = max(width + 1, 5)  # Place labels at least 5% away from the left edge
-        ax.text(label_position, bar.get_y() + bar.get_height()/2, f'{value:.1f}%', 
-                va='center', color='black', fontweight='bold')
-    
-    # Customize the plot
-    ax.set_xlabel('Data Completeness (%)')
-    ax.set_ylabel('Data Field')
-    ax.set_title('Data Completeness by Field')
-    ax.set_xlim(0, 105)  # Leave room for labels
-    
-    # Format x-axis as percentage
-    import matplotlib.ticker as mtick
-    ax.xaxis.set_major_formatter(mtick.PercentFormatter())
-    
-    # Add a legend
-    from matplotlib.patches import Patch
-    legend_elements = [Patch(facecolor=colors[status], label=status) 
-                      for status in ['Good', 'Fair', 'Poor', 'Critical']]
-    ax.legend(handles=legend_elements, loc='lower right')
-    
-    # Show the plot
-    st.pyplot(fig)
-    
-    # Data quality insights section
+    # Show additional data quality insights section
     st.markdown("### Missing Data Impact on Charts")
     
     # Fields affecting key charts
@@ -572,7 +450,7 @@ def show_data_quality(df):
         # Group by affected charts to show what's impacted
         affected_charts = {}
         for _, row in critical_fields.iterrows():
-            for chart in chart_dependencies.get(row['Column'], []):
+            for chart in row['Affects Charts'].split(', '):
                 if chart not in affected_charts:
                     affected_charts[chart] = []
                 affected_charts[chart].append((row['Column'], row['Completeness']))
@@ -590,12 +468,3 @@ def show_data_quality(df):
         """)
     else:
         st.success("✅ Data quality is good. All charts should display properly.")
-    
-    # Find columns with low completeness (< 80%)
-    low_completeness = completeness_df[completeness_df['Completeness'] < 0.8]
-    if not low_completeness.empty:
-        st.markdown("Fields with low data completeness (potential data quality issues):")
-        for _, row in low_completeness.iterrows():
-            st.markdown(f"- **{row['Column']}**: {row['Completeness']:.1%} complete")
-    else:
-        st.markdown("- All fields have good data completeness (>= 80%)")
