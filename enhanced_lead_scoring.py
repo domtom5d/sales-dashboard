@@ -613,8 +613,19 @@ def score_lead_enhanced(lead_data, model, scaler, feature_weights, metrics):
     final_score = min(final_score, 1.0)
     
     # Determine lead category
-    thresholds = metrics.get('thresholds', {'hot': 0.7, 'warm': 0.5, 'cool': 0.3})
+    default_thresholds = {'hot': 0.7, 'warm': 0.5, 'cool': 0.3}
+    thresholds = metrics.get('thresholds', default_thresholds)
     
+    # Ensure thresholds is a dictionary with the expected keys
+    if not isinstance(thresholds, dict):
+        thresholds = default_thresholds
+    
+    # Make sure all required threshold keys exist
+    for key in ['hot', 'warm', 'cool']:
+        if key not in thresholds:
+            thresholds[key] = default_thresholds[key]
+    
+    # Now use the thresholds to determine the category
     if final_score >= thresholds['hot']:
         category = "Hot"
     elif final_score >= thresholds['warm']:
