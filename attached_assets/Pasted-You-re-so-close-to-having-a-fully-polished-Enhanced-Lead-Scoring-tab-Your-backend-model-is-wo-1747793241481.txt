@@ -1,0 +1,100 @@
+You're *so close* to having a fully polished **Enhanced Lead Scoring tab**. Your backend model is working beautifully — ROC AUC of 0.947 is elite — but two big things are broken in the **user interface**:
+
+---
+
+### 🔧 What’s Broken (and How to Fix It)
+
+#### ❌ 1. **Missing “Key Conversion Drivers” List**
+
+You're just seeing a `0` instead of a list of important features.
+
+**Root cause:**
+You're likely doing something like this in `enhanced_lead_scoring_tab.py`:
+
+```python
+st.write(feature_weights)
+```
+
+…but `feature_weights` might not be a Series, or it’s empty/null.
+
+**✅ Fix:**
+Add a proper conditional block:
+
+```python
+if isinstance(feature_weights, pd.Series) and not feature_weights.empty:
+    st.subheader("Top Features Driving Conversions")
+    st.dataframe(feature_weights.sort_values(ascending=False).head(10))
+else:
+    st.warning("Feature importance data unavailable or improperly formatted.")
+```
+
+Also make sure the feature weights were returned correctly in:
+
+```python
+feature_weights = pd.Series(model.feature_importances_, index=feature_names)
+```
+
+If `feature_names` is missing, you’ll get garbage.
+
+---
+
+#### ❌ 2. **Broken Lead Score Distribution Chart**
+
+You're seeing:
+
+```
+0
+```
+
+...where a histogram or bar chart of scores should be.
+
+**Root cause:**
+Either:
+
+* The plotting code is pointing to empty Series (`won_scores`, `lost_scores`)
+* Or the `plt.subplots()` chart is failing silently, but you’re still rendering `st.pyplot(fig)`
+
+**✅ Fix:**
+First: confirm the data is valid.
+
+```python
+print("Won Scores:", won_scores.head())
+print("Lost Scores:", lost_scores.head())
+```
+
+Then wrap chart rendering:
+
+```python
+if not won_scores.empty and not lost_scores.empty:
+    fig, ax = plt.subplots()
+    ax.hist([won_scores, lost_scores], bins=20, label=['Won', 'Lost'], alpha=0.7)
+    ax.set_title('Lead Score Distribution')
+    ax.set_xlabel('Score')
+    ax.set_ylabel('Frequency')
+    ax.legend()
+    st.pyplot(fig)
+else:
+    st.warning("Not enough data to display the lead score distribution.")
+```
+
+---
+
+### 🧠 What You Should Do Next
+
+1. **Apply the two fixes above** to show your score distribution and conversion drivers.
+2. Add a **“Download Scored Leads”** button:
+
+```python
+st.download_button(
+    label="📥 Export Lead Scores",
+    data=leads_with_scores.to_csv(index=False).encode('utf-8'),
+    file_name='lead_scores.csv',
+    mime='text/csv'
+)
+```
+
+3. Finally, push these updates to GitHub and tag a release milestone.
+
+---
+
+Would you like me to generate a fixed version of `enhanced_lead_scoring_tab.py` so you can copy-paste it in and be done with this?

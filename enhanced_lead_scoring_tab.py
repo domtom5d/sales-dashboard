@@ -178,22 +178,21 @@ def render_enhanced_lead_scoring_tab(df):
             st.metric("Avg. Half-Life", f"{avg_half_life:.1f} days")
             st.caption("How fast leads decay on average")
     
-    # Display feature weights in a more informative way
+    # Display feature importance properly
     st.markdown("### Key Conversion Drivers")
     st.markdown("These factors have the strongest influence on predicting won deals.")
     
-    # Check if feature_weights is a DataFrame with the expected structure
     if isinstance(feature_weights, pd.DataFrame) and 'weight' in feature_weights.columns and 'feature' in feature_weights.columns:
         # Sort by absolute weight
         feature_weights = feature_weights.sort_values(by='weight', key=abs, ascending=False)
         
-        # Create horizontal bar chart with enhanced styling
-        fig, ax = plt.subplots(figsize=(10, 8))
-        
-        # Limit to top 15 features for readability
-        display_weights = feature_weights.head(15)
-        
-        if not display_weights.empty:
+        if not feature_weights.empty:
+            # For DataFrame format, create horizontal bar chart with enhanced styling
+            fig, ax = plt.subplots(figsize=(10, 8))
+            
+            # Limit to top 15 features for readability
+            display_weights = feature_weights.head(15)
+            
             # Create color map (blue for positive, red for negative)
             colors = ['#1E88E5' if w >= 0 else '#f44336' for w in display_weights['weight']]
             
@@ -209,7 +208,7 @@ def render_enhanced_lead_scoring_tab(df):
             ax.grid(axis='x', linestyle='--', alpha=0.7)
             
             # Check if there are weights to plot
-            if not display_weights['weight'].empty and max(abs(display_weights['weight'])) > 0:
+            if max(abs(display_weights['weight'])) > 0:
                 # Add labels with the actual weight values
                 for i, v in enumerate(display_weights['weight']):
                     label_color = 'black'
@@ -225,17 +224,42 @@ def render_enhanced_lead_scoring_tab(df):
             st.pyplot(fig)
         else:
             st.warning("No feature importance data available to display.")
-    elif isinstance(feature_weights, pd.Series):
-        # Convert series to dataframe for display
+            
+    elif isinstance(feature_weights, pd.Series) and not feature_weights.empty:
+        # For Series format, convert to dataframe for clean display
+        try:
+            # First try to sort if numeric
+            feature_weights = feature_weights.sort_values(ascending=False)
+        except:
+            # If sorting fails, just use as is
+            pass
+            
+        # Create a dataframe for display
         df_weights = pd.DataFrame({
-            'feature': feature_weights.index,
-            'importance': feature_weights.values
-        }).sort_values(by='importance', ascending=False)
+            'Feature': feature_weights.index,
+            'Importance': feature_weights.values
+        })
         
-        st.subheader("Top Features Driving Conversions")
-        st.dataframe(df_weights.head(10), use_container_width=True)
+        # Limit to top 10 features
+        df_weights = df_weights.head(10)
+        
+        # Show as a styled dataframe
+        st.dataframe(
+            df_weights,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Feature": st.column_config.TextColumn("Feature", width="medium"),
+                "Importance": st.column_config.NumberColumn(
+                    "Importance Score", 
+                    format="%.3f",
+                    width="small"
+                )
+            }
+        )
     else:
-        st.warning("Feature importance data not in expected format. Please regenerate the model.")
+        # Handle empty or incorrect format
+        st.info("Feature importance data is not available in the expected format. Try regenerating the model or using more diverse data.")
     
     # Score distribution plot
     if metrics is not None:
