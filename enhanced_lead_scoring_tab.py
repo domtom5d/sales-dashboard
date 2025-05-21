@@ -270,6 +270,48 @@ def render_enhanced_lead_scoring_tab(df):
             import traceback
             st.text(traceback.format_exc())
     
+    # Add Download Scored Leads button
+    if model is not None and scaler is not None and 'won_scores' in metrics and 'lost_scores' in metrics:
+        st.markdown("### Export Lead Scores")
+        
+        if st.button("📥 Generate Lead Scores for Export"):
+            with st.spinner("Scoring all leads..."):
+                # Create a copy of the dataframe
+                scored_df = df.copy()
+                
+                # Add score and category columns
+                scored_df['lead_score'] = 0.0
+                scored_df['lead_category'] = "Unknown"
+                
+                # Score each lead
+                for idx, row in scored_df.iterrows():
+                    # Convert row to dictionary
+                    lead_data = row.to_dict()
+                    
+                    # Score the lead
+                    score, category, _ = score_lead_enhanced(lead_data, model, scaler, feature_weights, metrics)
+                    
+                    # Update the dataframe
+                    scored_df.at[idx, 'lead_score'] = score
+                    scored_df.at[idx, 'lead_category'] = category
+                
+                # Sort by score (highest first)
+                scored_df = scored_df.sort_values(by='lead_score', ascending=False)
+                
+                # Create a download button
+                csv = scored_df.to_csv(index=False).encode('utf-8')
+                
+                st.download_button(
+                    label="📥 Download Scored Leads CSV",
+                    data=csv,
+                    file_name="lead_scores.csv",
+                    mime="text/csv"
+                )
+                
+                # Show a preview of the scored leads
+                st.subheader("Scored Leads Preview")
+                st.dataframe(scored_df[['lead_score', 'lead_category', 'outcome']].head(10), use_container_width=True)
+    
     # Enhanced lead scoring calculator
     st.markdown("### Lead Scoring Calculator")
     st.markdown("Enter values for a new lead to calculate its score and conversion probability.")
