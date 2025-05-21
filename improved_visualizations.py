@@ -414,6 +414,26 @@ def plot_conversion_by_days_until_event(df):
         return
 
     try:
+        # Ensure the days column is numeric
+        if valid_df[days_column].dtype == 'object' or valid_df[days_column].dtype == 'string':
+            # Try to convert string days to numeric
+            try:
+                valid_df[days_column] = pd.to_numeric(valid_df[days_column], errors='coerce')
+                # Drop rows where conversion failed
+                valid_df = valid_df.dropna(subset=[days_column])
+                if valid_df.empty:
+                    st.info("Could not convert days until event to numeric values.")
+                    return
+            except Exception as e:
+                st.error(f"Error converting days until event to numeric: {str(e)}")
+                return
+                
+        # Verify we have minimum required data
+        if valid_df[days_column].notna().sum() < 5:
+            st.info(f"Not enough valid data for days until event analysis (need at least 5 entries).")
+            return
+            
+        # Create bins for visualization
         valid_df['days_until_bin'] = pd.cut(valid_df[days_column], 
                                           bins=[-1, 0, 7, 30, 90, 180, 365, 10000],
                                           labels=['Past/0', '0-7d', '8-30d', '31-90d', '91-180d', '181-365d', '1yr+'])
@@ -483,6 +503,26 @@ def plot_conversion_by_days_since_inquiry(df):
         return
 
     try:
+        # Ensure the days column is numeric
+        if valid_df[days_column].dtype == 'object' or valid_df[days_column].dtype == 'string':
+            # Try to convert string days to numeric
+            try:
+                valid_df[days_column] = pd.to_numeric(valid_df[days_column], errors='coerce')
+                # Drop rows where conversion failed
+                valid_df = valid_df.dropna(subset=[days_column])
+                if valid_df.empty:
+                    st.info("Could not convert days since inquiry to numeric values.")
+                    return
+            except Exception as e:
+                st.error(f"Error converting days since inquiry to numeric: {str(e)}")
+                return
+                
+        # Verify we have minimum required data
+        if valid_df[days_column].notna().sum() < 5:
+            st.info(f"Not enough valid data for days since inquiry analysis (need at least 5 entries).")
+            return
+            
+        # Create bins for visualization
         valid_df['days_since_bin'] = pd.cut(valid_df[days_column], 
                                           bins=[-1, 1, 7, 30, 90, 180, 365, 10000],
                                           labels=['<1d', '1-7d', '8-30d', '31-90d', '91-180d', '181-365d', '1yr+'])

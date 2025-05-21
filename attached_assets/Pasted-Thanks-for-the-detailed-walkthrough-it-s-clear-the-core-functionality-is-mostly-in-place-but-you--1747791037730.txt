@@ -1,0 +1,134 @@
+Thanks for the detailed walkthrough — it’s clear the core functionality is mostly in place, but you’re facing a mix of data quality issues, code-level bugs, and AI service deprecation warnings. Let’s go tab by tab and tackle what needs to be fixed and how.
+
+🔧 Top Issues to Fix Right Now
+✅ 1. Conversion Analysis Tab
+✔️ Working:
+
+Shows total leads, won deals, conversion rates.
+
+Booking type conversion is working.
+
+❌ Not working:
+
+“Days Until Event” and “Days Since Inquiry” show "Not enough data".
+
+Likely causes:
+
+These fields might be:
+
+Stored as strings instead of integers/floats.
+
+Contain a high % of NaNs.
+
+Not binned or aggregated before visualization.
+
+Fix:
+Update the binning logic in conversion_analysis.py to:
+
+python
+Copy
+Edit
+if df['days_until_event'].notna().sum() > 100:
+    # proceed to plot
+else:
+    st.warning("Not enough data to analyze days until event.")
+✅ 2. Feature Correlation Tab
+✔️ Working:
+
+Correlation values and matrix are showing.
+
+Feature explanations appear.
+
+No action needed.
+
+❌ 3. Lead Scoring (Enhanced)
+Issue:
+
+ValueError: could not convert string to float: 'November'
+
+Cause:
+
+Your dataset likely includes month names as strings in a feature like event_month, which cannot be directly passed into StandardScaler.
+
+Fix:
+Before training the model:
+
+python
+Copy
+Edit
+if 'event_month' in df.columns:
+    df['event_month'] = pd.to_datetime(df['event_month'], errors='coerce').dt.month
+Or:
+
+python
+Copy
+Edit
+month_mapping = {'January': 1, ..., 'December': 12}
+df['event_month'] = df['event_month'].map(month_mapping)
+❌ 4. Lead Personas
+Issue:
+
+'float' object has no attribute 'replace'
+
+Cause:
+
+You're assuming row['Conversion Rate'] is a string like "12.5%", but it’s a float already.
+
+Fix:
+
+python
+Copy
+Edit
+if isinstance(row['Conversion Rate'], str):
+    conv_rate = float(row['Conversion Rate'].replace('%', ''))
+else:
+    conv_rate = row['Conversion Rate']
+❌ 5. Advanced Analytics
+Issue:
+
+ValueError: The truth value of a DataFrame is ambiguous...
+
+Cause:
+
+You're doing something like:
+
+python
+Copy
+Edit
+if analyze_booking_types(df):
+Which returns a DataFrame and causes ambiguity.
+
+Fix:
+
+python
+Copy
+Edit
+result = analyze_booking_types(df)
+if result is not None and not result[0].empty:
+    booking_types_result, column_used = result
+else:
+    booking_types_result, column_used = None, None
+❌ 6. AI Insights / Mistral Integration
+Issue:
+
+This client is deprecated. Please migrate...
+
+Fix:
+
+You are using the outdated Mistral client (0.4.x). You’ll need to upgrade your integration using the new v1 client.
+
+Update Instructions:
+Follow: Mistral Migration Guide
+
+Or switch to OpenAI temporarily if you're blocked.
+
+✅ Next Steps — In Order
+Fix column casting in enhanced scoring (event_month)
+
+Handle string vs float conversion in Lead Personas
+
+Fix DataFrame truth value bug in Advanced Analytics
+
+Upgrade the Mistral AI client
+
+Run a QA pass and screenshot each tab
