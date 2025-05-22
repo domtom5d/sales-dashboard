@@ -11,10 +11,12 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import json
 from enhanced_lead_scoring import (
     train_enhanced_lead_scoring_model,
     score_lead_enhanced,
-    plot_enhanced_lead_score_visualization
+    plot_enhanced_lead_score_visualization,
+    compute_final_score
 )
 
 def render_enhanced_lead_scoring_tab(df):
@@ -291,6 +293,98 @@ def render_enhanced_lead_scoring_tab(df):
         except Exception as e:
             st.error(f"Error plotting score distributions: {str(e)}")
             # Show stack trace for debugging
+            import traceback
+            st.text(traceback.format_exc())
+    
+    # API Testing Section
+    st.markdown("---")
+    st.markdown("## API Integration Testing")
+    st.markdown("""
+    Test how this scoring model would work with external systems. Enter sample lead data in JSON format
+    to see the resulting score and category.
+    """)
+    
+    # Sample JSON data
+    sample_json = {
+        "event_type": "Wedding",
+        "guest_count": 120,
+        "budget": 4500,
+        "referral_source": "Google",
+        "state": "Nebraska",
+        "days_since_inquiry": 20
+    }
+    
+    # Create a text area for JSON input
+    default_json = json.dumps(sample_json, indent=2)
+    json_input = st.text_area("Sample Lead Data (JSON format)", default_json, height=250)
+    
+    if st.button("Test Score API"):
+        try:
+            # Parse the JSON
+            lead_data = json.loads(json_input)
+            
+            # Compute the score
+            result = compute_final_score(lead_data, df, model, scaler, feature_weights, metrics)
+            
+            # Display the result
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### Lead Score Result")
+                score = result['score']
+                category = result['category']
+                
+                # Color-code the category
+                category_colors = {
+                    'Hot': 'red',
+                    'Warm': 'orange',
+                    'Cool': 'cyan',
+                    'Cold': 'blue',
+                    'Unknown': 'gray'
+                }
+                
+                color = category_colors.get(category, 'gray')
+                
+                st.markdown(f"""
+                **Score:** {score}/100  
+                **Category:** <span style='color:{color};font-weight:bold'>{category}</span>
+                """, unsafe_allow_html=True)
+                
+                # Show warnings if any
+                if result['missing_fields']:
+                    st.warning(f"Missing fields: {', '.join(result['missing_fields'])}")
+                if result['invalid_fields']:
+                    st.warning(f"Invalid fields: {', '.join(result['invalid_fields'])}")
+            
+            with col2:
+                st.markdown("### Score Breakdown")
+                if 'breakdown' in result:
+                    breakdown = result['breakdown']
+                    if 'raw_score' in breakdown:
+                        st.write(f"Base ML Score: {breakdown['raw_score']:.2f}")
+                    if 'decayed_score' in breakdown:
+                        st.write(f"After Time Decay: {breakdown['decayed_score']:.2f}")
+                    if 'base_adjustment' in breakdown:
+                        st.write(f"Quality Adjustment: +{breakdown['base_adjustment']:.2f}")
+                    if 'region_boost' in breakdown and breakdown['region_boost'] != 1.0:
+                        st.write(f"Region Boost: {(breakdown['region_boost']-1)*100:.0f}%")
+                    
+                    # Feature impact if available
+                    if 'feature_impact' in breakdown and breakdown['feature_impact']:
+                        st.markdown("#### Top Contributing Factors")
+                        for feature, impact in breakdown['feature_impact'].items():
+                            direction = impact.get('direction', '')
+                            emoji = "🔼" if direction == "positive" else "🔽"
+                            st.write(f"{emoji} {feature}: {impact.get('value')}")
+            
+            # Show API output format
+            st.markdown("### API Response Format")
+            st.json(result)
+            
+        except json.JSONDecodeError:
+            st.error("Invalid JSON format. Please check your input.")
+        except Exception as e:
+            st.error(f"Error scoring lead: {str(e)}")
             import traceback
             st.text(traceback.format_exc())
     

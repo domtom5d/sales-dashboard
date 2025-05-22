@@ -770,6 +770,73 @@ def score_lead_enhanced(lead_data, model, scaler, feature_weights, metrics):
     
     return final_score, category, score_breakdown
 
+def compute_final_score(lead_data, df, model=None, scaler=None, feature_weights=None, metrics=None):
+    """
+    Compute a final lead score from a JSON/dict lead object
+    
+    Args:
+        lead_data (dict): Dictionary or JSON object containing lead data
+        df (DataFrame): Main dataset used for model training if model is None
+        model (object, optional): Trained machine learning model
+        scaler (object, optional): Feature scaler
+        feature_weights (DataFrame, optional): Feature weights dataframe
+        metrics (dict, optional): Model metrics dictionary
+    
+    Returns:
+        dict: Dictionary with score, category and breakdown information
+        {
+            'score': float,
+            'category': str,
+            'breakdown': dict,
+            'missing_fields': list,
+            'invalid_fields': list
+        }
+    """
+    # Check for missing or invalid fields
+    missing_fields = []
+    invalid_fields = []
+    
+    # Check for required fields
+    required_fields = ['event_type', 'guest_count', 'budget', 'days_since_inquiry']
+    for field in required_fields:
+        if field not in lead_data:
+            missing_fields.append(field)
+    
+    # Validate numeric fields
+    numeric_fields = ['guest_count', 'budget', 'days_since_inquiry']
+    for field in numeric_fields:
+        if field in lead_data and not isinstance(lead_data[field], (int, float)):
+            try:
+                lead_data[field] = float(lead_data[field])
+            except (ValueError, TypeError):
+                invalid_fields.append(field)
+    
+    # If model and related objects aren't provided, train them
+    if model is None or scaler is None or feature_weights is None or metrics is None:
+        if df is not None:
+            model, scaler, feature_weights, thresholds, metrics = train_enhanced_lead_scoring_model(df)
+        else:
+            return {
+                'score': 0.0,
+                'category': 'Unknown',
+                'breakdown': {},
+                'missing_fields': missing_fields,
+                'invalid_fields': invalid_fields,
+                'error': 'No model or dataset provided'
+            }
+    
+    # Score the lead
+    score, category, breakdown = score_lead_enhanced(lead_data, model, scaler, feature_weights, metrics)
+    
+    # Return comprehensive result
+    return {
+        'score': round(score * 100, 1),  # Convert to 0-100 scale and round to 1 decimal
+        'category': category,
+        'breakdown': breakdown,
+        'missing_fields': missing_fields,
+        'invalid_fields': invalid_fields
+    }
+
 def plot_enhanced_lead_score_visualization(metrics, title="Lead Score Distribution"):
     """
     Create an enhanced visualization of lead scores with clear category boundaries
