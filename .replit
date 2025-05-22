@@ -20,6 +20,10 @@ author = "agent"
 task = "workflow.run"
 args = "Streamlit Server"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Lead Health Dashboard"
+
 [[workflows.workflow]]
 name = "Streamlit Server"
 author = "agent"
@@ -27,6 +31,15 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "streamlit run app.py --server.port 5000"
+waitForPort = 5000
+
+[[workflows.workflow]]
+name = "Lead Health Dashboard"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "streamlit run lead_health_dashboard.py --server.port 5000"
 waitForPort = 5000
 
 [[ports]]

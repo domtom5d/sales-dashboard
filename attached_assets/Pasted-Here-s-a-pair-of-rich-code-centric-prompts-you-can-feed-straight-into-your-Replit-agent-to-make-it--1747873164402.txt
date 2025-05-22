@@ -1,0 +1,93 @@
+Here’s a pair of rich, code-centric prompts you can feed straight into your Replit agent to make it do exactly what you need:
+
+---
+
+### 1️⃣ **System Prompt**
+
+*(Sets up imports, helper functions, and the main handler)*
+
+```python
+# System Prompt: Lead Scoring Agent Setup
+import json
+from enhanced_lead_scoring import (
+    apply_decay,
+    calculate_category_specific_half_life,
+    classify_referral_tiers,
+    identify_high_performing_regions
+)
+
+def base_score(lead):
+    score = 0
+    # Guest count
+    guests = lead.get("guest_count", 0)
+    score += 20 if guests >= 150 else 10 if guests >= 50 else 5
+    # Budget
+    budget = lead.get("budget", 0)
+    score += 20 if budget >= 5000 else 10 if budget >= 2000 else 5
+    # Referral tier
+    ref_tiers = classify_referral_tiers(your_dataframe)
+    tier = ref_tiers.get(lead.get("referral_source", ""), 2)
+    score += 10 if tier == 3 else -10 if tier == 1 else 0
+    return score
+
+def compute_final_score(lead, df):
+    # 1. Base
+    raw = base_score(lead)
+    # 2. Decay
+    half_lives = calculate_category_specific_half_life(df)
+    half_life = half_lives.get(lead.get("event_type","default"), half_lives["default"])
+    decayed = apply_decay(raw, lead.get("days_since_inquiry",0), half_life)
+    # 3. Region boost
+    regions, _ = identify_high_performing_regions(df)
+    if lead.get("state") in regions:
+        decayed *= 1.1
+    # 4. Cap & floor
+    return min(100, max(0, decayed))
+
+def categorize(score):
+    return "Hot" if score>=70 else "Warm" if score>=40 else "Cold"
+
+def handle_lead_request(request_body: str) -> str:
+    lead = json.loads(request_body)
+    # Validate required fields
+    required = ["event_type","guest_count","budget","referral_source","state","days_since_inquiry"]
+    missing = [f for f in required if f not in lead or lead[f] in (None, "")]
+    if missing:
+        return json.dumps({"error": f"Missing fields: {', '.join(missing)}"})
+    # Compute
+    score = compute_final_score(lead, your_dataframe)
+    return json.dumps({"score": round(score,1), "category": categorize(score)})
+```
+
+> **Note:** replace `your_dataframe` with the actual DataFrame you load at startup.
+
+---
+
+### 2️⃣ **User Prompt**
+
+*(What you send each time you want a lead scored)*
+
+```json
+{
+  "event_type": "Corporate",
+  "guest_count": 85,
+  "budget": 3200,
+  "referral_source": "Google",
+  "state": "Omaha",
+  "days_since_inquiry": 15
+}
+```
+
+---
+
+**Flow:**
+
+* **Start your agent** with the **System Prompt** so it knows all the imports and logic.
+* **Send** the **User Prompt** anytime you need a score.
+* The agent will reply with a tight JSON:
+
+  ```json
+  { "score": 58.7, "category": "Warm" }
+  ```
+
+Copy-paste those into your Replit agent config, and you’re all set—no more guesswork.

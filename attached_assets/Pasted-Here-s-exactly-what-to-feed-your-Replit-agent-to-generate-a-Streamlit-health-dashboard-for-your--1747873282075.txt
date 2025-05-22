@@ -1,0 +1,61 @@
+Here’s exactly what to feed your Replit agent to generate a **Streamlit health dashboard** for your current lead-scoring model. Copy–paste these two prompts into your agent flow:
+
+---
+
+### 1️⃣ System Prompt
+
+*(Sets up the environment and imports)*
+
+```python
+# System Prompt: Lead Scoring Health Dashboard Setup
+import pandas as pd
+import streamlit as st
+import altair as alt
+from enhanced_lead_scoring import compute_final_score, categorize_score
+
+# Load your master leads DataFrame once at startup
+@st.cache_data
+def load_leads(path="temp_leads.csv"):
+    df = pd.read_csv(path, parse_dates=["inquiry_date", "event_date"])
+    return df
+
+leads_df = load_leads()
+```
+
+---
+
+### 2️⃣ User Prompt
+
+*(Tells it exactly what the dashboard should do)*
+
+```text
+Generate a Streamlit app (file name: dashboard.py) that:
+
+1. Takes the `leads_df` from the system context and:
+   • Applies `compute_final_score(row, leads_df)` to each row, storing results in a “score” column  
+   • Applies `categorize_score(score)` to produce a “category” column  
+
+2. Builds a sidebar with:
+   • Date-range filter on “inquiry_date”  
+   • Multi-select filter on “state”  
+
+3. Displays on the main page:
+   • **KPIs**: total leads, average score, and counts per category (Hot/Warm/Cold)  
+   • **Histogram** of the “score” distribution  
+   • **Line chart**: daily average score over time  
+   • **Bar chart**: lead counts by state, colored by category  
+
+4. Uses Altair for all charts, with interactive tooltips and proper axis labels.  
+
+5. Wrap everything in `if __name__ == "__main__":` so it can be run via `streamlit run dashboard.py`.
+```
+
+---
+
+🔧 Just drop those two prompts into your Replit agent’s config. It’ll spit out a `dashboard.py` that you can deploy instantly with:
+
+```bash
+streamlit run dashboard.py
+```
+
+This will give you a live, interactive view of your model’s health—score distributions, time decay effects, regional performance—all in under a minute.
