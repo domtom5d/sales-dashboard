@@ -689,6 +689,10 @@ def score_lead_enhanced(lead_data, model, scaler, feature_weights, metrics):
     else:
         decayed_score = raw_score
     
+    # Apply base score adjustment based on guest count, budget, and referral quality
+    base_adjustment = calculate_base_score_adjustment(lead_data)
+    adjusted_score = decayed_score + base_adjustment
+    
     # Apply high-performing region boost if applicable
     high_performing_regions = metrics.get('high_performing_regions', {})
     high_states = high_performing_regions.get('states', {})
@@ -711,7 +715,7 @@ def score_lead_enhanced(lead_data, model, scaler, feature_weights, metrics):
             break
     
     # Apply region boost
-    final_score = decayed_score * region_boost
+    final_score = adjusted_score * region_boost
     
     # Cap at 1.0
     final_score = min(final_score, 1.0)
@@ -729,20 +733,15 @@ def score_lead_enhanced(lead_data, model, scaler, feature_weights, metrics):
         if key not in thresholds:
             thresholds[key] = default_thresholds[key]
     
-    # Now use the thresholds to determine the category
-    if final_score >= thresholds['hot']:
-        category = "Hot"
-    elif final_score >= thresholds['warm']:
-        category = "Warm"
-    elif final_score >= thresholds['cool']:
-        category = "Cool"
-    else:
-        category = "Cold"
+    # Now use our categorization function to determine the category
+    category = categorize_score(final_score, thresholds)
     
     # Create score breakdown
     score_breakdown = {
         'raw_score': raw_score,
         'decayed_score': decayed_score if 'decayed_score' in locals() else raw_score,
+        'base_adjustment': base_adjustment,
+        'adjusted_score': adjusted_score,
         'region_boost': region_boost,
         'final_score': final_score,
         'thresholds': thresholds,
