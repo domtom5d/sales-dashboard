@@ -63,6 +63,71 @@ def calculate_category_specific_half_life(df, category_column='booking_type'):
     
     return half_lives
 
+def calculate_base_score_adjustment(lead_data):
+    """
+    Calculate a base score adjustment based on guest count, budget, and referral source
+    
+    Args:
+        lead_data (dict): Dictionary containing lead data
+        
+    Returns:
+        float: Base score adjustment (0.0 to 0.3)
+    """
+    score_adjustment = 0.0
+    
+    # Guest count boost
+    guest_col = None
+    for col in ['number_of_guests', 'guest_count', 'NumberOfGuests', 'GuestCount']:
+        if col in lead_data:
+            guest_col = col
+            break
+            
+    if guest_col:
+        try:
+            guests = float(lead_data[guest_col])
+            if guests >= 150:
+                score_adjustment += 0.10  # Large events get a significant boost
+            elif guests >= 50:
+                score_adjustment += 0.05  # Medium events get a moderate boost
+        except (ValueError, TypeError):
+            pass  # If we can't parse the guest count, skip this adjustment
+    
+    # Budget boost
+    budget_col = None
+    for col in ['budget', 'total_price', 'deal_value', 'event_budget']:
+        if col in lead_data:
+            budget_col = col
+            break
+            
+    if budget_col:
+        try:
+            budget = float(lead_data[budget_col])
+            if budget >= 5000:
+                score_adjustment += 0.10  # High budget gets a significant boost
+            elif budget >= 2000:
+                score_adjustment += 0.05  # Medium budget gets a moderate boost
+        except (ValueError, TypeError):
+            pass  # If we can't parse the budget, skip this adjustment
+    
+    # Referral source quality boost
+    ref_col = None
+    for col in ['referral_source', 'ReferralSource', 'referral', 'Referral']:
+        if col in lead_data:
+            ref_col = col
+            break
+            
+    if ref_col and isinstance(lead_data.get(ref_col), str):
+        ref_source = lead_data[ref_col].lower()
+        
+        # High-quality referrals
+        if any(term in ref_source for term in ['referral', 'past client', 'repeat', 'existing']):
+            score_adjustment += 0.10
+        # Medium-quality sources
+        elif any(term in ref_source for term in ['google', 'search', 'social', 'instagram', 'facebook']):
+            score_adjustment += 0.05
+            
+    return score_adjustment
+
 def apply_decay(score, days_since, half_life):
     """
     Apply exponential decay to a score based on time elapsed and category-specific half-life
@@ -82,7 +147,42 @@ def apply_decay(score, days_since, half_life):
         half_life = 30.0  # Default to 30 days if invalid half-life
         
     # Apply exponential decay: score * 2^(-days/half_life)
-    return score * (2 ** (-days_since / half_life))
+    decayed_score = score * (2 ** (-days_since / half_life))
+    
+    # Apply a minimum score floor to prevent excessive decay
+    min_score = 0.05  # 5% minimum score
+    return max(min_score, decayed_score)
+
+def categorize_score(score, thresholds=None):
+    """
+    Categorize a score into Hot/Warm/Cool/Cold based on thresholds
+    
+    Args:
+        score (float): The lead score (0.0 to 1.0)
+        thresholds (dict, optional): Dictionary of thresholds
+        
+    Returns:
+        str: Category label ('Hot', 'Warm', 'Cool', or 'Cold')
+    """
+    # Default thresholds if none provided
+    if thresholds is None or not isinstance(thresholds, dict):
+        thresholds = {'hot': 0.7, 'warm': 0.5, 'cool': 0.3}
+    
+    # Ensure all required threshold keys exist
+    default_values = {'hot': 0.7, 'warm': 0.5, 'cool': 0.3}
+    for key in default_values:
+        if key not in thresholds:
+            thresholds[key] = default_values[key]
+    
+    # Apply categorization logic
+    if score >= thresholds['hot']:
+        return "Hot"
+    elif score >= thresholds['warm']:
+        return "Warm"
+    elif score >= thresholds['cool']:
+        return "Cool"
+    else:
+        return "Cold"
 
 def identify_high_performing_regions(df):
     """
@@ -582,6 +682,10 @@ def score_lead_enhanced(lead_data, model, scaler, feature_weights, metrics):
         
         # Apply decay
         decayed_score = apply_decay(raw_score, days_since, half_life_days)
+        
+        # Apply a minimum score floor to prevent excessive decay
+        min_score = 0.05  # 5% minimum score
+        decayed_score = max(min_score, decayed_score)
     else:
         decayed_score = raw_score
     
