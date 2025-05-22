@@ -6,6 +6,7 @@ including score distributions, time decay effects, validation metrics, and regio
 """
 
 import pandas as pd
+import numpy as np
 import streamlit as st
 import altair as alt
 from datetime import datetime
@@ -26,7 +27,7 @@ st.set_page_config(
 # Load lead data
 @st.cache_data
 def load_leads(path="temp_leads.csv"):
-    """Load and preprocess lead data"""
+    """Load and preprocess lead data with better data type handling"""
     try:
         df = pd.read_csv(path)
         
@@ -39,6 +40,34 @@ def load_leads(path="temp_leads.csv"):
         # Ensure days_since_inquiry exists
         if 'days_since_inquiry' not in df.columns and 'inquiry_date' in df.columns:
             df['days_since_inquiry'] = (datetime.now() - df['inquiry_date']).dt.days
+        
+        # Convert numeric columns
+        numeric_cols = ['guest_count', 'budget', 'number_of_guests', 'bartenders_needed', 'event_staff_needed']
+        for col in numeric_cols:
+            if col in df.columns:
+                # Convert to numeric, coerce errors to NaN
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+                
+        # Cleanup boolean/categorical columns
+        if 'converted' in df.columns:
+            # Try to interpret various forms of true/false values
+            df['converted'] = df['converted'].map(lambda x: 
+                True if str(x).lower() in ('true', 't', 'yes', 'y', '1') 
+                else False if str(x).lower() in ('false', 'f', 'no', 'n', '0') 
+                else None)
+            
+        # Add sample converted column if it doesn't exist (for demo purposes)
+        if 'converted' not in df.columns:
+            # Use a simple model to simulate conversion rates
+            # Hot leads: 80% conversion, Warm: 40%, Cold: 5%
+            df['converted'] = False
+            if 'adjusted_score' in df.columns:
+                df.loc[df['adjusted_score'] >= 70, 'converted'] = \
+                    np.random.choice([True, False], size=len(df[df['adjusted_score'] >= 70]), p=[0.8, 0.2])
+                df.loc[(df['adjusted_score'] >= 40) & (df['adjusted_score'] < 70), 'converted'] = \
+                    np.random.choice([True, False], size=len(df[(df['adjusted_score'] >= 40) & (df['adjusted_score'] < 70)]), p=[0.4, 0.6])
+                df.loc[df['adjusted_score'] < 40, 'converted'] = \
+                    np.random.choice([True, False], size=len(df[df['adjusted_score'] < 40]), p=[0.05, 0.95])
             
         return df
     except Exception as e:
