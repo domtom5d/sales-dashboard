@@ -2,7 +2,7 @@ modules = ["python-3.11", "postgresql-16"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["cairo", "ffmpeg-full", "freetype", "ghostscript", "glibcLocales", "gobject-introspection", "gtk3", "libxcrypt", "pkg-config", "qhull", "sqlite", "tcl", "tk", "xsimd", "zip", "unzipNLS", "openssh"]
+packages = ["cairo", "ffmpeg-full", "freetype", "ghostscript", "glibcLocales", "gobject-introspection", "gtk3", "libxcrypt", "openssh", "pkg-config", "qhull", "sqlite", "tcl", "tk", "unzipNLS", "xsimd", "zip"]
 
 [deployment]
 deploymentTarget = "autoscale"
@@ -18,20 +18,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Streamlit Server"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
 args = "Lead Health Dashboard"
-
-[[workflows.workflow]]
-name = "Streamlit Server"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "streamlit run app.py --server.port 5000"
-waitForPort = 5000
 
 [[workflows.workflow]]
 name = "Lead Health Dashboard"

@@ -1,0 +1,127 @@
+import pandas as pd
+import streamlit as st
+import altair as alt
+from enhanced_lead_scoring import apply_decay
+
+# Load lead data
+@st.cache_data
+def load_leads(path="temp_leads.csv"):
+    df = pd.read_csv(path, parse_dates=["inquiry_date", "event_date"])
+    # Calculate days since inquiry if not present
+    if "days_since_inquiry" not in df.columns:
+        df["days_since_inquiry"] = (pd.Timestamp.today() - df["inquiry_date"]).dt.days
+    return df
+
+leads_df = load_leads()
+
+# Sidebar: filters and dynamic weight sliders
+st.sidebar.header("Filters & Weight Adjustments")
+# Date range filter
+dates = st.sidebar.date_input(
+    "Inquiry Date Range", 
+    [leads_df["inquiry_date"].min(), leads_df["inquiry_date"].max()]
+)
+states = st.sidebar.multiselect(
+    "State", sorted(leads_df["state"].dropna().unique()), 
+    default=sorted(leads_df["state"].dropna().unique())
+)
+# Weight sliders
+weight_guest = st.sidebar.slider("Guest Count Weight", 0.5, 2.0, 1.0)
+weight_budget = st.sidebar.slider("Budget Weight", 0.5, 2.0, 1.0)
+weight_decay = st.sidebar.slider("Decay Rate Weight", 0.5, 2.0, 1.0)
+
+# Apply filters
+df = leads_df[
+    (leads_df["inquiry_date"] >= pd.to_datetime(dates[0])) &
+    (leads_df["inquiry_date"] <= pd.to_datetime(dates[1]))
+]
+df = df[df["state"].isin(states)]
+
+# Scoring logic with dynamic weights
+def compute_adjusted_score(row):
+    # Guest count score
+    g = row.get("guest_count", 0) or 0
+    gs = 20 if g >= 150 else 10 if g >= 50 else 5
+    # Budget score
+    b = row.get("budget", 0) or 0
+    bs = 20 if b >= 5000 else 10 if b >= 2000 else 5
+    # Combine with weights
+    base = gs * weight_guest + bs * weight_budget
+    # Decay
+    days = row.get("days_since_inquiry", 0)
+    half_life = 30 * weight_decay  # base half-life scaled
+    score = apply_decay(base, days, half_life)
+    # Cap and floor
+    return max(0, min(100, score))
+
+# Compute adjusted scores and categories
+df["adjusted_score"] = df.apply(compute_adjusted_score, axis=1)
+
+def categorize(score):
+    if score >= 70:
+        return "Hot"
+    elif score >= 40:
+        return "Warm"
+    return "Cold"
+
+df["adjusted_category"] = df["adjusted_score"].apply(categorize)
+
+# Main dashboard layout
+st.title("Lead Scoring Model Health Dashboard")
+
+# KPIs
+st.subheader("Key Performance Indicators")
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Leads", len(df))
+col2.metric("Average Score", f"{df['adjusted_score'].mean():.1f}")
+counts = df['adjusted_category'].value_counts().to_dict()
+col3.metric("Category Counts", counts)
+
+# Score Distribution
+st.subheader("Score Distribution")
+hist = alt.Chart(df).mark_bar().encode(
+    alt.X("adjusted_score:Q", bin=alt.Bin(maxbins=20), title="Score"),
+    alt.Y("count():Q", title="Count"),
+    tooltip=["count()"]
+).properties(width=700, height=300)
+st.altair_chart(hist)
+
+# Time Series: Daily Average Score
+st.subheader("Daily Average Score Over Time")
+ts = df.groupby(df["inquiry_date"].dt.date).agg(
+    avg_score=("adjusted_score", "mean")
+).reset_index()
+line = alt.Chart(ts).mark_line(point=True).encode(
+    x=alt.X("inquiry_date:T", title="Date"),
+    y=alt.Y("avg_score:Q", title="Avg Score"),
+    tooltip=["inquiry_date", "avg_score"]
+).properties(width=700, height=300)
+st.altair_chart(line)
+
+# Seasonality: Monthly Average Score
+st.subheader("Average Score by Month")
+df["month"] = df["inquiry_date"].dt.month
+month_stats = df.groupby("month").agg(
+    avg_score=("adjusted_score", "mean")
+).reset_index()
+month_line = alt.Chart(month_stats).mark_line(point=True).encode(
+    x=alt.X("month:O", title="Month"),
+    y=alt.Y("avg_score:Q", title="Avg Score"),
+    tooltip=["month", "avg_score"]
+).properties(width=700, height=300)
+st.altair_chart(month_line)
+
+# Conversion Funnel
+st.subheader("Lead Category Funnel")
+funnel = df['adjusted_category'].value_counts().reset_index()
+funnel.columns = ["category", "count"]
+# Ensure order
+order = ["Hot", "Warm", "Cold"]
+funnel['category'] = pd.Categorical(funnel['category'], categories=order, ordered=True)
+funnel = funnel.sort_values('category')
+funnel_chart = alt.Chart(funnel).mark_bar().encode(
+    x=alt.X("count:Q", title="Number of Leads"),
+    y=alt.Y("category:N", sort=order, title="Category"),
+    tooltip=["category", "count"]
+).properties(width=700, height=200)
+st.altair_chart(funnel_chart)

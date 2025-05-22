@@ -28,8 +28,9 @@ from evaluate import (
 )
 from findings import generate_findings
 from segmentation import segment_leads, plot_clusters, plot_cluster_conversion_rates, plot_feature_importance_by_cluster
+from mistral_insights_tab import render_mistral_insights_tab
 from advanced_analytics import run_all_analytics, plot_conversion_by_category
-from mistral_insights import generate_sales_opportunity_analysis, generate_booking_type_recommendations, generate_customer_segment_insights
+from mistral_insights import generate_lead_recommendation, batch_generate_recommendations
 
 # Set page config and title
 st.set_page_config(
@@ -344,7 +345,7 @@ if 'processed_df' in st.session_state and st.session_state.processed_df is not N
     st.session_state['filtered_df'] = filtered_df
     
     # Create tabs for different analysis views
-    tab1, tab2, tab3, tab3b, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+    tab1, tab2, tab3, tab3b, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
         "📊 Conversion Analysis", 
         "🔍 Feature Correlation", 
         "🤖 Lead Scoring", 
@@ -355,6 +356,7 @@ if 'processed_df' in st.session_state and st.session_state.processed_df is not N
         "🧩 Lead Personas",
         "📊 Advanced Analytics",
         "🧠 AI Insights",
+        "💡 Lead Recommendations",
         "🔧 Debug"
     ])
     
@@ -651,8 +653,18 @@ if 'processed_df' in st.session_state and st.session_state.processed_df is not N
             import traceback
             st.text(traceback.format_exc())
 
-# Tab 10: Debug
+# Tab 10: Mistral AI
     with tab10:
+        try:
+            # Render the Mistral AI Insights tab
+            render_mistral_insights_tab(filtered_df)
+        except Exception as e:
+            st.error(f"Error in Mistral AI tab: {str(e)}")
+            import traceback
+            st.text(traceback.format_exc())
+
+# Tab 11: Debug
+    with tab11:
         try:
             st.markdown("## 🔧 Dashboard Diagnostics")
             

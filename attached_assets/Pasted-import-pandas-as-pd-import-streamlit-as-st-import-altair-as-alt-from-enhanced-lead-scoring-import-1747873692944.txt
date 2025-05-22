@@ -1,0 +1,160 @@
+import pandas as pd
+import streamlit as st
+import altair as alt
+from enhanced_lead_scoring import apply_decay, calculate_category_specific_half_life, classify_referral_tiers, identify_high_performing_regions
+
+# Load lead data
+@st.cache_data
+def load_leads(path="temp_leads.csv"):
+    df = pd.read_csv(path, parse_dates=["inquiry_date", "event_date"])
+    if "days_since_inquiry" not in df.columns:
+        df["days_since_inquiry"] = (pd.Timestamp.today() - df["inquiry_date"]).dt.days
+    return df
+
+leads_df = load_leads()
+
+# Sidebar: filters and dynamic weight sliders
+st.sidebar.header("Filters & Weight Adjustments")
+# Date range filter
+dates = st.sidebar.date_input(
+    "Inquiry Date Range", 
+    [leads_df["inquiry_date"].min(), leads_df["inquiry_date"].max()]
+)
+states = st.sidebar.multiselect(
+    "State", sorted(leads_df["state"].dropna().unique()), 
+    default=sorted(leads_df["state"].dropna().unique())
+)
+# Dynamic weights
+weight_guest = st.sidebar.slider("Guest Count Weight", 0.5, 2.0, 1.0)
+weight_budget = st.sidebar.slider("Budget Weight", 0.5, 2.0, 1.0)
+weight_decay = st.sidebar.slider("Decay Rate Weight", 0.5, 2.0, 1.0)
+
+# Apply filters
+df = leads_df[
+    (leads_df["inquiry_date"] >= pd.to_datetime(dates[0])) &
+    (leads_df["inquiry_date"] <= pd.to_datetime(dates[1]))
+]
+df = df[df["state"].isin(states)]
+
+# Scoring logic leveraging core functions and dynamic weights
+def compute_adjusted_score(row):
+    # Base scoring: guest
+    guests = row.get("guest_count", 0) or 0
+    gs = 20 * weight_guest if guests >= 150 else 10 * weight_guest if guests >= 50 else 5 * weight_guest
+
+    # Base scoring: budget
+    budget = row.get("budget", 0) or 0
+    bs = 20 * weight_budget if budget >= 5000 else 10 * weight_budget if budget >= 2000 else 5 * weight_budget
+
+    # Combine base
+    base_score = gs + bs
+
+    # Decay
+    days = row.get("days_since_inquiry", 0)
+    half_lives = calculate_category_specific_half_life(pd.DataFrame())  # Use default half-lives from module
+    half_life = half_lives.get(row.get("event_type","default"), half_lives.get("default",30)) * weight_decay
+    decayed = apply_decay(base_score, days, half_life)
+
+    # Region influence
+    regions, _ = identify_high_performing_regions(pd.DataFrame())
+    if row.get("state") in regions:
+        decayed *= 1.1
+
+    # Referral influence
+    tiers = classify_referral_tiers(pd.DataFrame())
+    tier = tiers.get(row.get("referral_source",""), 2)
+    if tier == 3:
+        decayed += 10
+    elif tier == 1:
+        decayed -= 10
+
+    # Cap & floor
+    return max(0, min(100, decayed))
+
+# Compute scores and categories
+df["adjusted_score"] = df.apply(compute_adjusted_score, axis=1)
+
+# Category mapping
+def categorize(score):
+    if score >= 70:
+        return "Hot"
+    elif score >= 40:
+        return "Warm"
+    return "Cold"
+
+df["adjusted_category"] = df["adjusted_score"].apply(categorize)
+
+# Dashboard title
+st.title("Lead Scoring Model Health Dashboard")
+
+# KPIs
+st.subheader("Key Performance Indicators")
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Leads", len(df))
+col2.metric("Average Score", f"{df['adjusted_score'].mean():.1f}")
+counts = df['adjusted_category'].value_counts().to_dict()
+col3.metric("Category Counts", counts)
+
+# Visuals: Score Distribution
+st.subheader("Score Distribution")
+hist = alt.Chart(df).mark_bar().encode(
+    alt.X("adjusted_score:Q", bin=alt.Bin(maxbins=20), title="Score"),
+    alt.Y("count():Q", title="Count"),
+    tooltip=["count()"]
+).properties(height=300)
+st.altair_chart(hist)
+
+# Visuals: Daily Average Score
+st.subheader("Daily Average Score Over Time")
+ts = df.groupby(df["inquiry_date"].dt.date).agg(
+    avg_score=("adjusted_score", "mean")
+).reset_index()
+line = alt.Chart(ts).mark_line(point=True).encode(
+    x=alt.X("inquiry_date:T", title="Date"),
+    y=alt.Y("avg_score:Q", title="Avg Score"),
+    tooltip=["inquiry_date", "avg_score"]
+).properties(height=300)
+st.altair_chart(line)
+
+# Visuals: Average Score by Month
+st.subheader("Average Score by Month")
+df["month"] = df["inquiry_date"].dt.month
+month_stats = df.groupby("month").agg(
+    avg_score=("adjusted_score", "mean")
+).reset_index()
+month_line = alt.Chart(month_stats).mark_line(point=True).encode(
+    x=alt.X("month:O", title="Month"),
+    y=alt.Y("avg_score:Q", title="Avg Score"),
+    tooltip=["month", "avg_score"]
+).properties(height=300)
+st.altair_chart(month_line)
+
+# Funnel: Category Counts
+st.subheader("Lead Category Funnel")
+funnel = df['adjusted_category'].value_counts().reset_index()
+funnel.columns = ["category", "count"]
+order = ["Hot", "Warm", "Cold"]
+funnel['category'] = pd.Categorical(funnel['category'], categories=order, ordered=True)
+funnel = funnel.sort_values('category')
+funnel_chart = alt.Chart(funnel).mark_bar().encode(
+    x="count:Q", y=alt.Y("category:N", sort=order), tooltip=["category","count"]
+).properties(height=200)
+st.altair_chart(funnel_chart)
+
+# Validation: Feature Correlations
+st.subheader("Validation: Feature Correlations")
+features = ["guest_count","budget","days_since_inquiry","adjusted_score"]
+corr_df = df[features].corr()
+st.dataframe(corr_df)
+
+# Validation: Conversion Rate by Category
+st.subheader("Actual Conversion Rate by Category")
+if 'converted' in df.columns:
+    conv = df.groupby('adjusted_category')['converted'].mean().reset_index()
+    conv.columns = ['Category','Conversion Rate']
+    conv_chart = alt.Chart(conv).mark_bar().encode(
+        x='Category:N', y='Conversion Rate:Q', tooltip=['Conversion Rate']
+    )
+    st.altair_chart(conv_chart)
+else:
+    st.info("No 'converted' column found for conversion rate validation.")
