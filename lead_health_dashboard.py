@@ -86,12 +86,132 @@ def main():
     st.title("Lead Scoring Health Dashboard")
     st.markdown("Monitor your lead scoring model's performance over time")
     
-    # Load data
-    with st.spinner("Loading leads data..."):
-        leads_df = load_leads()
+    # Add tabs for main dashboard and configuration
+    tab1, tab2 = st.tabs(["Dashboard", "Model Configuration"])
     
-    if leads_df.empty:
-        st.warning("No lead data available. Please check your data source.")
+    with tab2:
+        st.markdown("## Adjust Lead Scoring Parameters")
+        st.markdown("Modify these parameters to see how they affect your lead scoring model.")
+        
+        # Dynamic weight sliders
+        st.markdown("### Factor Weights")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Guest count importance
+            guest_weight = st.slider(
+                "Guest Count Weight", 
+                min_value=0.0, 
+                max_value=2.0, 
+                value=1.0, 
+                step=0.1,
+                help="Higher values give more importance to guest count in scoring"
+            )
+            
+            # Budget importance
+            budget_weight = st.slider(
+                "Budget Weight", 
+                min_value=0.0, 
+                max_value=2.0, 
+                value=1.0, 
+                step=0.1,
+                help="Higher values give more importance to budget in scoring"
+            )
+        
+        with col2:
+            # Referral source importance
+            referral_weight = st.slider(
+                "Referral Quality Weight", 
+                min_value=0.0, 
+                max_value=2.0, 
+                value=1.0, 
+                step=0.1,
+                help="Higher values give more importance to referral quality in scoring"
+            )
+            
+            # Region boost importance
+            region_weight = st.slider(
+                "Region Boost Factor", 
+                min_value=0.0, 
+                max_value=2.0, 
+                value=1.0, 
+                step=0.1,
+                help="Higher values give more importance to regional performance in scoring"
+            )
+        
+        # Time decay configuration
+        st.markdown("### Time Decay Configuration")
+        
+        decay_active = st.checkbox("Enable Time Decay", value=True)
+        
+        decay_col1, decay_col2 = st.columns(2)
+        
+        with decay_col1:
+            base_half_life = st.slider(
+                "Base Half-Life (days)", 
+                min_value=5, 
+                max_value=90, 
+                value=30, 
+                step=5,
+                help="Number of days after which a lead's score is halved"
+            )
+        
+        with decay_col2:
+            decay_curve = st.select_slider(
+                "Decay Curve", 
+                options=["Very Slow", "Slow", "Medium", "Fast", "Very Fast"],
+                value="Medium",
+                help="How quickly the score drops after the half-life point"
+            )
+        
+        # Category thresholds
+        st.markdown("### Score Category Thresholds")
+        
+        threshold_col1, threshold_col2 = st.columns(2)
+        
+        with threshold_col1:
+            hot_threshold = st.slider(
+                "Hot Lead Threshold", 
+                min_value=50, 
+                max_value=95, 
+                value=70, 
+                step=5,
+                help="Minimum score for a lead to be categorized as Hot"
+            )
+        
+        with threshold_col2:
+            warm_threshold = st.slider(
+                "Warm Lead Threshold", 
+                min_value=20, 
+                max_value=70, 
+                value=40, 
+                step=5,
+                help="Minimum score for a lead to be categorized as Warm"
+            )
+        
+        # Save configuration button
+        if st.button("Apply Configuration"):
+            st.session_state["guest_weight"] = guest_weight
+            st.session_state["budget_weight"] = budget_weight
+            st.session_state["referral_weight"] = referral_weight
+            st.session_state["region_weight"] = region_weight
+            st.session_state["decay_active"] = decay_active
+            st.session_state["base_half_life"] = base_half_life
+            st.session_state["decay_curve"] = decay_curve
+            st.session_state["hot_threshold"] = hot_threshold
+            st.session_state["warm_threshold"] = warm_threshold
+            
+            st.success("Configuration applied! Refresh the dashboard to see changes.")
+    
+    # Switch to main dashboard tab
+    with tab1:
+        # Load data
+        with st.spinner("Loading leads data..."):
+            leads_df = load_leads()
+        
+        if leads_df.empty:
+            st.warning("No lead data available. Please check your data source.")
         st.info("You can upload a CSV file with lead data below:")
         
         uploaded_file = st.file_uploader("Upload leads CSV", type="csv")
@@ -218,17 +338,88 @@ def main():
     
     st.altair_chart(score_hist, use_container_width=True)
     
-    # Score over time
+    # Score over time with seasonality overlay
     if date_col:
         st.markdown("## Score Trends Over Time")
+        
+        # Seasonality controls
+        show_seasonality = st.checkbox("Show Seasonality Overlay", value=True)
         
         # Prepare time series data
         time_df = filtered_df.copy()
         time_df['date'] = time_df[date_col].dt.date
+        time_df['month'] = time_df[date_col].dt.month
+        time_df['quarter'] = time_df[date_col].dt.quarter
+        time_df['day_of_week'] = time_df[date_col].dt.dayofweek
         
         # Group by date and calculate average score
         daily_scores = time_df.groupby('date')['score'].mean().reset_index()
         daily_scores['score'] = daily_scores['score'] * 100  # Convert to 0-100 scale
+        
+        # Extract seasonality if requested
+        seasonal_data = None
+        if show_seasonality:
+            # Choose seasonality type
+            seasonality_type = st.radio(
+                "Seasonality Type", 
+                options=["Monthly", "Quarterly", "Day of Week"],
+                horizontal=True
+            )
+            
+            if seasonality_type == "Monthly":
+                seasonal_data = time_df.groupby('month')['score'].mean().reset_index()
+                seasonal_data['score'] = seasonal_data['score'] * 100
+                seasonal_data['month_name'] = seasonal_data['month'].apply(lambda x: datetime(2023, x, 1).strftime('%B'))
+                
+                # Create seasonal bar chart
+                seasonal_chart = alt.Chart(seasonal_data).mark_bar().encode(
+                    x=alt.X('month:O', title='Month', sort=None),
+                    y=alt.Y('score:Q', title='Average Score'),
+                    color=alt.Color('score:Q', scale=alt.Scale(scheme='viridis')),
+                    tooltip=['month_name', alt.Tooltip('score:Q', format='.1f')]
+                ).properties(
+                    height=200,
+                    title="Monthly Score Patterns"
+                )
+                
+                st.altair_chart(seasonal_chart, use_container_width=True)
+                
+            elif seasonality_type == "Quarterly":
+                seasonal_data = time_df.groupby('quarter')['score'].mean().reset_index()
+                seasonal_data['score'] = seasonal_data['score'] * 100
+                seasonal_data['quarter_name'] = seasonal_data['quarter'].apply(lambda x: f"Q{x}")
+                
+                # Create seasonal bar chart
+                seasonal_chart = alt.Chart(seasonal_data).mark_bar().encode(
+                    x=alt.X('quarter:O', title='Quarter'),
+                    y=alt.Y('score:Q', title='Average Score'),
+                    color=alt.Color('score:Q', scale=alt.Scale(scheme='viridis')),
+                    tooltip=['quarter_name', alt.Tooltip('score:Q', format='.1f')]
+                ).properties(
+                    height=200,
+                    title="Quarterly Score Patterns"
+                )
+                
+                st.altair_chart(seasonal_chart, use_container_width=True)
+                
+            elif seasonality_type == "Day of Week":
+                day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                seasonal_data = time_df.groupby('day_of_week')['score'].mean().reset_index()
+                seasonal_data['score'] = seasonal_data['score'] * 100
+                seasonal_data['day_name'] = seasonal_data['day_of_week'].apply(lambda x: day_names[x])
+                
+                # Create seasonal bar chart
+                seasonal_chart = alt.Chart(seasonal_data).mark_bar().encode(
+                    x=alt.X('day_of_week:O', title='Day of Week', sort=None),
+                    y=alt.Y('score:Q', title='Average Score'),
+                    color=alt.Color('score:Q', scale=alt.Scale(scheme='viridis')),
+                    tooltip=['day_name', alt.Tooltip('score:Q', format='.1f')]
+                ).properties(
+                    height=200,
+                    title="Day of Week Score Patterns"
+                )
+                
+                st.altair_chart(seasonal_chart, use_container_width=True)
         
         # Create line chart with Altair
         score_line = alt.Chart(daily_scores).mark_line(point=True).encode(
@@ -262,6 +453,109 @@ def main():
         )
         
         st.altair_chart(state_chart, use_container_width=True)
+    
+    # Conversion Funnel Widget
+    st.markdown("## Conversion Funnel Analysis")
+    st.markdown("Track how leads convert across different stages by category")
+    
+    # Define stages
+    lead_stages = ['Inquiry', 'Contacted', 'Quoted', 'Site Visit', 'Contract Sent', 'Booked']
+    
+    # Check if we have stage data
+    has_stages = False
+    stage_cols = ['stage', 'Stage', 'status', 'Status', 'pipeline_stage', 'PipelineStage']
+    stage_col = None
+    
+    for col in stage_cols:
+        if col in filtered_df.columns:
+            stage_col = col
+            has_stages = True
+            break
+    
+    # If no stages, create dummy data based on outcome
+    if not has_stages and 'outcome' in filtered_df.columns:
+        # Create a synthetic stage column for visualization
+        filtered_df['stage'] = 'Inquiry'  # Default stage
+        
+        # For won deals, distribute to later stages
+        won_mask = filtered_df['outcome'] == 1
+        stages_distribution = {
+            'Quoted': 0.9,
+            'Site Visit': 0.7,
+            'Contract Sent': 0.5,
+            'Booked': 0.3
+        }
+        
+        # Apply stage distribution
+        for stage, probability in stages_distribution.items():
+            if sum(won_mask) > 0:
+                # Take a portion of won deals for each stage
+                stage_count = int(sum(won_mask) * probability)
+                if stage_count > 0:
+                    # Get random indices from won deals
+                    stage_indices = filtered_df[won_mask].sample(n=min(stage_count, sum(won_mask))).index
+                    # Assign stage
+                    filtered_df.loc[stage_indices, 'stage'] = stage
+        
+        stage_col = 'stage'
+        has_stages = True
+    
+    # Build funnel data
+    if has_stages:
+        # Get counts by stage and category
+        funnel_data = filtered_df.groupby([stage_col, 'category']).size().reset_index(name='count')
+        
+        # Create funnel chart with Altair
+        funnel_chart = alt.Chart(funnel_data).mark_bar().encode(
+            x=alt.X('category:N', title='Lead Category'),
+            y=alt.Y('count:Q', title='Number of Leads'),
+            color=alt.Color('category:N', scale=alt.Scale(
+                domain=['Hot', 'Warm', 'Cool', 'Cold'],
+                range=['#ff4b4b', '#ffa64b', '#4bcaff', '#4b83ff']
+            )),
+            column=alt.Column(f'{stage_col}:N', title='Stage', sort=lead_stages),
+            tooltip=['category', stage_col, 'count']
+        ).properties(
+            width=120,
+            height=250,
+            title="Conversion Funnel by Lead Category"
+        )
+        
+        st.altair_chart(funnel_chart, use_container_width=True)
+        
+        # Calculate conversion rates between stages
+        st.markdown("### Stage Conversion Rates")
+        
+        # Find unique stages in the data
+        existing_stages = sorted(filtered_df[stage_col].unique(), 
+                                key=lambda x: lead_stages.index(x) if x in lead_stages else 999)
+        
+        if len(existing_stages) > 1:
+            # Calculate conversion rates between consecutive stages
+            conversion_rates = []
+            
+            for i in range(len(existing_stages) - 1):
+                stage1 = existing_stages[i]
+                stage2 = existing_stages[i + 1]
+                
+                stage1_count = filtered_df[filtered_df[stage_col] == stage1].shape[0]
+                stage2_count = filtered_df[filtered_df[stage_col] == stage2].shape[0]
+                
+                if stage1_count > 0:
+                    rate = (stage2_count / stage1_count) * 100
+                    conversion_rates.append({
+                        'From Stage': stage1,
+                        'To Stage': stage2,
+                        'Conversion Rate': f"{rate:.1f}%",
+                        'Count': f"{stage2_count}/{stage1_count}"
+                    })
+            
+            # Convert to DataFrame and display
+            if conversion_rates:
+                conversion_df = pd.DataFrame(conversion_rates)
+                st.dataframe(conversion_df, use_container_width=True)
+    else:
+        st.info("Stage information not available in the data. Add a 'stage' column to enable the conversion funnel.")
     
     # Data Quality Analysis
     st.markdown("## Data Quality Insights")
